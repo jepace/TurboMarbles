@@ -68,6 +68,15 @@ function scoreMove(game, playerIndex, move) {
     case 'enterCenter':
       return 250;
 
+    case 'moveStar': {
+      if (move.toZone === 'home') return 550 + move.toSlot * 40;
+      if (move.toZone === 'track') {
+        if (bumpsOpponent(game, playerIndex, move.toSpace, 'track')) return 800;
+        return 200 + progress(cfg.start, move.toSpace);
+      }
+      return 0;
+    }
+
     default:
       return 0;
   }

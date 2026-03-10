@@ -30,7 +30,11 @@ Based on the Aggravation 6-player board, adapted for TurboMarbles.
 
 ### Shape
 
-The board is a **6-pointed star**. Six colored arms radiate from a central hub at 60° intervals. The outer track is an 84-space ring connecting all six arms. Marbles travel clockwise.
+The board is a **6-pointed star**. Six colored arms radiate from a central hub at 60° intervals. There are **three separate paths** a marble can travel:
+
+1. **Main track** — the outer 84-space ring; all marbles travel clockwise.
+2. **Star track** — an inner circle of exactly 6 spaces (one per player's star); adjacent stars are 1 step apart.  A marble that lands on any star space may use this track on future turns.
+3. **Center hub** — a single space in the middle, 1 step from every star on the star track.
 
 ```
               [Base]
@@ -78,15 +82,24 @@ Each player has a **private 4-slot home lane** running from the board edge inwar
 
 Each player has **4 base slots** at the tip of their arm, fully off the track. Marbles start here and return here when bumped.
 
-### Shortcut (Center Hub)
+### Star Track
 
-The shortcut path is: **track star → Center Hub → any track star**.  No specific die value is required; landing exactly on your own star is what grants center access.
+When a marble lands **exactly** on any star space (via main-track movement), it becomes **star-eligible** and may use the star track on future turns — and remains star-eligible as long as it stays on a star.
 
-- **Entering the hub**: A marble enters the center hub by landing there exactly — the hub is 1 step past the player's own star on a shortcut branch.  No specific die value is required; the die simply needs to count exactly to that point.  For example, yellow's star is at space 8 and the hub is 8 steps from yellow's start, so a marble 3 spaces before the star enters with a die of 4 (3 to the star + 1 into the hub).  From the star itself a die of 1 enters the hub.
-- **Transit (powerful!)**: When a marble is **already sitting on its own star**, any die may be used to jump freely through the center hub to any other shortcut star, then continue the full die-value worth of steps from that exit star.  This can carry a marble across the board and into a home stretch in a single move.
-- **Exiting the hub**: A marble parked in center exits with a die of **1** only (the die is fully consumed; marble lands on any chosen star and becomes `starEligible`).
-- **Bumping applies**: The center hub is a normal space for bumping. A marble arriving at the hub bumps any marble already there.  For a transit move, only the final landing position is checked for bumping.
-- **Choice**: The player may always choose to move along the track normally instead of entering the shortcut.
+From a star-eligible marble, any die may be used to travel **K steps clockwise** around the inner star circle (K = 1–5, stopping before a full loop).  After K star-steps the marble can:
+- **Stop on that star** (remaining die steps = 0)
+- **Enter the center hub** (remaining = 1; the hub is 1 step from any star)
+- **Exit onto the main track** and continue the remaining die steps from that star
+
+A marble is still star-eligible after stopping on a star via the star track.
+
+### Center Hub
+
+The center hub is **1 step from any star** on the star track.
+
+- **Entering**: A marble may reach the center from the **main track** (die count = stepsToAnyStar + 1, landing there exactly) or from the **star track** (1 remaining step at any intermediate star).
+- **Exiting**: Requires a die of **1**; the marble exits to any star (not blocked by own marble) and becomes star-eligible.
+- **Bumping**: Arriving at the center bumps any opponent marble already there.  Only the final landing position is checked for bumping.
 
 ### Canvas coordinate system
 

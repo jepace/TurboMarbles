@@ -78,11 +78,12 @@ export function createGame(players) {
 // Move types by zone:
 //   base    → exitBase      (die 1 or 6, start space must be clear of own marble)
 //   center  → exitCenter    (die 1 only; land exactly on any star not blocked by own marble)
-//   track   → enterCenter   (dieVal = stepsToOwnStar + 1; marble diverts to center instead
-//                            of continuing past the star — "land there exactly")
-//             transitCenter (any die, marble must be starEligible; free teleport through
-//                            center to any exit star, then continues full dieVal steps)
-//             move          (normal step forward; may enter home stretch)
+//   track   → enterCenter   (dieVal = stepsToAnyStar + 1; marble diverts 1 step into center
+//                            instead of continuing past the star)
+//             moveStar      (marble is starEligible; travels K stars clockwise on the star
+//                            track, then optionally continues on main track with remaining
+//                            dieVal−K steps; toZone/toSpace describe the final position)
+//             move          (normal step forward on main track; may enter home stretch)
 //   home    → moveHome      (advance within home slots; cannot overshoot HOME_SLOTS)
 export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
   const player = state.players[playerIndex];
@@ -113,31 +114,23 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
   }
 
   if (marbleOnTrack(marble)) {
-    // Enter center: the center hub is a 1-step branch off the player's own star.
-    // A marble can divert into center whenever its die count would land it exactly
-    // 1 step past the star (i.e. dieVal = stepsToStar + 1).  No special die value
-    // is required — only exact spacing matters.  Example: from 3 spaces before the
-    // star, a die of 4 reaches the star (3 steps) then diverts into center (1 more).
+    // Enter center: the center hub is 1 step past any star on a shortcut branch.
+    // Any marble on the main track whose die count lands it exactly 1 step past
+    // any star (dieVal = stepsToThatStar + 1) may divert into center instead.
     if (canEnterCenter(player, marble, dieVal)) {
       moves.push({ type: 'enterCenter', dieIndex, marbleId });
     }
 
-    // Transit: when already sitting on own star, any die can be used to jump freely
-    // through the center hub to any exit star, then continue the full die value of
-    // steps from there.  ("Jump around the star circle and potentially out.")
+    // Star-track movement: when sitting on any star (starEligible), the marble
+    // may travel around the inner star circle instead of the main track.
+    // Each step on the star track advances to the next star clockwise.
+    // After K star-steps the marble may either stop on that star or exit onto
+    // the main track and continue the remaining (dieVal−K) steps from there.
     if (marble.starEligible) {
-      for (const cfg of PLAYER_CONFIG) {
-        const exitStar = cfg.star;
-        if (ownMarbleAt(player, { zone: 'track', space: exitStar })) continue;
-        const tempMarble = { zone: 'track', space: exitStar, starEligible: true };
-        const dest = computeTrackMove(state, player, tempMarble, dieVal);
-        if (dest) {
-          moves.push({ type: 'transitCenter', dieIndex, marbleId, toStar: exitStar, ...dest });
-        }
-      }
+      moves.push(...legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId));
     }
 
-    // Normal track movement (may redirect into home stretch)
+    // Normal main-track movement (may redirect into home stretch)
     const dest = computeTrackMove(state, player, marble, dieVal);
     if (dest) moves.push({ type: 'move', dieIndex, marbleId, ...dest });
 
@@ -159,28 +152,83 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
   return moves;
 }
 
-// Returns true when a marble can choose to divert into the center hub on this die.
-// The hub is exactly 1 step past the player's own star on a shortcut branch, so the
-// marble must have exactly (stepsToStar + 1) die steps remaining.  Additional guards:
-//   - the player's homeEntry must not lie along the path before the star (it would
-//     redirect the marble into home before it reaches the star)
-//   - no own marble may block any step of the path up to and including the star
+// Returns true when a marble can divert into the center hub on this die.
+// The center is 1 step past ANY star on a shortcut branch, so the marble needs
+// exactly (stepsToThatStar + 1) die steps.  We check every star; as long as
+// one is reachable the move is legal.  Special-cased guards per star:
+//   - the player's homeEntry must not lie along the path before that star
+//   - no own marble may block any step of the path up to (and onto) that star
+// Note: when the marble IS already on a star, stepsToThatStar is 0 (not 84),
+// so dieVal=1 correctly allows entering center from that star.
 function canEnterCenter(player, marble, dieVal) {
-  const { star, homeEntry } = player.config;
-  const stepsToStar = trackDistance(marble.space, star);
-  if (dieVal !== stepsToStar + 1) return false;
+  const { homeEntry } = player.config;
+  for (const starSpace of ALL_STARS) {
+    // Distance to this star: 0 if already there, clockwise distance otherwise
+    const stepsToStar = marble.space === starSpace ? 0 : trackDistance(marble.space, starSpace);
+    if (dieVal !== stepsToStar + 1) continue;
 
-  // homeEntry must not lie on the path before the star
-  const stepsToHomeEntry = trackDistance(marble.space, homeEntry);
-  if (stepsToHomeEntry <= stepsToStar) return false;
+    // homeEntry must not lie on the path before the star
+    if (stepsToStar > 0) {
+      const stepsToHomeEntry = trackDistance(marble.space, homeEntry);
+      if (stepsToHomeEntry <= stepsToStar) continue;
+    }
 
-  // Every step toward (and onto) the star must be clear of own marbles
-  let pos = marble.space;
-  for (let i = 0; i < stepsToStar; i++) {
-    pos = advanceTrack(pos, 1);
-    if (ownMarbleAtSpace(player, pos)) return false;
+    // Every step toward (and onto) the star must be clear of own marbles
+    let pos = marble.space;
+    let blocked = false;
+    for (let i = 0; i < stepsToStar; i++) {
+      pos = advanceTrack(pos, 1);
+      if (ownMarbleAtSpace(player, pos)) { blocked = true; break; }
+    }
+    if (!blocked) return true;
   }
-  return true;
+  return false;
+}
+
+// The ordered list of star spaces going clockwise around the star track.
+const STAR_TRACK = PLAYER_CONFIG.map(c => c.star); // [8, 22, 36, 50, 64, 78]
+
+// Computes all legal moveStar (and enterCenter) moves available via the star track
+// for a marble that is currently sitting on a star space (starEligible).
+//
+// The marble may travel K steps clockwise around the star circle (K = 1..min(dieVal,5)).
+// Each step advances to the next star.  An own marble on a star blocks further traversal
+// (same rule as on the main track).  After K star-steps the marble can:
+//   - stop on that star  (remaining === 0)                     → moveStar
+//   - enter the center   (remaining === 1, center is 1 step)   → enterCenter
+//   - continue on the main track for remaining steps           → moveStar (toZone from computeTrackMove)
+function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
+  const dieVal = state.dice[dieIndex];
+  const moves = [];
+  const startIdx = STAR_TRACK.indexOf(marble.space);
+  if (startIdx === -1) return moves; // safety: marble not on a star
+
+  for (let k = 1; k <= Math.min(dieVal, 5); k++) {
+    const exitStar = STAR_TRACK[(startIdx + k) % 6];
+
+    // Own marble on this star blocks further traversal around the ring
+    if (ownMarbleAtSpace(player, exitStar)) break;
+
+    const remaining = dieVal - k;
+
+    if (remaining === 0) {
+      // Stop on this star
+      moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar });
+    } else if (remaining === 1) {
+      // Enter center from this star (center is exactly 1 step from any star)
+      moves.push({ type: 'enterCenter', dieIndex, marbleId });
+      // OR continue 1 step on main track from this star
+      const tempMarble = { zone: 'track', space: exitStar };
+      const dest = computeTrackMove(state, player, tempMarble, 1);
+      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot });
+    } else {
+      // Continue on main track with remaining steps from exitStar
+      const tempMarble = { zone: 'track', space: exitStar };
+      const dest = computeTrackMove(state, player, tempMarble, remaining);
+      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot });
+    }
+  }
+  return moves;
 }
 
 // Compute where a track marble ends up after moving dieVal steps clockwise.
@@ -288,7 +336,7 @@ export function applyMove(state, playerIndex, move) {
     if (bumped) { bumpMarble(state, bumped, events); }
     marble.zone = 'track';
     marble.space = dest;
-    marble.starEligible = (dest === player.config.star);
+    marble.starEligible = ALL_STARS.has(dest);
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
       from: { zone: 'base' }, to: { zone: 'track', space: dest } });
 
@@ -298,7 +346,7 @@ export function applyMove(state, playerIndex, move) {
       const bumped = findMarbleAt(state, playerIndex, 'track', move.toSpace);
       if (bumped) { bumpMarble(state, bumped, events); }
       marble.space = move.toSpace;
-      marble.starEligible = (move.toSpace === player.config.star);
+      marble.starEligible = ALL_STARS.has(move.toSpace);
       events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
         from, to: { zone: 'track', space: move.toSpace } });
     } else {
@@ -337,20 +385,20 @@ export function applyMove(state, playerIndex, move) {
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
       from, to: { zone: 'track', space: move.toStar } });
 
-  } else if (move.type === 'transitCenter') {
-    // Marble transits through center (without stopping) and exits to toStar, then
-    // continues dieVal steps from there.  Bump only at the final landing position.
+  } else if (move.type === 'moveStar') {
+    // Marble traveled along the star track (K steps to a star, then optionally
+    // continued on the main track).  Only the final landing position is bumped.
     const from = { zone: 'track', space: marble.space };
     if (move.toZone === 'track') {
       const bumped = findMarbleAt(state, playerIndex, 'track', move.toSpace);
       if (bumped) { bumpMarble(state, bumped, events); }
       marble.zone = 'track';
       marble.space = move.toSpace;
-      marble.starEligible = (move.toSpace === player.config.star);
+      marble.starEligible = ALL_STARS.has(move.toSpace);
       events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
         from, to: { zone: 'track', space: move.toSpace } });
     } else {
-      // entered home stretch after transit
+      // continued from star track into home stretch
       marble.zone = 'home';
       marble.space = null;
       marble.slot = move.toSlot;

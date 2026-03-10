@@ -310,7 +310,8 @@ function cleanupIfAbandoned(room) {
 
 // Validate `move` against the computed legal set, then apply it.
 // We re-derive legal moves server-side so clients cannot send arbitrary moves.
-// `toStar` is only checked for exitCenter moves (choosing which star to land on).
+// For moveStar moves the client must specify toZone+toSpace (or toSlot) because
+// multiple star-track destinations may share the same type/marbleId/dieIndex.
 function tryApplyMove(room, playerIndex, move) {
   const { game } = room;
 
@@ -323,8 +324,11 @@ function tryApplyMove(room, playerIndex, move) {
   const matched = validForDie.find(m =>
     m.type === move.type &&
     m.marbleId === move.marbleId &&
-    (move.toStar === undefined || m.toStar === move.toStar) &&
-    m.dieIndex === idx
+    m.dieIndex === idx &&
+    (move.toStar  === undefined || m.toStar  === move.toStar)  &&
+    (move.toZone  === undefined || m.toZone  === move.toZone)  &&
+    (move.toSpace === undefined || m.toSpace === move.toSpace) &&
+    (move.toSlot  === undefined || m.toSlot  === move.toSlot)
   );
   if (!matched) return { error: 'Move not in legal set' };
 
