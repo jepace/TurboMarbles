@@ -6,7 +6,7 @@ A web-based, turn-based multiplayer marble racing game where strategy meets chao
 
 ## Overview
 
-TurboMarbles is a browser-based board game for 2–4 players. Each player controls a set of colored marbles and races them around a shared track, trying to get all marbles safely into their home zone. The twist: rolling two dice each turn opens up split moves, doubles bonuses, and way more ways to wreck your friends' plans.
+TurboMarbles is a browser-based board game for 2–6 players. Each player controls a set of colored marbles and races them around a shared track, trying to get all marbles safely into their home zone. The twist: rolling two dice each turn creates constant choices — and constant threats.
 
 ---
 
@@ -21,23 +21,23 @@ Be the first player to move all of your marbles from your **Base** into your **H
 
 ### Turn Structure
 1. **Roll** both dice.
-2. **Choose** how to use the result:
-   - Use the **total** of both dice to move a single marble.
-   - Use each die **separately** to make two moves (same marble or different marbles).
-3. **Move** your marble(s) the chosen number of spaces clockwise around the track.
-4. If you land on an opponent's marble, it gets **sent back to their Base**.
+2. Each die is an **independent move** — dice are never combined into a single total.
+3. You choose the **order** in which to play each die.
+4. Each die can move any marble (including using both dice on the same marble in sequence).
+5. Landing on an opponent's marble sends it **back to their Base**.
 
 ### Getting Out of Base
-- A marble can only leave Base when you roll a **1** or a **6** on either die (or a combined total of **7**).
+- A marble can only leave Base when you roll a **1** or a **6** on either die.
 - Once out, it is placed on your designated start space.
+- A **6** that moves a marble out of Base still triggers an extra roll.
 
 ### Rolling a Six
 - Rolling a **6** on either or both dice earns you an **extra roll** after completing your move.
 - Rolling 6–6 still grants only **one** extra roll — sixes do not stack.
 
 ### Safe Spaces
-- Certain marked spaces on the board are **Safe Zones** — marbles on these spaces cannot be sent back to Base.
-- Your own start space is always safe.
+- **Base** and **Home** are untouchable — marbles there cannot be bumped.
+- Everywhere else on the track is fair game.
 
 ### Shortcut Spaces
 - The board includes a **center shortcut** accessible from specific spaces. Landing on a shortcut entry point lets you cut across the board on your next turn for a significant leap forward.
@@ -50,8 +50,8 @@ Be the first player to move all of your marbles from your **Base** into your **H
 
 ## Features
 
-- **2–4 Player Support** — play locally (pass-and-play) or against others online
-- **Two-Dice Mechanics** — split moves, doubles bonuses, and tactical choices every turn
+- **2–6 Player Support** — play locally (pass-and-play) or against others online
+- **Two-Dice Mechanics** — independent dice with player-chosen order create tactical decisions every turn
 - **Animated Board** — smooth marble movement and dice roll animations
 - **Color Themes** — choose from classic colors for each player
 - **Turn Timer** (optional) — keep the game moving with a configurable per-turn clock
@@ -125,11 +125,10 @@ TurboMarbles/
 
 | Situation | Rule |
 |---|---|
-| Leaving Base | Roll a 1, 6, or total of 7 |
+| Leaving Base | Roll a 1 or 6 on either die |
 | Bump opponent | Send their marble back to Base |
-| Land on Safe space | Cannot be bumped |
-| Roll doubles | Take an extra turn |
-| Three doubles in a row | Forfeit turn |
+| Base / Home | Marbles there cannot be bumped |
+| Roll a 6 | Take one extra roll (never stacks) |
 | Entering Home | Must roll exact count |
 
 ---
