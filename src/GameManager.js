@@ -74,12 +74,13 @@ export function joinRoom(ws, code, playerName) {
   slot.ws = ws;
   sessions.set(ws._id, { roomId: room.id, playerIndex: slot.index });
 
+  // Exclude the joining player — they'll get lobbyState via joinedRoom instead
   broadcast(room, {
     event: 'playerJoined',
     playerIndex: slot.index,
     name: playerName,
     color: slot.color,
-  });
+  }, ws);
 
   return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room) };
 }
