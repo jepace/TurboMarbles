@@ -1,0 +1,201 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --card: #0f3460;
+  --accent: #e94560;
+  --text: #eaeaea;
+  --muted: #888;
+  --yellow: #f0c040;
+  --orange: #f07820;
+  --pink:   #e040c0;
+  --white:  #e8e8e8;
+  --green:  #40c040;
+  --blue:   #4080f0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* ---- Screens ---- */
+.screen { display: none; width: 100%; }
+.screen.active { display: flex; align-items: center; justify-content: center; }
+
+#screen-game.active {
+  display: block;
+  height: 100vh;
+}
+
+/* ---- Cards ---- */
+.card {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 380px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 8px 32px #0008;
+}
+.card.wide { max-width: 480px; }
+
+h1 { font-size: 2.4rem; color: var(--accent); letter-spacing: 2px; text-align: center; }
+h2 { font-size: 1.5rem; text-align: center; }
+.tagline { text-align: center; color: var(--muted); }
+
+/* ---- Inputs ---- */
+input[type=text], input[type=number] {
+  background: var(--surface);
+  border: 1px solid #fff2;
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 1.1rem;
+  padding: 0.6rem 1rem;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus { border-color: var(--accent); }
+
+/* ---- Buttons ---- */
+button {
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 0.65rem 1.4rem;
+  transition: opacity 0.15s, transform 0.1s;
+}
+button:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+button:active:not(:disabled) { transform: translateY(0); }
+button:disabled { opacity: 0.35; cursor: default; }
+button.secondary { background: #fff2; }
+
+.btn-row { display: flex; gap: 0.75rem; justify-content: center; }
+
+/* ---- Lobby slots ---- */
+#lobby-slots { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+#lobby-slots li {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.slot-dot {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---- Game layout ---- */
+#game-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#board-canvas {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  background: #0d1b2a;
+}
+
+#sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+/* ---- Dice ---- */
+#dice-area {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.die {
+  width: 52px; height: 52px;
+  background: #fff;
+  color: #111;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem;
+  font-weight: 900;
+  box-shadow: 2px 3px 6px #0006;
+  transition: background 0.2s;
+}
+.die.used { background: #555; color: #888; }
+.die.rolling { animation: shake 0.4s ease; }
+
+@keyframes shake {
+  0%,100% { transform: rotate(0); }
+  25% { transform: rotate(-15deg) scale(1.1); }
+  75% { transform: rotate(15deg) scale(1.1); }
+}
+
+/* ---- Turn banner ---- */
+#turn-banner {
+  background: var(--card);
+  border-radius: 8px;
+  padding: 0.5rem;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* ---- Player list ---- */
+#player-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.player-row {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+}
+.player-row.active-turn { border-color: var(--accent); background: #fff1; }
+.player-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ---- Game log ---- */
+#game-log {
+  flex: 1;
+  overflow-y: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.log-entry { padding: 1px 0; }
+
+/* ---- Player color CSS vars used in JS ---- */
+.color-yellow { background: var(--yellow); }
+.color-orange { background: var(--orange); }
+.color-pink   { background: var(--pink);   }
+.color-white  { background: var(--white);  }
+.color-green  { background: var(--green);  }
+.color-blue   { background: var(--blue);   }

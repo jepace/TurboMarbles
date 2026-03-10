@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TurboMarbles</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== SCREENS ===== -->
+
+<div id="screen-landing" class="screen active">
+  <div class="card">
+    <h1>TurboMarbles</h1>
+    <p class="tagline">Race your marbles. Wreck your friends.</p>
+    <input id="landing-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
+    <div class="btn-row">
+      <button id="btn-create">Create Game</button>
+      <button id="btn-join">Join Game</button>
+    </div>
+  </div>
+</div>
+
+<div id="screen-create" class="screen">
+  <div class="card">
+    <h2>Create Game</h2>
+    <label>Players (2–6)
+      <input id="create-count" type="number" min="2" max="6" value="4">
+    </label>
+    <div class="btn-row">
+      <button id="btn-create-confirm">Create</button>
+      <button class="secondary" id="btn-create-back">Back</button>
+    </div>
+  </div>
+</div>
+
+<div id="screen-join" class="screen">
+  <div class="card">
+    <h2>Join Game</h2>
+    <input id="join-code" type="text" maxlength="4" placeholder="Room code" autocomplete="off" style="text-transform:uppercase">
+    <div class="btn-row">
+      <button id="btn-join-confirm">Join</button>
+      <button class="secondary" id="btn-join-back">Back</button>
+    </div>
+  </div>
+</div>
+
+<div id="screen-lobby" class="screen">
+  <div class="card wide">
+    <h2>Waiting Room</h2>
+    <p>Room code: <strong id="lobby-code"></strong></p>
+    <ul id="lobby-slots"></ul>
+    <div class="btn-row" id="host-controls" style="display:none">
+      <button id="btn-add-robot">+ Robot</button>
+      <button id="btn-start">Start Game</button>
+    </div>
+    <p id="lobby-wait-msg" style="display:none">Waiting for host to start…</p>
+  </div>
+</div>
+
+<div id="screen-game" class="screen">
+  <div id="game-layout">
+    <canvas id="board-canvas"></canvas>
+    <div id="sidebar">
+      <div id="dice-area">
+        <div class="die" id="die-0">–</div>
+        <div class="die" id="die-1">–</div>
+        <button id="btn-roll" disabled>Roll</button>
+      </div>
+      <div id="turn-banner"></div>
+      <div id="player-list"></div>
+      <div id="game-log"></div>
+    </div>
+  </div>
+</div>
+
+<div id="screen-gameover" class="screen">
+  <div class="card">
+    <h2>Game Over</h2>
+    <p id="winner-msg"></p>
+    <button id="btn-play-again">Play Again</button>
+  </div>
+</div>
+
+<!-- ===== JS ===== -->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
