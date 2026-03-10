@@ -4,10 +4,18 @@ const handlers = {};
 
 let ws = null;
 let reconnectInfo = null; // { roomId, playerIndex, reconnectToken }
+let sendQueue = [];       // messages buffered while connecting
 
 export function connect() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws = new WebSocket(`${proto}://${location.host}`);
+
+  ws.addEventListener('open', () => {
+    // Flush any messages that were queued before the connection opened
+    const queued = sendQueue.splice(0);
+    queued.forEach(msg => ws.send(JSON.stringify(msg)));
+  });
 
   ws.addEventListener('message', (e) => {
     let msg;
@@ -20,6 +28,7 @@ export function connect() {
     // Attempt reconnect after brief delay if we have context
     if (reconnectInfo) {
       setTimeout(() => {
+        ws = null;
         connect();
         ws.addEventListener('open', () => {
           send({ action: 'reconnect', ...reconnectInfo });
@@ -40,8 +49,11 @@ export function off(event, fn) {
 }
 
 export function send(msg) {
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (!ws) return;
+  if (ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg));
+  } else if (ws.readyState === WebSocket.CONNECTING) {
+    sendQueue.push(msg);
   }
 }
 
