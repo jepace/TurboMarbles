@@ -135,10 +135,18 @@ export function handleRoll(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'playing') return;
   const { game } = room;
+
+  // Only allow rolling during IN_TURN (start of turn) or EXTRA_ROLL (earned by rolling a 6).
+  // Phase flow: IN_TURN → (roll) → AWAITING_MOVE → (all dice used) → IN_TURN or EXTRA_ROLL
   if (game.phase !== 'IN_TURN' && game.phase !== 'EXTRA_ROLL') return;
 
+  // Only the current turn's player may roll.
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;
+
+  // Guard: if dice are already set the player has already rolled this turn.
+  // Without this check a client could re-roll to fish for a better result.
+  if (game.dice) return;
 
   const dice = rollDice();
   game.dice = dice;
@@ -152,11 +160,16 @@ export function handleMove(ws, roomId, move) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'playing') return;
   const { game } = room;
+
+  // Moves are only accepted after the player has rolled (AWAITING_MOVE).
   if (game.phase !== 'AWAITING_MOVE') return;
 
+  // Only the current turn's player may move.
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;
 
+  // Validate the move against the legal set before applying it.
+  // Illegal moves are reported back to the sender only (not broadcast).
   const result = tryApplyMove(room, game.turnIndex, move);
   if (result.error) {
     sendTo(ws, { event: 'error', code: 'ILLEGAL_MOVE', message: result.error });
@@ -172,7 +185,8 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;
 
-  // Only valid if no legal moves exist for that die
+  // A player may only forfeit a die when there are genuinely no legal moves for it.
+  // This prevents using forfeit as a way to skip a die that has valid plays.
   const legal = allLegalMoves(game, game.turnIndex);
   if (legal[dieIndex] && legal[dieIndex].length > 0) {
     sendTo(ws, { event: 'error', code: 'ILLEGAL_FORFEIT', message: 'Legal moves exist' });
@@ -242,6 +256,9 @@ export function handleReconnect(ws, roomId, playerIndex, playerName) {
 
 // ---------- Internal helpers ----------
 
+// Validate `move` against the computed legal set, then apply it.
+// We re-derive legal moves server-side so clients cannot send arbitrary moves.
+// `toStar` is only checked for exitCenter moves (choosing which star to land on).
 function tryApplyMove(room, playerIndex, move) {
   const { game } = room;
   const legal = allLegalMoves(game, playerIndex);
@@ -265,6 +282,10 @@ function tryApplyMove(room, playerIndex, move) {
   return { ok: true };
 }
 
+// Called after every move or forfeit. When both dice are consumed, either:
+//   - award an extra roll if the player rolled a 6 (earnsExtraRoll), or
+//   - advance to the next player's turn.
+// In both cases scheduleCurrentTurn kicks off robot logic if applicable.
 function advanceTurnIfDone(room) {
   const { game } = room;
   if (game.diceUsed[0] && game.diceUsed[1]) {

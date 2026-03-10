@@ -1,10 +1,11 @@
 // GameEngine.js — authoritative rule engine for TurboMarbles
 // All game logic lives here. No I/O, no WebSocket knowledge.
 
-export const TRACK_SIZE = 84;
-export const HOME_SLOTS = 4;
-export const MARBLES_PER_PLAYER = 4;
-export const CENTER = 'center';
+// Board constants
+export const TRACK_SIZE = 84;         // total squares in the outer ring (1-indexed)
+export const HOME_SLOTS = 4;          // slots in each player's home stretch (1–4)
+export const MARBLES_PER_PLAYER = 4;  // marbles per player
+export const CENTER = 'center';       // zone name for the center circle
 
 // Per-player constants indexed by player index 0-5
 export const PLAYER_CONFIG = [
@@ -56,17 +57,30 @@ export function createGame(players) {
   return {
     players: gamePlayers,
     turnIndex: 0,
-    phase: 'IN_TURN',  // IN_TURN | AWAITING_MOVE | EXTRA_ROLL | GAME_OVER
-    dice: null,
+    // Phase state machine:
+    //   IN_TURN      — waiting for the current player to roll
+    //   AWAITING_MOVE — player has rolled; waiting for move(s) or forfeit
+    //   EXTRA_ROLL   — player rolled a 6 and earned a bonus roll (back to IN_TURN flow)
+    //   GAME_OVER    — a player has moved all marbles into home
+    phase: 'IN_TURN',
+    dice: null,           // [die0, die1] after roll; null at start of turn
     diceUsed: [false, false],
-    winner: null,
+    winner: null,         // playerIndex of the winner, or null
   };
 }
 
 // --- Legal move computation ---
 
-// Returns array of legal moves for a given die value and marble.
-// Each move: { type, dieIndex, marbleId, ...destination info }
+// Returns all legal moves for a single marble and die combination.
+// Each move object has at minimum: { type, dieIndex, marbleId }
+// plus zone-specific fields (toStar, toSlot, toZone, toSpace).
+//
+// Move types by zone:
+//   base    → exitBase      (die 1 or 6, start space must be clear of own marble)
+//   center  → exitCenter    (die 1 only, choose any star not blocked by own marble)
+//   track   → enterCenter   (die 1, marble must be starEligible — sitting on own star)
+//             move          (normal step forward; may enter home stretch)
+//   home    → moveHome      (advance within home slots; cannot overshoot HOME_SLOTS)
 export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
   const player = state.players[playerIndex];
   const dieVal = state.dice[dieIndex];
@@ -96,12 +110,12 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
   }
 
   if (marbleOnTrack(marble)) {
-    // Option A: enter center via star
+    // Option A: enter center via star (marble must be sitting on its own star)
     if (marble.starEligible && dieVal === 1) {
       moves.push({ type: 'enterCenter', dieIndex, marbleId });
     }
 
-    // Option B: normal track movement
+    // Option B: normal track movement (may redirect into home stretch)
     const dest = computeTrackMove(state, player, marble, dieVal);
     if (dest) moves.push({ type: 'move', dieIndex, marbleId, ...dest });
 
@@ -116,15 +130,23 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
         moves.push({ type: 'moveHome', dieIndex, marbleId, toSlot: targetSlot });
       }
     }
-    // Overshoot or blocked → no move
+    // Overshoot (targetSlot > HOME_SLOTS) or blocked → no move available
     return moves;
   }
 
   return moves;
 }
 
-// Compute where a track marble ends up after moving dieVal steps.
-// Returns { toZone, toSpace?, toSlot? } or null if blocked by own marble.
+// Compute where a track marble ends up after moving dieVal steps clockwise.
+// Returns { toZone, toSpace?, toSlot? } or null if the move is blocked.
+//
+// Special cases (checked in order):
+//  1. The path crosses the player's homeEntry — redirect into the home stretch.
+//     stepsIntoHome = remaining steps after entering home.
+//     stepsIntoHome === 0  → lands on the entry square → slot 1
+//     stepsIntoHome  > 0  → advances that many slots deeper into home
+//     Overshoot (targetSlot > HOME_SLOTS) or blocked → null (no move)
+//  2. An own marble occupies any square along the path → blocked → null.
 function computeTrackMove(state, player, marble, dieVal) {
   const { start, homeEntry } = player.config;
   let pos = marble.space;
@@ -150,9 +172,8 @@ function computeTrackMove(state, player, marble, dieVal) {
       return null; // overshoot or blocked
     }
 
-    // Blocked by own marble on track?
-    if (step < dieVal && ownMarbleAtSpace(player, next)) return null;
-    if (step === dieVal && ownMarbleAtSpace(player, next)) return null;
+    // A player's own marble blocks movement through and onto any track square.
+    if (ownMarbleAtSpace(player, next)) return null;
 
     pos = next;
   }
@@ -160,14 +181,20 @@ function computeTrackMove(state, player, marble, dieVal) {
   return { toZone: 'track', toSpace: pos };
 }
 
-// True if moving from trackPos wraps past homeEntry
+// Returns true if a single clockwise step from `prev` to `next` crosses the
+// player's homeEntry boundary.  Handles the track wrap-around (space 84 → 1).
+//   No wrap  (next > prev): homeEntry is crossed if it sits strictly between prev and next.
+//   Wrapped  (next < prev): homeEntry is crossed if it's beyond prev OR at/before next.
 function crossesHome(prev, homeEntry, next) {
-  // Handles wrap-around: e.g. homeEntry=84, prev=83, next=1
   if (next > prev) return prev < homeEntry && homeEntry < next;
-  // wrapped
   return prev < homeEntry || homeEntry <= next;
 }
 
+// Returns true if the player already has a marble at the given location.
+// Space is only compared for 'track' locations; this function is currently
+// only called with track locations.  If you ever call it with a 'home' or
+// 'center' loc, add the appropriate space/slot comparison here — the current
+// fallback (true) would incorrectly match ANY marble in that zone.
 function ownMarbleAt(player, loc) {
   return player.marbles.some(m =>
     m.zone === loc.zone &&
@@ -267,7 +294,11 @@ export function applyMove(state, playerIndex, move) {
 
   state.diceUsed[move.dieIndex] = true;
 
-  // Check win
+  // Check win: all 4 marbles in the home zone.
+  // Note: this checks zone only, not that every marble is in slot 4 (the final
+  // slot).  A marble entering slot 1–3 counts toward the win total.  This is
+  // intentional — a player wins as soon as all marbles have entered home,
+  // regardless of which slot they occupy.
   if (player.marbles.every(m => m.zone === 'home')) {
     state.phase = 'GAME_OVER';
     state.winner = playerIndex;
