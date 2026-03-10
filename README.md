@@ -31,9 +31,9 @@ Be the first player to move all of your marbles from your **Base** into your **H
 - A marble can only leave Base when you roll a **1** or a **6** on either die (or a combined total of **7**).
 - Once out, it is placed on your designated start space.
 
-### Doubles Bonus
-- Rolling doubles (matching numbers on both dice) earns you an **extra roll** after completing your move.
-- Rolling doubles three times in a row forfeits your turn.
+### Rolling a Six
+- Rolling a **6** on either or both dice earns you an **extra roll** after completing your move.
+- Rolling 6–6 still grants only **one** extra roll — sixes do not stack.
 
 ### Safe Spaces
 - Certain marked spaces on the board are **Safe Zones** — marbles on these spaces cannot be sent back to Base.
