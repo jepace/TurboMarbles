@@ -60,3 +60,11 @@ export function send(msg) {
 export function setReconnectInfo(info) {
   reconnectInfo = info;
 }
+
+// For unit testing only — resets all module-level state between test cases.
+export function _reset() {
+  ws = null;
+  reconnectInfo = null;
+  sendQueue.length = 0;
+  Object.keys(handlers).forEach(k => delete handlers[k]);
+}

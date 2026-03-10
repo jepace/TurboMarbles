@@ -469,3 +469,9 @@ export function getRoomByWs(ws) {
   const sess = sessions.get(ws._id);
   return sess ? sess.roomId : null;
 }
+
+// For unit testing only — resets all module-level state between test cases.
+export function _reset() {
+  rooms.clear();
+  sessions.clear();
+}
