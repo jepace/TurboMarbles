@@ -26,40 +26,83 @@ No build step is required for the frontend. No Linux-specific APIs are used.
 
 ## 3. Board Layout
 
-The board is a fixed track of **96 spaces** arranged in a loop, plus a center shortcut region.
+Based on the Aggravation 6-player board, adapted for TurboMarbles.
+
+### Shape
+
+The board is a **6-pointed star**. Six colored arms radiate from a central hub at 60° intervals. The outer track is an 84-space ring connecting all six arms. Marbles travel clockwise.
 
 ```
-         [Home A]
-            |
-... - [97] - [98] - [99] - [100/Start A] - [1] - [2] - ...
-                                  |
-                             (shortcut in)
-                                  |
-                            [Center Hub]
-                                  |
-                             (shortcut out)
-                                  |
-... - [48] - [49] - [50/Start C] - [51] - ...
+              [Base]
+                |
+           [Home lane]  ← 4 slots, inward toward center
+                |
+           [Home entry]
+                |
+  ──[★]──[  ]──[Start]──[  ]──[  ]──[  ]──[  ]──[★]──
+         ↑                                        ↑
+    shortcut star                           shortcut star
+    (prior player's                         (this player's
+       section)                               section)
+                       [Center Hub]
+                    (shortcut destination)
 ```
 
-### Zones per player
+### Track numbering
 
-Each player color owns:
-- **Base** — 4 slots, off the main track; immune to bumping.
-- **Start space** — the entry point onto the main track.
-- **Home** — 4 slots at the end of a private lane; immune to bumping.
-- **Shortcut entry** — one specific track space that grants shortcut access.
+84 spaces, numbered **1–84 clockwise** around the outer ring.
 
-### Shortcut
+| Player | Color  | Start space | Shortcut star | Home entry |
+|--------|--------|-------------|---------------|------------|
+| 0      | Yellow | 1           | 11            | 84         |
+| 1      | Orange | 15          | 25            | 14         |
+| 2      | Pink   | 29          | 39            | 28         |
+| 3      | White  | 43          | 53            | 42         |
+| 4      | Green  | 57          | 67            | 56         |
+| 5      | Blue   | 71          | 81            | 70         |
 
-- Landing exactly on a **shortcut entry space** activates the shortcut for that marble.
-- On the player's **next turn**, they may choose to move that marble through the center hub, skipping a significant portion of the track.
-- The marble exits at the shortcut's paired **exit space** on the far side of the board.
-- A player may decline the shortcut and move normally instead.
+- Each player owns **14 consecutive spaces** (e.g., Player 0 owns spaces 1–14).
+- **Start space**: the first space in a player's section; marble placed here on exit from Base.
+- **Shortcut star**: 10 spaces into the player's section (the gold star-burst on the physical board). Landing here activates the shortcut.
+- **Home entry**: the last space before the next player's start; turning inward here enters the home lane.
 
-### Space numbering
+### Home lane
 
-Track spaces are numbered 1–96 globally. Each player's home lane is a separate sequence (e.g., `A-home-1` through `A-home-4`), not part of the main loop.
+Each player has a **private 4-slot home lane** running from the board edge inward toward the center hub. These slots are off the main track and cannot be landed on by opponents.
+
+- Slots are numbered 1 (outermost) to 4 (innermost, closest to center).
+- A marble enters slot 1 from the home entry space using an exact roll.
+- Subsequent exact rolls advance it deeper (slot 1 → 2 → 3 → 4).
+
+### Base
+
+Each player has **4 base slots** at the tip of their arm, fully off the track. Marbles start here and return here when bumped.
+
+### Shortcut (Center Hub)
+
+- A marble that lands **exactly** on a shortcut star space gains shortcut eligibility.
+- On any subsequent turn, the player may use a die move to send that marble to the **Center Hub** instead of moving along the track. The die value used equals the number of track spaces to the center from that star (treated as a fixed cost of **14 spaces** — half the ring).
+- From the Center Hub, on the player's next turn, they may exit to **any shortcut star** on the board. The marble is placed on that star and play continues normally from there.
+- A marble may only pass through the center once per trip around the board.
+- The center hub is **neutral** — no bumping occurs there (treated like Base/Home for safety).
+
+### Canvas coordinate system
+
+The board is drawn on an HTML5 Canvas. Layout is computed geometrically from these constants:
+
+```js
+const CENTER = { x: 500, y: 500 };  // canvas center
+const ARM_LENGTH = 340;             // pixels from center to base tip
+const ARM_WIDTH = 80;               // pixels
+const SPACE_RADIUS = 14;            // hole circle radius
+const PLAYERS = 6;
+const ANGLE_STEP = (2 * Math.PI) / PLAYERS; // 60°
+
+// Each player i has arm angle: i * ANGLE_STEP - Math.PI / 2
+// (Player 0 points straight down, matching the photo reference)
+```
+
+Track space pixel positions are pre-computed once at startup and stored in a 84-element array indexed by space number. Home lane and base slot positions are stored separately per player.
 
 ---
 
@@ -192,12 +235,14 @@ LOBBY → STARTING → IN_TURN → AWAITING_MOVE → EXTRA_ROLL → GAME_OVER
 
 ### Marble location values
 
-| Value             | Meaning                                  |
-|-------------------|------------------------------------------|
-| `"base"`          | In player's base, not on track           |
-| `"track"` + space | On the main track at global space number |
-| `"home"` + slot   | In home lane at slot 1–4                 |
-| `"shortcutPending"` | On track, eligible for shortcut next turn |
+| Value                      | Meaning                                         |
+|----------------------------|-------------------------------------------------|
+| `{ zone: "base" }`         | In player's base, not on track                  |
+| `{ zone: "track", space: n }` | On the main ring at space 1–84              |
+| `{ zone: "home", slot: n }` | In home lane at slot 1–4                       |
+| `{ zone: "center" }`       | On the center hub (shortcut transit)            |
+
+Shortcut eligibility is a boolean flag on the marble: `shortcutEligible: true`. It is set when the marble lands on the player's shortcut star, and cleared when the shortcut is used or the marble moves off the star.
 
 ---
 
@@ -313,10 +358,8 @@ pkg install node20 sqlite3 nginx
 
 ## 11. Open Questions (Pre-Implementation)
 
-Items not yet decided:
-
-- [ ] What are the exact shortcut entry and exit space numbers?
-- [ ] Board visual design — top-down grid, circular path, or custom shape?
+- [ ] Shortcut cost: is the die value to move from star → center hub fixed (14), or is there a simpler "free teleport" model?
+- [ ] Can a marble on the center hub be bumped by another marble arriving at the center?
+- [ ] What happens if a marble's shortcut star is occupied by another marble when the player wants to exit the center to that star — pick a different star, or blocked?
 - [ ] Is there a maximum room idle timeout before the room is closed?
-- [ ] Is a spectator mode desired?
 - [ ] Local pass-and-play vs. online-only, or both?
