@@ -80,12 +80,13 @@ Each player has **4 base slots** at the tip of their arm, fully off the track. M
 
 ### Shortcut (Center Hub)
 
-The shortcut path is: **track star → Center Hub → any track star**. Each leg costs exactly one die value of **1**.
+The shortcut path is: **track star → Center Hub → any track star**.  No specific die value is required; landing exactly on your own star is what grants center access.
 
-- **Entering the hub**: When a marble is on a shortcut star space and the player rolls (or chooses to apply) a **1**, the marble moves to the Center Hub instead of advancing one track space.
-- **Exiting the hub**: On any subsequent turn, when the player rolls (or applies) a **1**, the marble exits to **any** shortcut star of the player's choosing. The marble is placed on that star and play continues from there.
-- **Bumping applies**: The center hub is a normal space for bumping. A marble arriving at the center bumps any marble already there, sending it back to its owner's Base.
-- **Choice**: The player may always choose to move along the track normally instead of taking the shortcut, even when holding a 1.
+- **Entering the hub**: When a marble is sitting on its own shortcut star, the player may use **any die** to move the marble into the Center Hub (the die is consumed; the marble parks in center).
+- **Transit (powerful!)**: Instead of parking in center, the player may use a single die to **transit through** the center in one action — the marble passes through the center and exits to **any** shortcut star, then continues the full die-value worth of steps from that exit star.  This can carry a marble across the board and into a home stretch in a single move.
+- **Exiting the hub**: A marble parked in center may exit to **any** shortcut star using **any die** (the die is consumed; the marble lands on that star and is `starEligible`).
+- **Bumping applies**: The center hub is a normal space for bumping. A marble arriving at (or transiting through) the center bumps any marble already there, sending it back to its owner's Base.  For a transit move, only the final landing position is checked for bumping, not intermediate spaces.
+- **Choice**: The player may always choose to move along the track normally instead of entering the shortcut, even when on their own star.
 
 ### Canvas coordinate system
 
