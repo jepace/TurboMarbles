@@ -50,7 +50,7 @@ Be the first player to move all of your marbles from your **Base** into your **H
 
 ## Features
 
-- **2–6 Player Support** — play locally (pass-and-play) or against others online
+- **2–6 Player Support** — online multiplayer; optional heuristic robo-player for empty slots
 - **Two-Dice Mechanics** — independent dice with player-chosen order create tactical decisions every turn
 - **Animated Board** — smooth marble movement and dice roll animations
 - **Color Themes** — choose from classic colors for each player

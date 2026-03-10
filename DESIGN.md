@@ -54,16 +54,16 @@ The board is a **6-pointed star**. Six colored arms radiate from a central hub a
 
 | Player | Color  | Start space | Shortcut star | Home entry |
 |--------|--------|-------------|---------------|------------|
-| 0      | Yellow | 1           | 11            | 84         |
-| 1      | Orange | 15          | 25            | 14         |
-| 2      | Pink   | 29          | 39            | 28         |
-| 3      | White  | 43          | 53            | 42         |
-| 4      | Green  | 57          | 67            | 56         |
-| 5      | Blue   | 71          | 81            | 70         |
+| 0      | Yellow | 1           | 8             | 84         |
+| 1      | Orange | 15          | 22            | 14         |
+| 2      | Pink   | 29          | 36            | 28         |
+| 3      | White  | 43          | 50            | 42         |
+| 4      | Green  | 57          | 64            | 56         |
+| 5      | Blue   | 71          | 78            | 70         |
 
 - Each player owns **14 consecutive spaces** (e.g., Player 0 owns spaces 1–14).
 - **Start space**: the first space in a player's section; marble placed here on exit from Base.
-- **Shortcut star**: 10 spaces into the player's section (the gold star-burst on the physical board). Landing here activates the shortcut.
+- **Shortcut star**: 7 spaces into the player's section (the midpoint; gold star-burst on the physical board).
 - **Home entry**: the last space before the next player's start; turning inward here enters the home lane.
 
 ### Home lane
@@ -80,11 +80,12 @@ Each player has **4 base slots** at the tip of their arm, fully off the track. M
 
 ### Shortcut (Center Hub)
 
-- A marble that lands **exactly** on a shortcut star space gains shortcut eligibility.
-- On any subsequent turn, the player may use a die move to send that marble to the **Center Hub** instead of moving along the track. The die value used equals the number of track spaces to the center from that star (treated as a fixed cost of **14 spaces** — half the ring).
-- From the Center Hub, on the player's next turn, they may exit to **any shortcut star** on the board. The marble is placed on that star and play continues normally from there.
-- A marble may only pass through the center once per trip around the board.
-- The center hub is **neutral** — no bumping occurs there (treated like Base/Home for safety).
+The shortcut path is: **track star → Center Hub → any track star**. Each leg costs exactly one die value of **1**.
+
+- **Entering the hub**: When a marble is on a shortcut star space and the player rolls (or chooses to apply) a **1**, the marble moves to the Center Hub instead of advancing one track space.
+- **Exiting the hub**: On any subsequent turn, when the player rolls (or applies) a **1**, the marble exits to **any** shortcut star of the player's choosing. The marble is placed on that star and play continues from there.
+- **Bumping applies**: The center hub is a normal space for bumping. A marble arriving at the center bumps any marble already there, sending it back to its owner's Base.
+- **Choice**: The player may always choose to move along the track normally instead of taking the shortcut, even when holding a 1.
 
 ### Canvas coordinate system
 
@@ -122,6 +123,7 @@ Track space pixel positions are pre-computed once at startup and stored in a 84-
 ### Getting out of Base
 - A marble leaves Base only when the player rolls a **1** or a **6** on a die.
 - That die's value (1 or 6) is consumed to move the marble from Base onto the player's start space.
+- The start space must be **unoccupied by the player's own marble** to exit. If it is occupied by an opponent, the opponent is bumped.
 - A **6** used to leave Base still triggers the extra-roll rule.
 
 ### Rolling a 6
@@ -129,15 +131,21 @@ Track space pixel positions are pre-computed once at startup and stored in a 84-
 - Rolling 6–6 grants only **one** extra roll — sixes do not stack.
 - The extra roll follows the same rules as a normal turn (both dice, both must be used).
 
+### Movement blocking — cannot pass your own marble
+- A marble **cannot move through or land on** a space occupied by another of the player's own marbles.
+- If a die move would require passing your own marble, that move is illegal for that die.
+- **Exception — shortcut path**: While in the shortcut path (star → center → star), a marble may pass over your own marbles that are on the main track. However, it still cannot pass your own marble that is also on the shortcut path (star or center).
+
 ### Bumping
 - Landing on a space occupied by an **opponent's marble** sends that marble back to its owner's Base.
-- A player may not bump their own marbles.
+- The Center Hub follows the same rule — arriving there bumps any marble already present.
 - Marbles in **Base** and **Home** cannot be bumped under any circumstances.
 
 ### Entering Home
-- A marble may only enter the home lane from the player's designated entry point.
+- A marble may only enter the home lane from the player's designated home entry space.
 - The player must roll the **exact number** needed to advance a marble to an open home slot.
-- Overshooting (rolling more than needed) means the marble cannot enter; the die is forfeited for that marble.
+- Overshooting (rolling more than needed) is illegal for that die; the die is forfeited for that marble.
+- A marble already in the home lane cannot move forward if its path is blocked by another of the player's own marbles.
 
 ---
 
@@ -358,8 +366,5 @@ pkg install node20 sqlite3 nginx
 
 ## 11. Open Questions (Pre-Implementation)
 
-- [ ] Shortcut cost: is the die value to move from star → center hub fixed (14), or is there a simpler "free teleport" model?
-- [ ] Can a marble on the center hub be bumped by another marble arriving at the center?
-- [ ] What happens if a marble's shortcut star is occupied by another marble when the player wants to exit the center to that star — pick a different star, or blocked?
 - [ ] Is there a maximum room idle timeout before the room is closed?
-- [ ] Local pass-and-play vs. online-only, or both?
+- [ ] Robo-player: which player slots can be filled by a bot, and how does the host trigger it?
