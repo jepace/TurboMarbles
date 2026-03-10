@@ -313,7 +313,40 @@ public/
 
 ---
 
-## 10. FreeBSD Deployment
+## 10. Lobby & Room Flow
+
+### Creating a game
+
+1. Player visits the site, enters their name.
+2. Clicks **Create Game** and selects total player count (2–6).
+3. Server creates a room and returns a short **room code** (e.g. `KFMQ`).
+4. Host shares the code out-of-band (text, Discord, etc.).
+5. As other humans join, they appear in the waiting room list.
+6. Host may click **Add Robot** on any unfilled slot at any time.
+7. Host clicks **Start** once the room is full (all slots human or robot). A single human playing against all robots is valid.
+
+### Joining a game
+
+1. Player visits the site, enters their name.
+2. Clicks **Join Game**, enters the room code.
+3. Lands in the waiting room; waits for host to start.
+
+### Disconnection during a game
+
+- If a human player's WebSocket disconnects, the server starts a **2-minute countdown**.
+- The disconnected player's turns are skipped during the countdown.
+- If they reconnect before the timer expires, they resume normally.
+- If the timer expires, a **robot permanently takes over** that player's marbles for the rest of the game.
+
+### Robot players
+
+- Robots share the same turn interface as human players (same WebSocket events, same rule engine).
+- The server handles a robot's turn internally: on `IN_TURN`, the robot computes and submits its moves server-side without a WebSocket round-trip.
+- Robot strategy is heuristic-based (v1): prioritize getting marbles out of base, advance the furthest marble, bump opponents when possible.
+
+---
+
+## 11. FreeBSD Deployment
 
 ### Service setup
 
@@ -364,7 +397,10 @@ pkg install node20 sqlite3 nginx
 
 ---
 
-## 11. Open Questions (Pre-Implementation)
+## 12. Open Questions (Post-v1)
 
-- [ ] Is there a maximum room idle timeout before the room is closed?
-- [ ] Robo-player: which player slots can be filled by a bot, and how does the host trigger it?
+All core design decisions are resolved. Items to revisit after v1:
+
+- [ ] Turn timer: configurable per-turn clock (already in feature list; exact UI TBD)
+- [ ] Spectator mode
+- [ ] Idle room cleanup: how long before a finished/abandoned room is purged from memory
