@@ -82,11 +82,11 @@ Each player has **4 base slots** at the tip of their arm, fully off the track. M
 
 The shortcut path is: **track star → Center Hub → any track star**.  No specific die value is required; landing exactly on your own star is what grants center access.
 
-- **Entering the hub**: When a marble is sitting on its own shortcut star, the player may use **any die** to move the marble into the Center Hub (the die is consumed; the marble parks in center).
-- **Transit (powerful!)**: Instead of parking in center, the player may use a single die to **transit through** the center in one action — the marble passes through the center and exits to **any** shortcut star, then continues the full die-value worth of steps from that exit star.  This can carry a marble across the board and into a home stretch in a single move.
-- **Exiting the hub**: A marble parked in center may exit to **any** shortcut star using **any die** (the die is consumed; the marble lands on that star and is `starEligible`).
-- **Bumping applies**: The center hub is a normal space for bumping. A marble arriving at (or transiting through) the center bumps any marble already there, sending it back to its owner's Base.  For a transit move, only the final landing position is checked for bumping, not intermediate spaces.
-- **Choice**: The player may always choose to move along the track normally instead of entering the shortcut, even when on their own star.
+- **Entering the hub**: A marble enters the center hub by landing there exactly — the hub is 1 step past the player's own star on a shortcut branch.  No specific die value is required; the die simply needs to count exactly to that point.  For example, yellow's star is at space 8 and the hub is 8 steps from yellow's start, so a marble 3 spaces before the star enters with a die of 4 (3 to the star + 1 into the hub).  From the star itself a die of 1 enters the hub.
+- **Transit (powerful!)**: When a marble is **already sitting on its own star**, any die may be used to jump freely through the center hub to any other shortcut star, then continue the full die-value worth of steps from that exit star.  This can carry a marble across the board and into a home stretch in a single move.
+- **Exiting the hub**: A marble parked in center exits with a die of **1** only (the die is fully consumed; marble lands on any chosen star and becomes `starEligible`).
+- **Bumping applies**: The center hub is a normal space for bumping. A marble arriving at the hub bumps any marble already there.  For a transit move, only the final landing position is checked for bumping.
+- **Choice**: The player may always choose to move along the track normally instead of entering the shortcut.
 
 ### Canvas coordinate system
 
