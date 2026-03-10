@@ -2,6 +2,7 @@
   "name": "turbomarbles",
   "version": "0.1.0",
   "description": "Turn-based multiplayer marble racing game",
+  "license": "BSD-2-Clause",
   "main": "src/server.js",
   "type": "module",
   "scripts": {
