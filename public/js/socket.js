@@ -3,7 +3,7 @@
 const handlers = {};
 
 let ws = null;
-let reconnectInfo = null; // { roomId, playerIndex, name }
+let reconnectInfo = null; // { roomId, playerIndex, reconnectToken }
 
 export function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';

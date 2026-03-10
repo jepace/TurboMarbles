@@ -79,10 +79,10 @@ on('error', ({ message }) => {
   alert(message);
 });
 
-on('roomCreated', ({ roomId: rid, code }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken }) => {
   roomId = rid;
   myPlayerIndex = 0;
-  setReconnectInfo({ roomId: rid, playerIndex: 0, name: myName });
+  setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
@@ -90,10 +90,10 @@ on('roomCreated', ({ roomId: rid, code }) => {
   show('screen-lobby');
 });
 
-on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState }) => {
+on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState, reconnectToken }) => {
   roomId = rid;
   myPlayerIndex = playerIndex;
-  setReconnectInfo({ roomId: rid, playerIndex, name: myName });
+  setReconnectInfo({ roomId: rid, playerIndex, reconnectToken });
   $('lobby-code').textContent = lobbyState.code;
   $('host-controls').style.display = 'none';
   $('lobby-wait-msg').style.display = 'block';

@@ -92,8 +92,8 @@ function dispatch(ws, msg) {
     }
 
     case 'reconnect': {
-      const { roomId, playerIndex, name } = msg;
-      const result = handleReconnect(ws, roomId, playerIndex, name);
+      const { roomId, playerIndex, reconnectToken } = msg;
+      const result = handleReconnect(ws, roomId, playerIndex, reconnectToken);
       if (result && result.error) send(ws, { event: 'error', message: result.error });
       break;
     }

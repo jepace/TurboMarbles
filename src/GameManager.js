@@ -9,7 +9,7 @@ import { robotTakeTurn } from './RobotPlayer.js';
 const DISCONNECT_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 const ROBOT_TURN_DELAY_MS   = 800;            // brief pause so it feels natural
 
-const rooms = new Map();   // roomId → Room
+const rooms = new Map();    // roomId → Room
 const sessions = new Map(); // wsId → { roomId, playerIndex }
 
 function genCode() {
@@ -30,7 +30,8 @@ function genId() {
 //   totalPlayers,
 //   state: 'lobby' | 'playing' | 'finished',
 //   game: GameEngine state | null,
-//   disconnectTimers: Map<playerIndex, timer>,
+//   disconnectTimers: Map<playerIndex, timer>,  // human reconnect grace timers
+//   robotTurnTimer: TimeoutId | null,           // pending robot-move setTimeout handle
 // }
 
 export function createRoom(hostWs, hostName, totalPlayers) {
@@ -56,9 +57,13 @@ export function createRoom(hostWs, hostName, totalPlayers) {
     state: 'lobby',
     game: null,
     disconnectTimers: new Map(),
+    robotTurnTimer: null,
   };
   rooms.set(roomId, room);
-  return { roomId, code };
+
+  // Return the hostId as reconnectToken so the host can authenticate reconnects.
+  // The client must store this and send it back in any 'reconnect' action.
+  return { roomId, code, reconnectToken: hostId };
 }
 
 export function joinRoom(ws, code, playerName) {
@@ -82,7 +87,10 @@ export function joinRoom(ws, code, playerName) {
     color: slot.color,
   }, ws);
 
-  return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room) };
+  // Return playerId as reconnectToken so the client can re-authenticate after
+  // a disconnect.  The client must store this securely and send it back on
+  // 'reconnect'.  Using a name-only check would allow impersonation.
+  return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room), reconnectToken: playerId };
 }
 
 export function addRobot(ws, roomId) {
@@ -129,6 +137,18 @@ export function startGame(ws, roomId) {
   return { ok: true };
 }
 
+// ---------- Shared roll helper ----------
+
+// Performs a dice roll and transitions game to AWAITING_MOVE.
+// Called by both human handleRoll() and doRobotTurn() so roll logic stays in one place.
+function performRoll(game) {
+  const dice = rollDice();
+  game.dice = dice;
+  game.diceUsed = [false, false];
+  game.phase = 'AWAITING_MOVE';
+  return dice;
+}
+
 // ---------- In-game actions ----------
 
 export function handleRoll(ws, roomId) {
@@ -148,11 +168,7 @@ export function handleRoll(ws, roomId) {
   // Without this check a client could re-roll to fish for a better result.
   if (game.dice) return;
 
-  const dice = rollDice();
-  game.dice = dice;
-  game.diceUsed = [false, false];
-  game.phase = 'AWAITING_MOVE';
-
+  const dice = performRoll(game);
   broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
 }
 
@@ -185,15 +201,19 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;
 
+  // Validate dieIndex is exactly 0 or 1 — reject strings, undefined, out-of-range.
+  const idx = Number(dieIndex);
+  if (idx !== 0 && idx !== 1) return;
+
   // A player may only forfeit a die when there are genuinely no legal moves for it.
   // This prevents using forfeit as a way to skip a die that has valid plays.
   const legal = allLegalMoves(game, game.turnIndex);
-  if (legal[dieIndex] && legal[dieIndex].length > 0) {
+  if (legal[idx] && legal[idx].length > 0) {
     sendTo(ws, { event: 'error', code: 'ILLEGAL_FORFEIT', message: 'Legal moves exist' });
     return;
   }
 
-  game.diceUsed[dieIndex] = true;
+  game.diceUsed[idx] = true;
   advanceTurnIfDone(room);
 }
 
@@ -212,20 +232,27 @@ export function handleDisconnect(ws) {
   slot.ws = null;
 
   if (room.state === 'lobby') {
-    // Remove from lobby
+    // Remove from lobby immediately — slot becomes available for another player
     slot.playerId = null;
     slot.name = null;
     broadcast(room, { event: 'playerLeft', playerIndex: sess.playerIndex });
+    cleanupIfAbandoned(room); // delete the room if no humans remain
     return;
   }
 
-  // In-game: start disconnect timer
+  // In-game: give the player DISCONNECT_TIMEOUT_MS to reconnect before handing
+  // their slot to a robot.
   broadcast(room, { event: 'playerDisconnected', playerIndex: sess.playerIndex, timeoutMs: DISCONNECT_TIMEOUT_MS });
 
   const timer = setTimeout(() => {
+    room.disconnectTimers.delete(sess.playerIndex);
     slot.isRobot = true;
     broadcast(room, { event: 'robotTookOver', playerIndex: sess.playerIndex });
-    // If it's currently this player's turn, proceed with robot
+
+    // If this takeover leaves no humans in the game, nobody is watching — clean up.
+    if (cleanupIfAbandoned(room)) return;
+
+    // If it's currently this player's turn, schedule the robot to move.
     if (room.game && room.game.turnIndex === sess.playerIndex) {
       scheduleCurrentTurn(room);
     }
@@ -234,15 +261,18 @@ export function handleDisconnect(ws) {
   room.disconnectTimers.set(sess.playerIndex, timer);
 }
 
-export function handleReconnect(ws, roomId, playerIndex, playerName) {
+export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'playing') return { error: 'Invalid room' };
 
   const slot = room.slots[playerIndex];
   if (!slot || slot.isRobot) return { error: 'Slot not available' };
-  if (slot.name !== playerName) return { error: 'Name mismatch' };
 
-  // Cancel disconnect timer
+  // Validate using the playerId issued at join time, not just the player name.
+  // A name-only check would allow any client who knows the name to hijack the slot.
+  if (!reconnectToken || slot.playerId !== reconnectToken) return { error: 'Invalid token' };
+
+  // Cancel disconnect timer — the player made it back in time
   const timer = room.disconnectTimers.get(playerIndex);
   if (timer) { clearTimeout(timer); room.disconnectTimers.delete(playerIndex); }
 
@@ -254,6 +284,28 @@ export function handleReconnect(ws, roomId, playerIndex, playerName) {
   return { ok: true };
 }
 
+// ---------- Room lifecycle ----------
+
+// Returns the number of human (non-robot) players that have been assigned a slot.
+// Robots and empty slots don't count.
+function humanCount(room) {
+  return room.slots.filter(s => s.playerId && !s.isRobot).length;
+}
+
+// Delete the room if no human players remain.
+// Called after any event that could reduce the human count to zero:
+//   - a human leaves the lobby
+//   - a human's disconnect timer fires (robot takeover) and they were the last human
+// Cancels all pending timers before deleting so nothing fires against a dead room.
+// Returns true if the room was deleted.
+function cleanupIfAbandoned(room) {
+  if (humanCount(room) > 0) return false;
+  if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
+  for (const t of room.disconnectTimers.values()) clearTimeout(t);
+  rooms.delete(room.id);
+  return true;
+}
+
 // ---------- Internal helpers ----------
 
 // Validate `move` against the computed legal set, then apply it.
@@ -261,12 +313,18 @@ export function handleReconnect(ws, roomId, playerIndex, playerName) {
 // `toStar` is only checked for exitCenter moves (choosing which star to land on).
 function tryApplyMove(room, playerIndex, move) {
   const { game } = room;
+
+  // Reject any move with an invalid dieIndex before touching game state.
+  const idx = Number(move?.dieIndex);
+  if (idx !== 0 && idx !== 1) return { error: 'Invalid dieIndex' };
+
   const legal = allLegalMoves(game, playerIndex);
-  const validForDie = (legal[move.dieIndex] || []);
+  const validForDie = (legal[idx] || []);
   const matched = validForDie.find(m =>
     m.type === move.type &&
     m.marbleId === move.marbleId &&
-    (move.toStar === undefined || m.toStar === move.toStar)
+    (move.toStar === undefined || m.toStar === move.toStar) &&
+    m.dieIndex === idx
   );
   if (!matched) return { error: 'Move not in legal set' };
 
@@ -303,31 +361,40 @@ function advanceTurnIfDone(room) {
 function scheduleCurrentTurn(room) {
   const { game } = room;
   if (!game || game.phase === 'GAME_OVER') return;
+
+  // Cancel any previously scheduled robot timer.  Without this, rapid phase
+  // transitions (e.g. extra-roll chains) could stack multiple pending timers
+  // causing the robot to take several moves in quick succession.
+  if (room.robotTurnTimer) {
+    clearTimeout(room.robotTurnTimer);
+    room.robotTurnTimer = null;
+  }
+
   const slot = room.slots[game.turnIndex];
   if (slot.isRobot) {
-    setTimeout(() => doRobotTurn(room), ROBOT_TURN_DELAY_MS);
+    room.robotTurnTimer = setTimeout(() => {
+      room.robotTurnTimer = null;
+      doRobotTurn(room);
+    }, ROBOT_TURN_DELAY_MS);
   }
-  // Human turn: wait for client to send 'roll'
+  // Human turn: nothing to schedule — wait for client to send 'roll'
 }
 
 function doRobotTurn(room) {
   const { game } = room;
   if (!game || game.phase === 'GAME_OVER') return;
+
+  // Roll using the shared helper (same logic path as a human roll)
   if (game.phase === 'IN_TURN' || game.phase === 'EXTRA_ROLL') {
-    // Roll
-    const dice = rollDice();
-    game.dice = dice;
-    game.diceUsed = [false, false];
-    game.phase = 'AWAITING_MOVE';
+    const dice = performRoll(game);
     broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
   }
 
-  // Apply robot moves
+  // robotTakeTurn calls applyCallback for each die it uses.
+  // null callback means no legal move found — the die is already forfeited inside
+  // robotTakeTurn; we just broadcast the events for any moves that were made.
   robotTakeTurn(game, game.turnIndex, (move) => {
-    if (!move) {
-      // Forfeit remaining dice
-      game.diceUsed = [true, true];
-    } else {
+    if (move) {
       const events = applyMove(game, game.turnIndex, move);
       events.forEach(ev => broadcast(room, ev));
     }

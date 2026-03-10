@@ -42,8 +42,10 @@ function scoreMove(game, playerIndex, move) {
 
   switch (move.type) {
     case 'moveHome': {
-      const isLast = player.marbles.filter((m, i) =>
-        i !== move.marbleId && (m.zone === 'home' || m.zone === 'base')).length === 0;
+      // isLast: every OTHER marble is already in home — moving this one wins.
+      // (Previous bug: condition was inverted, checking home||base instead of !home)
+      const isLast = player.marbles.every((m, i) =>
+        i === move.marbleId || m.zone === 'home');
       if (move.toSlot === 4 && isLast) return 10000; // win
       return 600 + move.toSlot * 40;
     }
