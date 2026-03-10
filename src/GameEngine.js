@@ -250,7 +250,7 @@ function computeTrackMove(state, player, marble, dieVal) {
 
     // Check: does this step cross or land on homeEntry?
     if (pos === homeEntry || (crossesHome(pos, homeEntry, next))) {
-      const stepsToEntry = trackDistance(marble.space, homeEntry);
+      const stepsToEntry = (marble.space === homeEntry) ? 0 : trackDistance(marble.space, homeEntry);
       const stepsIntoHome = dieVal - stepsToEntry;
       if (stepsIntoHome === 0) {
         // Lands exactly on homeEntry — enters slot 1
@@ -280,7 +280,7 @@ function computeTrackMove(state, player, marble, dieVal) {
 //   No wrap  (next > prev): homeEntry is crossed if it sits strictly between prev and next.
 //   Wrapped  (next < prev): homeEntry is crossed if it's beyond prev OR at/before next.
 function crossesHome(prev, homeEntry, next) {
-  if (next > prev) return prev < homeEntry && homeEntry < next;
+  if (next > prev) return prev < homeEntry && homeEntry <= next;
   return prev < homeEntry || homeEntry <= next;
 }
 
