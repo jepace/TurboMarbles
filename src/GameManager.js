@@ -151,6 +151,7 @@ function performRoll(game) {
   game._humanMadeMove = false;
   // Snapshot marble positions for undo support
   game._rollSnapshot = game.players.map(p => p.marbles.map(m => ({ ...m })));
+  game._undoStack = []; // reset undo stack on new roll
   return dice;
 }
 
@@ -344,6 +345,12 @@ function tryApplyMove(room, playerIndex, move) {
   );
   if (!matched) return { error: 'Move not in legal set' };
 
+  // Save state before move for undo support (LIFO: last move undone first)
+  game._undoStack.push({
+    marbles: game.players.map(p => p.marbles.map(m => ({ ...m }))),
+    diceUsed: [...game.diceUsed],
+  });
+
   const events = applyMove(game, playerIndex, matched);
   events.forEach(ev => broadcast(room, ev));
   game._humanMadeMove = true;
@@ -359,7 +366,8 @@ function tryApplyMove(room, playerIndex, move) {
   // can highlight valid destinations for the remaining die.
   if (game.phase === 'AWAITING_MOVE' && game.turnIndex === playerIndex) {
     const ws = room.slots[playerIndex]?.ws;
-    sendTo(ws, { event: 'legalMoves', moves: allLegalMoves(game, playerIndex) });
+    const moves = allLegalMoves(game, playerIndex);
+    sendTo(ws, { event: 'legalMoves', moves, diceUsed: game.diceUsed });
   }
 
   return { ok: true };
@@ -528,7 +536,7 @@ export function getRoomByWs(ws) {
   return sess ? sess.roomId : null;
 }
 
-// Undo all moves made this turn — restore marble positions to state at roll time.
+// Undo the last move (one die at a time, LIFO).
 export function handleUndo(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'playing') return;
@@ -538,21 +546,24 @@ export function handleUndo(ws, roomId) {
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;
 
-  if (!game._rollSnapshot) return;
+  // Pop the last move's pre-state from undo stack
+  if (!game._undoStack || game._undoStack.length === 0) return;
 
-  // Restore every player's marble positions to the snapshot taken at roll time
+  const snapshot = game._undoStack.pop();
+
+  // Restore marble positions and diceUsed
   game.players.forEach((p, pi) => {
     for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
-      Object.assign(p.marbles[mi], game._rollSnapshot[pi][mi]);
+      Object.assign(p.marbles[mi], snapshot.marbles[pi][mi]);
     }
   });
-  game.diceUsed = [false, false];
-  game._humanMadeMove = false;
+  game.diceUsed = snapshot.diceUsed;
+  game._humanMadeMove = game._undoStack.length > 0; // no moves if stack empty
 
   // Re-broadcast full game state so all clients see the restored positions
   const legalMoves = allLegalMoves(game, game.turnIndex);
   broadcast(room, { event: 'undone', gameState: publicState(room) });
-  sendTo(ws, { event: 'legalMoves', moves: legalMoves });
+  sendTo(ws, { event: 'legalMoves', moves: legalMoves, diceUsed: game.diceUsed });
 }
 
 // Explicit turn commit — advance turn after human player has used their dice.

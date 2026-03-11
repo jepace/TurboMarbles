@@ -217,8 +217,12 @@ on('rolled', ({ playerIndex, dice, legalMoves }) => {
 
 // Server sends updated legal moves after the player uses one die (so remaining
 // die destinations can be highlighted correctly).
-on('legalMoves', ({ moves }) => {
+on('legalMoves', ({ moves, diceUsed }) => {
   legalMovesCache = moves;
+  if (diceUsed && gameState) {
+    gameState.diceUsed = diceUsed;
+    renderDice(gameState.dice);
+  }
   selectedMarble = null;
   selectedMarbleMoves = [];
   drawBoard(gameState);
