@@ -52,7 +52,7 @@
     <p>Room code: <strong id="lobby-code"></strong></p>
     <ul id="lobby-slots"></ul>
     <div class="btn-row" id="host-controls" style="display:none">
-      <button id="btn-add-robot">+ Robot</button>
+      <button id="btn-add-robot">Add Robot Player</button>
       <button id="btn-start">Start Game</button>
     </div>
     <p id="lobby-wait-msg" style="display:none">Waiting for host to start…</p>
@@ -61,7 +61,9 @@
 
 <div id="screen-game" class="screen">
   <div id="game-layout">
-    <canvas id="board-canvas"></canvas>
+    <div id="board-area">
+      <canvas id="board-canvas"></canvas>
+    </div>
     <div id="sidebar">
       <div id="dice-area">
         <div class="die" id="die-0">–</div>
@@ -69,6 +71,7 @@
         <button id="btn-roll" disabled>Roll</button>
       </div>
       <div id="turn-banner"></div>
+      <div id="move-hint" style="display:none"></div>
       <div id="player-list"></div>
       <div id="game-log"></div>
     </div>
