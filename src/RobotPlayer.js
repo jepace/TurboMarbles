@@ -7,7 +7,7 @@
 //   5. Use shortcut
 //   6. Any legal move
 
-import { allLegalMoves, PLAYER_CONFIG, TRACK_SIZE, advanceTrack } from './GameEngine.js';
+import { allLegalMoves, TRACK_SIZE } from './GameEngine.js';
 
 export function robotTakeTurn(game, playerIndex, applyCallback) {
   for (let pass = 0; pass < 2; pass++) {
@@ -38,7 +38,7 @@ export function robotTakeTurn(game, playerIndex, applyCallback) {
 
 function scoreMove(game, playerIndex, move) {
   const player = game.players[playerIndex];
-  const cfg = PLAYER_CONFIG[playerIndex];
+  const cfg = game.players[playerIndex].config; // use arm-mapped config, not raw PLAYER_CONFIG index
 
   switch (move.type) {
     case 'moveHome': {

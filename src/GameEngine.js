@@ -17,6 +17,17 @@ export const PLAYER_CONFIG = [
   { color: 'blue',   start: 71, star: 78, homeEntry: 70 },
 ];
 
+// ARM_MAP[n][i] = arm index (0–5) for player i in an n-player game.
+// Determines which PLAYER_CONFIG slot (start/star/homeEntry/color) each player uses,
+// ensuring good visual spacing around the board.
+export const ARM_MAP = {
+  2: [0, 3],           // opposite arms
+  3: [0, 2, 4],        // evenly spaced (every other arm)
+  4: [0, 1, 3, 4],     // 2 adjacent, gap, 2 adjacent
+  5: [0, 1, 2, 3, 4],  // first 5 arms
+  6: [0, 1, 2, 3, 4, 5],
+};
+
 export const ALL_STARS = new Set(PLAYER_CONFIG.map(p => p.star));
 
 // --- Marble location helpers ---
@@ -40,11 +51,14 @@ export function trackDistance(from, to) {
 
 export function createGame(players) {
   // players: array of { id, name, color, isRobot }
-  // Assign player indices and configs
+  // Assign player indices and configs; use ARM_MAP so each player occupies the
+  // arm slot appropriate for the player count (opposite for 2p, evenly spaced for 3p, etc.)
+  const n = players.length;
+  const armMap = ARM_MAP[n] ?? players.map((_, i) => i);
   const gamePlayers = players.map((p, i) => ({
     ...p,
     index: i,
-    config: PLAYER_CONFIG[i],
+    config: PLAYER_CONFIG[armMap[i]],
     marbles: Array.from({ length: MARBLES_PER_PLAYER }, (_, m) => ({
       id: m,
       zone: 'base',

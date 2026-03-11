@@ -13,8 +13,12 @@ let pendingMoves = [];        // moves selected but not yet submitted
 let selectedMarble = null;    // { playerIndex, marbleId }
 let legalMovesCache = null;   // legal moves for current interaction
 
-const COLORS = ['#f0c040','#f07820','#e040c0','#e8e8e8','#40c040','#4080f0'];
-const COLOR_NAMES = ['yellow','orange','pink','white','green','blue'];
+// Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
+// a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
+const COLOR_MAP = {
+  yellow: '#f5d000', orange: '#ff7800', pink: '#e8208c',
+  white:  '#e0e0e0', green:  '#44bb44', blue: '#2288f0',
+};
 
 // ---- Screen management ----
 function show(id) {
@@ -261,7 +265,7 @@ function renderLobbySlots(slots) {
     li.id = `slot-${slot.index}`;
     const dot = document.createElement('span');
     dot.className = 'slot-dot';
-    dot.style.background = COLORS[slot.index];
+    dot.style.background = COLOR_MAP[slot.color] ?? '#888';
     const name = document.createElement('span');
     name.className = 'slot-name';
     name.textContent = slot.filled ? slot.name + (slot.isRobot ? ' 🤖' : '') : '(empty)';
@@ -280,7 +284,7 @@ function renderSidebar() {
     row.className = 'player-row' + (p.index === gameState.turnIndex ? ' active-turn' : '');
     const dot = document.createElement('span');
     dot.className = 'player-dot';
-    dot.style.background = COLORS[p.index];
+    dot.style.background = COLOR_MAP[p.color] ?? '#888';
     const label = document.createElement('span');
     label.textContent = p.name + (p.isRobot ? ' 🤖' : '');
     row.appendChild(dot);

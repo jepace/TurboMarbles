@@ -2,7 +2,7 @@
 
 import {
   createGame, rollDice, allLegalMoves, applyMove,
-  earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG,
+  earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
 } from './GameEngine.js';
 import { robotTakeTurn } from './RobotPlayer.js';
 
@@ -42,11 +42,12 @@ export function createRoom(hostWs, hostName, totalPlayers) {
   const hostId = genId();
   sessions.set(hostWs._id, { roomId, playerIndex: 0 });
 
+  const armMap = ARM_MAP[totalPlayers] ?? Array.from({ length: totalPlayers }, (_, i) => i);
   const slots = Array.from({ length: totalPlayers }, (_, i) => ({
     index: i,
     playerId: i === 0 ? hostId : null,
     name: i === 0 ? hostName : null,
-    color: PLAYER_CONFIG[i].color,
+    color: PLAYER_CONFIG[armMap[i]].color,  // arm-mapped color so lobby matches game
     isRobot: false,
     ws: i === 0 ? hostWs : null,
   }));
@@ -170,6 +171,9 @@ export function handleRoll(ws, roomId) {
 
   const dice = performRoll(game);
   broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
+  // Auto-forfeit and advance turn if this roll leaves no legal moves (e.g. all marbles
+  // in base with a 3+4 roll).  No-op when at least one die has available moves.
+  advanceTurnIfDone(room);
 }
 
 export function handleMove(ws, roomId, move) {
@@ -350,6 +354,18 @@ function tryApplyMove(room, playerIndex, move) {
 // In both cases scheduleCurrentTurn kicks off robot logic if applicable.
 function advanceTurnIfDone(room) {
   const { game } = room;
+
+  // Auto-forfeit any remaining dice that have no legal moves.
+  // Covers: all-in-base after rolling non-1/non-6; one die used and other has no plays.
+  if (!game.diceUsed[0] || !game.diceUsed[1]) {
+    const legal = allLegalMoves(game, game.turnIndex);
+    for (let i = 0; i < 2; i++) {
+      if (!game.diceUsed[i] && (!legal[i] || legal[i].length === 0)) {
+        game.diceUsed[i] = true;
+      }
+    }
+  }
+
   if (game.diceUsed[0] && game.diceUsed[1]) {
     if (earnsExtraRoll(game.dice)) {
       startExtraRoll(game);

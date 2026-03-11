@@ -159,8 +159,11 @@ describe('handleMove — rejects invalid dieIndex', () => {
   addRobot(host, roomId);
   startGame(host, roomId);
 
-  // Must roll first so phase becomes AWAITING_MOVE; host is player 0 (goes first)
+  // Control dice to [1,1] so exitBase is legal → auto-forfeit won't fire
+  const origRandom = Math.random;
+  Math.random = () => 0;
   handleRoll(host, roomId);
+  Math.random = origRandom;
   host.sent = [];
 
   handleMove(host, roomId, { type: 'move', marbleId: 0, dieIndex: 99 });
@@ -175,11 +178,13 @@ describe('handleMove — rejects illegal move type', () => {
   addRobot(host, roomId);
   startGame(host, roomId);
 
-  // Roll manually: set game into IN_TURN, trigger roll
-  host.sent = [];
+  // Control dice to [1,1] so exitBase is legal → auto-forfeit won't fire
+  const origRandom = Math.random;
+  Math.random = () => 0;
   handleRoll(host, roomId);
+  Math.random = origRandom;
+  host.sent = [];
 
-  // Now try a bogus move
   handleMove(host, roomId, { type: 'teleport', marbleId: 0, dieIndex: 0 });
   assert(host.find('error').some(e => e.code === 'ILLEGAL_MOVE'), 'bogus move type rejected');
 });
@@ -192,7 +197,11 @@ describe('handleForfeitDie — rejects out-of-range dieIndex', () => {
   const { roomId } = createRoom(host, 'Alice', 2);
   addRobot(host, roomId);
   startGame(host, roomId);
+  // Control dice so legal moves exist and auto-forfeit doesn't advance turn
+  const origRandom = Math.random;
+  Math.random = () => 0;
   handleRoll(host, roomId);
+  Math.random = origRandom;
   host.sent = [];
 
   handleForfeitDie(host, roomId, 5);
@@ -200,6 +209,28 @@ describe('handleForfeitDie — rejects out-of-range dieIndex', () => {
   assert(true, 'invalid dieIndex does not crash');
   // Turn should not have advanced (no turnChanged or extraRoll)
   assert(host.find('turnChanged').length === 0, 'turn did not advance');
+});
+
+describe('auto-forfeit — all marbles in base, non-1/6 roll → turn advances automatically', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+  host.sent = [];
+
+  // Force dice to [3, 4]: no legal moves when all in base (need 1 or 6)
+  const origRandom = Math.random;
+  let rollCount = 0;
+  // rollDice calls Math.random() twice: first call → 3 (val 0.4), second → 4 (val 0.55)
+  Math.random = () => (rollCount++ % 2 === 0 ? 0.4 : 0.55);
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  assert(host.find('rolled').length === 1, 'rolled event sent');
+  assert(host.find('turnChanged').length === 1, 'turn advanced automatically (no legal moves)');
+  const rolled = host.find('rolled')[0];
+  assert(rolled.dice[0] === 3 && rolled.dice[1] === 4, 'correct dice values broadcast');
 });
 
 // ---- handleReconnect --------------------------------------------------------
