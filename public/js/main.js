@@ -2,7 +2,8 @@
 
 import { connect, on, send, setReconnectInfo } from './socket.js';
 import { init as initBoard, drawBoard, resize as resizeBoard,
-         hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition } from './board.js';
+         hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
+         setMarbleOverride, clearMarbleOverride } from './board.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -12,6 +13,7 @@ let gameState = null;
 let selectedMarble = null;      // { playerIndex, marbleId } currently selected
 let legalMovesCache = null;     // { 0: [...], 1: [...] } from server after roll
 let selectedMarbleMoves = [];   // filtered moves for selectedMarble (for highlighting)
+let commitPending = false;      // true when readyToCommit received, waiting for Commit click
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
 // a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
@@ -74,19 +76,60 @@ $('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }))
 $('btn-start').addEventListener('click', () => send({ action: 'startGame' }));
 
 // ---- Roll ----
-$('btn-roll').addEventListener('click', () => {
+$('btn-roll').addEventListener('click', doRoll);
+
+function doRoll() {
+  if ($('btn-roll').disabled) return;
   send({ action: 'roll' });
-  // Animate dice briefly
   $('die-0').classList.add('rolling');
   $('die-1').classList.add('rolling');
   setTimeout(() => { $('die-0').classList.remove('rolling'); $('die-1').classList.remove('rolling'); }, 500);
+}
+
+// ---- Commit / Undo ----
+$('btn-commit').addEventListener('click', doCommit);
+$('btn-undo').addEventListener('click', doUndo);
+
+function doCommit() {
+  send({ action: 'commit' });
+  commitPending = false;
+  setCommitVisible(false);
+}
+
+function doUndo() {
+  send({ action: 'undo' });
+  commitPending = false;
+  setCommitVisible(false);
+  legalMovesCache = null;
+  selectedMarble = null;
+  selectedMarbleMoves = [];
+}
+
+function setCommitVisible(visible) {
+  $('commit-area').style.display = visible ? 'flex' : 'none';
+}
+
+// ---- [Enter] key — roll dice when it's my turn, or commit when ready ----
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter') return;
+  // Don't fire if user is typing in an input/textarea
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if (!gameState) return;
+  if (commitPending && isMyTurn()) {
+    doCommit();
+  } else if (!$('btn-roll').disabled && isMyTurn()) {
+    doRoll();
+  }
+});
+
+// ---- Play again ----
+$('btn-play-again').addEventListener('click', () => {
+  $('win-overlay').style.display = 'none';
+  show('screen-landing');
 });
 
 // ---- Canvas click (marble selection & move) ----
 $('board-canvas').addEventListener('click', onCanvasClick);
-
-// ---- Play again ----
-$('btn-play-again').addEventListener('click', () => show('screen-landing'));
 
 // ---- Socket events ----
 
@@ -132,10 +175,12 @@ on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
   show('screen-game');
   initBoard($('board-canvas'));
+  setCommitVisible(false);
+  commitPending = false;
   renderSidebar();
   drawBoard(gameState);
   log('Game started! Good luck.');
-  if (isMyTurn()) { enableRoll(); log('⭐ You go first — roll the dice!'); }
+  if (isMyTurn()) { enableRoll(); log('⭐ You go first — roll the dice! (press Enter)'); }
   else log(`${playerName(gs.turnIndex)} goes first.`);
 });
 
@@ -146,6 +191,8 @@ on('rolled', ({ playerIndex, dice, legalMoves }) => {
   legalMovesCache = legalMoves ?? null;
   selectedMarble = null;
   selectedMarbleMoves = [];
+  commitPending = false;
+  setCommitVisible(false);
   renderDice(dice);
   $('btn-roll').disabled = true;
 
@@ -157,7 +204,7 @@ on('rolled', ({ playerIndex, dice, legalMoves }) => {
     log(`🎲 You rolled ${d0} and ${d1}!${hasSix ? ' (extra roll earned)' : ''}`);
     const totalMoves = Object.values(legalMoves ?? {}).reduce((s, a) => s + a.length, 0);
     if (totalMoves === 0) {
-      log('No legal moves — turn skipped.');
+      log('No legal moves — turn will be skipped.');
       setHint('');
     } else {
       setHint('Click one of your marbles to see where it can move.');
@@ -180,15 +227,26 @@ on('legalMoves', ({ moves }) => {
 
 on('marbleMoved', ({ playerIndex, marbleId, from, to }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
+
+  // Capture from-position before updating state (for animation)
+  const fromPos = getSpacePosition(zoneToSpace(from, playerIndex));
+
+  // Update game state
   Object.assign(marble, to);
   selectedMarble = null;
   selectedMarbleMoves = [];
-  drawBoard(gameState);
+
+  const toPos = getSpacePosition(zoneToSpace(to, playerIndex));
+  if (fromPos && toPos && (fromPos.x !== toPos.x || fromPos.y !== toPos.y)) {
+    animateMarble(playerIndex, marbleId, fromPos, toPos);
+  } else {
+    drawBoard(gameState);
+  }
 
   const who = playerIndex === myPlayerIndex ? 'Your' : `${playerName(playerIndex)}'s`;
-  const dest = to.zone === 'track' ? `space ${to.space}` :
-               to.zone === 'home'  ? `home slot ${to.slot}` :
-               to.zone === 'center'? 'the hub' : to.zone;
+  const dest = to.zone === 'track'  ? `space ${to.space}` :
+               to.zone === 'home'   ? `home slot ${to.slot}` :
+               to.zone === 'center' ? 'the hub' : to.zone;
   log(`${who} marble moved to ${dest}.`);
 });
 
@@ -210,12 +268,14 @@ on('turnChanged', ({ playerIndex }) => {
   legalMovesCache = null;
   selectedMarble = null;
   selectedMarbleMoves = [];
+  commitPending = false;
+  setCommitVisible(false);
   setHint('');
   renderSidebar();
   renderDice(null);
   if (isMyTurn()) {
     enableRoll();
-    log(`⭐ It's your turn!`);
+    log(`⭐ It's your turn! Press Enter to roll.`);
   } else {
     $('btn-roll').disabled = true;
     log(`${playerName(playerIndex)}'s turn.`);
@@ -224,6 +284,8 @@ on('turnChanged', ({ playerIndex }) => {
 
 on('extraRoll', ({ playerIndex }) => {
   gameState.phase = 'EXTRA_ROLL';
+  commitPending = false;
+  setCommitVisible(false);
   if (playerIndex === myPlayerIndex) {
     log('🎲 You earned an extra roll!');
     enableRoll();
@@ -232,11 +294,45 @@ on('extraRoll', ({ playerIndex }) => {
   }
 });
 
+on('dieForfeit', ({ dieIndex }) => {
+  if (gameState?.diceUsed) gameState.diceUsed[dieIndex] = true;
+  renderDice(gameState?.dice);
+  if (isMyTurn()) {
+    const val = gameState?.dice?.[dieIndex];
+    log(`Die ${val ?? dieIndex + 1} has no legal moves — forfeited.`);
+  }
+});
+
+on('turnSkipped', ({ playerIndex }) => {
+  const who = playerIndex === myPlayerIndex ? 'You have' : `${playerName(playerIndex)} has`;
+  log(`${who} no valid moves — turn skipped.`);
+});
+
+on('readyToCommit', ({ playerIndex }) => {
+  if (playerIndex !== myPlayerIndex) return;
+  commitPending = true;
+  setCommitVisible(true);
+  setHint('Both dice used. Commit your turn or Undo to try again.');
+});
+
+on('undone', ({ gameState: gs }) => {
+  gameState = gs;
+  selectedMarble = null;
+  selectedMarbleMoves = [];
+  commitPending = false;
+  setCommitVisible(false);
+  renderDice(gameState.dice);
+  drawBoard(gameState);
+  if (isMyTurn()) setHint('Undone. Click a marble to make your moves.');
+});
+
 on('gameOver', ({ winnerIndex }) => {
   gameState.phase = 'GAME_OVER';
   const name = playerName(winnerIndex);
-  $('winner-msg').textContent = `${name} wins!`;
-  show('screen-gameover');
+  $('winner-msg').textContent = `${name} wins! 🎉`;
+  $('win-overlay').style.display = 'flex';
+  // Board stays visible — no screen switch
+  log(`🏆 ${name} wins the game!`);
 });
 
 on('playerDisconnected', ({ playerIndex, timeoutMs }) => {
@@ -251,6 +347,8 @@ on('reconnected', ({ gameState: gs }) => {
   gameState = gs;
   show('screen-game');
   initBoard($('board-canvas'));
+  setCommitVisible(false);
+  commitPending = false;
   renderSidebar();
   drawBoard(gameState);
   log('Reconnected.');
@@ -278,9 +376,20 @@ function onCanvasClick(e) {
     }
   }
 
-  // Clicking a marble selects it and highlights its legal destinations.
+  // Clicking a marble selects it — or deselects if clicking the already-selected marble.
   const hit = hitTestMarble(gameState, cx, cy);
   if (!hit || hit.playerIndex !== myPlayerIndex) {
+    selectedMarble = null;
+    selectedMarbleMoves = [];
+    drawBoard(gameState);
+    if (isMyTurn() && gameState.phase === 'AWAITING_MOVE') {
+      setHint('Click one of your marbles to see where it can move.');
+    }
+    return;
+  }
+
+  // Deselect if clicking the same marble again
+  if (selectedMarble && selectedMarble.marbleId === hit.marbleId) {
     selectedMarble = null;
     selectedMarbleMoves = [];
     drawBoard(gameState);
@@ -327,6 +436,15 @@ function moveToSpace(move) {
   return null;
 }
 
+// Converts a zone/space descriptor from a marbleMoved event to a space descriptor for board
+function zoneToSpace(loc, playerIndex) {
+  if (!loc) return null;
+  if (loc.zone === 'center') return { zone: 'center' };
+  if (loc.zone === 'track')  return { zone: 'track', space: loc.space };
+  if (loc.zone === 'home')   return { zone: 'home', playerIndex, slot: loc.slot };
+  return null;
+}
+
 // Returns the move that the player clicked, or null.
 function hitTestDestination(cx, cy, moves) {
   const R = $('board-canvas').width * 0.028;
@@ -344,6 +462,30 @@ function submitMove(move) {
   selectedMarble = null;
   selectedMarbleMoves = [];
   legalMovesCache = null; // will be refreshed by server via 'legalMoves' event if turn continues
+}
+
+// ---- Marble animation ----
+
+function animateMarble(playerIndex, marbleId, fromPos, toPos) {
+  const duration = 320;
+  const start = performance.now();
+
+  function step(now) {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = t * t * (3 - 2 * t); // smoothstep
+    setMarbleOverride(playerIndex, marbleId, {
+      x: fromPos.x + (toPos.x - fromPos.x) * ease,
+      y: fromPos.y + (toPos.y - fromPos.y) * ease,
+    });
+    drawBoard(gameState);
+    if (t < 1) {
+      requestAnimationFrame(step);
+    } else {
+      clearMarbleOverride(playerIndex, marbleId);
+      drawBoard(gameState);
+    }
+  }
+  requestAnimationFrame(step);
 }
 
 // ---- Render helpers ----
@@ -397,7 +539,7 @@ function renderDice(dice) {
 
 function enableRoll() {
   $('btn-roll').disabled = false;
-  $('turn-banner').textContent = 'Your turn — Roll the dice!';
+  $('turn-banner').textContent = 'Your turn — Roll! (Enter)';
   $('turn-banner').style.color = '#f0c040';
 }
 

@@ -70,10 +70,22 @@
         <div class="die" id="die-1">–</div>
         <button id="btn-roll" disabled>Roll</button>
       </div>
+      <div id="commit-area" style="display:none">
+        <button id="btn-commit">Commit Turn</button>
+        <button id="btn-undo" class="secondary">Undo</button>
+      </div>
       <div id="turn-banner"></div>
       <div id="move-hint" style="display:none"></div>
       <div id="player-list"></div>
       <div id="game-log"></div>
+    </div>
+  </div>
+  <!-- Win overlay: shown over the game board so the final state remains visible -->
+  <div id="win-overlay" style="display:none">
+    <div class="card">
+      <h2>Game Over</h2>
+      <p id="winner-msg"></p>
+      <button id="btn-play-again">Play Again</button>
     </div>
   </div>
 </div>
@@ -81,8 +93,8 @@
 <div id="screen-gameover" class="screen">
   <div class="card">
     <h2>Game Over</h2>
-    <p id="winner-msg"></p>
-    <button id="btn-play-again">Play Again</button>
+    <p id="winner-msg-old"></p>
+    <button id="btn-play-again-old">Play Again</button>
   </div>
 </div>
 

@@ -18,7 +18,11 @@ const ARM_MAP = {
   6: [0, 1, 2, 3, 4, 5],
 };
 
-const STAR_SPACES = new Set([8, 22, 36, 50, 64, 78]);
+// Star spaces and home entry spaces (from PLAYER_CONFIG)
+const STAR_SPACES      = new Set([8, 22, 36, 50, 64, 78]);
+// homeEntry[arm] = track space that is the last space before entering home
+const HOME_ENTRY_SPACE = [84, 14, 28, 42, 56, 70]; // indexed by arm
+
 const BG_BLUE     = '#1565c0';
 const STAR_GOLD   = '#ffd600';
 const CENTER_PINK = '#e91e63';
@@ -33,6 +37,9 @@ let bubbles   = [];
 
 // Updated at start of each drawBoard call
 let playerToArm = [0, 1, 2, 3, 4, 5];
+
+// Animation overrides: { playerIndex: { marbleId: {x,y} } }
+let marbleOverrides = {};
 
 export function init(canvasEl) {
   canvas = canvasEl;
@@ -58,6 +65,17 @@ export function resize() {
   computeBubbles();
 }
 
+// ---------- Animation overrides ------------------------------------------
+
+export function setMarbleOverride(playerIndex, marbleId, pos) {
+  if (!marbleOverrides[playerIndex]) marbleOverrides[playerIndex] = {};
+  marbleOverrides[playerIndex][marbleId] = pos;
+}
+
+export function clearMarbleOverride(playerIndex, marbleId) {
+  if (marbleOverrides[playerIndex]) delete marbleOverrides[playerIndex][marbleId];
+}
+
 // ---------- Layout -----------------------------------------------------------
 
 function lerp2(a, b, t) {
@@ -67,12 +85,13 @@ function lerp2(a, b, t) {
 function armAngle(ai) { return ai * STEP + Math.PI / 2; }
 
 function computeLayout() {
-  // Arm tips (star spaces) further out; junctions between arms closer in.
-  // Together they form a 6-pointed star shape for the outer track.
-  const R_TIP  = W * 0.40;   // arm tip radius — where star spaces sit
-  const R_JNC  = W * 0.27;   // junction radius — corners between arms
+  // U-shaped track: star spaces dip INWARD toward center (at R_IN),
+  // while track corners between arms bulge OUTWARD (at R_OUT).
+  // This gives the correct Wahoo board geometry where star spaces are near the hub.
+  const R_OUT  = W * 0.40;   // outer track corners (between arms)
+  const R_IN   = W * 0.27;   // inner star spaces (at arm axes, near hub)
   const ARM_IN = W * 0.095;  // inner end of home corridor (near center hub)
-  const BASE_D = W * 0.47;   // radial centre of base area (beyond tip)
+  const BASE_D = W * 0.47;   // radial centre of base area (beyond arm tip)
   const BASE_G = W * 0.050;  // half-spacing of 2×2 base grid
 
   trackPos = new Array(TRACK_SIZE + 1);
@@ -81,29 +100,32 @@ function computeLayout() {
 
   for (let arm = 0; arm < ALL_ARMS; arm++) {
     const ang  = armAngle(arm);
-    const angL = ang - STEP / 2;   // angle of left junction
-    const angR = ang + STEP / 2;   // angle of right junction
+    const angL = ang - STEP / 2;   // angle of left outer corner
+    const angR = ang + STEP / 2;   // angle of right outer corner
 
-    // Three anchor points for this arm's V-shaped track segment
-    const PL = { x: CX + Math.cos(angL) * R_JNC, y: CY + Math.sin(angL) * R_JNC };
-    const PT = { x: CX + Math.cos(ang)  * R_TIP, y: CY + Math.sin(ang)  * R_TIP };
-    const PR = { x: CX + Math.cos(angR) * R_JNC, y: CY + Math.sin(angR) * R_JNC };
+    // Three anchor points for this arm's U-shaped track segment
+    // PL and PR are the outer corners between arms; PT is the inner star
+    const PL = { x: CX + Math.cos(angL) * R_OUT, y: CY + Math.sin(angL) * R_OUT };
+    const PT = { x: CX + Math.cos(ang)  * R_IN,  y: CY + Math.sin(ang)  * R_IN  };
+    const PR = { x: CX + Math.cos(angR) * R_OUT, y: CY + Math.sin(angR) * R_OUT };
 
-    // Spaces 1-7: left junction → tip (using t=j/8 so spaces don't coincide with junctions)
+    // Spaces 1-7: outer left corner → inner star (t=j/8 avoids coinciding with corners)
     for (let j = 1; j <= 7; j++) trackPos[arm * 14 + j] = lerp2(PL, PT, j / 8);
-    // Space 8: exactly at tip (the star/shortcut space)
+    // Space 8: exactly at inner star (the shortcut space)
     trackPos[arm * 14 + 8] = { x: PT.x, y: PT.y };
-    // Spaces 9-14: tip → right junction
+    // Spaces 9-14: inner star → outer right corner
     for (let j = 9; j <= 14; j++) trackPos[arm * 14 + j] = lerp2(PT, PR, (j - 8) / 7);
 
-    // Home: 4 slots evenly spaced along arm axis from ARM_IN outward
+    // Home slots: slot 1 near track (outer), slot HOME_SLOTS near hub (inner).
+    // Marbles move inward (toward hub) as they advance through home.
     homePos[arm] = new Array(HOME_SLOTS + 1);
     for (let s = 1; s <= HOME_SLOTS; s++) {
-      const d = ARM_IN + (s / (HOME_SLOTS + 1)) * (R_TIP * 0.84 - ARM_IN);
+      const t = (s - 1) / (HOME_SLOTS - 1); // 0 at s=1 (outer), 1 at s=HOME_SLOTS (inner)
+      const d = (R_IN * 0.85) * (1 - t) + (ARM_IN * 1.35) * t;
       homePos[arm][s] = { x: CX + Math.cos(ang) * d, y: CY + Math.sin(ang) * d };
     }
 
-    // Base: 2×2 grid centred beyond arm tip
+    // Base: 2×2 grid centred beyond arm tip along arm axis
     const dx = Math.cos(ang), dy = Math.sin(ang);
     const px = -Math.sin(ang), py = Math.cos(ang);
     basePos[arm] = [];
@@ -170,8 +192,9 @@ function fillQuad(pts, fillStyle, strokeStyle, lineWidth = 1.5) {
 }
 
 function drawArms(n) {
-  const R_TIP   = W * 0.40;
+  const R_IN    = W * 0.27;
   const ARM_IN  = W * 0.095;
+  const R_SPLIT = W * 0.32;    // divider between home corridor and base area
   const BASE_END = W * 0.525;  // outer edge of base area
   const HW   = W * 0.063;      // half-width of home corridor
   const BHW  = W * 0.070;      // half-width of base area (slightly wider)
@@ -195,34 +218,27 @@ function drawArms(n) {
       const color = COLORS[ai];
       const dark  = DARK_C[ai];
 
-      // Home corridor (inner to arm tip)
-      fillQuad(quad(ARM_IN, R_TIP, HW), color + 'bb', '#00000044');
-      // Base area (arm tip to outer edge)
-      fillQuad(quad(R_TIP, BASE_END, BHW), dark + 'dd', '#00000044');
+      // Home corridor (inner hub → star area)
+      fillQuad(quad(ARM_IN, R_SPLIT, HW), color + 'bb', '#00000044');
+      // Base area (beyond home → outer edge)
+      fillQuad(quad(R_SPLIT, BASE_END, BHW), dark + 'dd', '#00000044');
 
       // Divider line between home and base sections
       ctx.beginPath();
-      ctx.moveTo(CX + dx * R_TIP + px * HW * 1.15, CY + dy * R_TIP + py * HW * 1.15);
-      ctx.lineTo(CX + dx * R_TIP - px * HW * 1.15, CY + dy * R_TIP - py * HW * 1.15);
+      ctx.moveTo(CX + dx * R_SPLIT + px * HW * 1.15, CY + dy * R_SPLIT + py * HW * 1.15);
+      ctx.lineTo(CX + dx * R_SPLIT - px * HW * 1.15, CY + dy * R_SPLIT - py * HW * 1.15);
       ctx.strokeStyle = '#ffffff55'; ctx.lineWidth = 1.5; ctx.stroke();
 
-      // Arm labels — rotate so text runs along the arm
+      // Arm labels — drawn horizontally to avoid upside-down text on any arm
       const fs = Math.max(8, Math.round(W * 0.012));
-      ctx.save();
-      ctx.translate(CX + dx * (ARM_IN + (R_TIP - ARM_IN) * 0.42), CY + dy * (ARM_IN + (R_TIP - ARM_IN) * 0.42));
-      ctx.rotate(ang + Math.PI / 2);
+      const homeMidD = (ARM_IN + R_SPLIT) / 2;
       ctx.font = `bold ${fs}px Arial, sans-serif`;
       ctx.fillStyle = '#00000066'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('HOME', 0, 0);
-      ctx.restore();
+      ctx.fillText('HOME', CX + dx * homeMidD, CY + dy * homeMidD);
 
-      ctx.save();
-      ctx.translate(CX + dx * (R_TIP + (BASE_END - R_TIP) * 0.48), CY + dy * (R_TIP + (BASE_END - R_TIP) * 0.48));
-      ctx.rotate(ang + Math.PI / 2);
-      ctx.font = `bold ${fs}px Arial, sans-serif`;
-      ctx.fillStyle = '#ffffff55'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('BASE', 0, 0);
-      ctx.restore();
+      const baseMidD = (R_SPLIT + BASE_END) / 2;
+      ctx.fillStyle = '#ffffff55';
+      ctx.fillText('BASE', CX + dx * baseMidD, CY + dy * baseMidD);
     } else {
       // Inactive arm: dark recessed rectangle
       fillQuad(quad(ARM_IN, BASE_END, HW), 'rgba(8,32,80,0.40)', 'rgba(20,70,160,0.20)', 1);
@@ -251,8 +267,14 @@ function drawTrackRail() {
 }
 
 function drawTrack(n) {
-  const R = W * 0.014;
+  const R = W * 0.020;  // slightly larger circles so marbles fit
   const activeSet = new Set(playerToArm.slice(0, n));
+
+  // Build set of active homeEntry spaces for highlighting
+  const homeEntryByArm = new Map(); // arm → homeEntry space
+  for (let ai = 0; ai < ALL_ARMS; ai++) {
+    if (activeSet.has(ai)) homeEntryByArm.set(ai, HOME_ENTRY_SPACE[ai]);
+  }
 
   for (let i = 1; i <= TRACK_SIZE; i++) {
     const p  = trackPos[i];
@@ -260,7 +282,7 @@ function drawTrack(n) {
     const ai = Math.floor((i - 1) / 14);
 
     if (STAR_SPACES.has(i)) {
-      // Star (shortcut) space: prominent gold circle + small star
+      // Star (shortcut) space: prominent gold circle + small starburst
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.7, 0, Math.PI * 2);
       ctx.fillStyle   = '#7a5000cc';
@@ -270,19 +292,27 @@ function drawTrack(n) {
       ctx.stroke();
       drawStar8(p.x, p.y, R * 1.2, STAR_GOLD);
     } else {
+      // Check if this is a homeEntry space — color the rim with player color
+      const isHomeEntry = [...homeEntryByArm.entries()].find(([hAi, hs]) => hs === i);
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
       ctx.fillStyle   = activeSet.has(ai) ? '#1a3a8faa' : '#0d1a6055';
       ctx.fill();
-      ctx.strokeStyle = activeSet.has(ai) ? '#ffffffaa' : '#ffffff33';
-      ctx.lineWidth   = 1;
+      if (isHomeEntry) {
+        // Mark homeEntry with player color arrow/ring so it's clearly the home entrance
+        ctx.strokeStyle = COLORS[isHomeEntry[0]] + 'ee';
+        ctx.lineWidth   = 2.5;
+      } else {
+        ctx.strokeStyle = activeSet.has(ai) ? '#ffffffaa' : '#ffffff33';
+        ctx.lineWidth   = 1;
+      }
       ctx.stroke();
     }
   }
 }
 
 function drawHomeAndBase(n) {
-  const R = W * 0.014;
+  const R = W * 0.020;
   const activeSet = new Set(playerToArm.slice(0, n));
 
   for (let ai = 0; ai < ALL_ARMS; ai++) {
@@ -345,7 +375,7 @@ function drawCenter() {
     ctx.restore();
   }
 
-  // Gold hub circle
+  // Gold hub circle (no label — removed "HUB" text per user request)
   ctx.beginPath();
   ctx.arc(0, 0, innerR, 0, Math.PI * 2);
   ctx.fillStyle   = STAR_GOLD;
@@ -354,18 +384,11 @@ function drawCenter() {
   ctx.lineWidth   = 1.5;
   ctx.stroke();
 
-  // Label
-  ctx.font = `bold ${Math.round(W * 0.014)}px Arial, sans-serif`;
-  ctx.fillStyle    = '#000a';
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('HUB', 0, 0);
-
   ctx.restore();
 }
 
 function drawMarbles(gameState) {
-  const R = W * 0.022;
+  const R = W * 0.018;  // slightly smaller to fit inside track circles
   for (const player of gameState.players) {
     const ai    = playerToArm[player.index] ?? player.index;
     const color = COLORS[ai];
@@ -397,6 +420,9 @@ function drawMarbles(gameState) {
 
 function marblePosition(marble, playerIndex) {
   const ai = playerToArm[playerIndex] ?? playerIndex;
+  // Check animation override first
+  const override = marbleOverrides[playerIndex]?.[marble.id];
+  if (override) return override;
   if (marble.zone === 'base')   return basePos[ai]?.[marble.id];
   if (marble.zone === 'track')  return trackPos[marble.space];
   if (marble.zone === 'home')   return homePos[ai]?.[marble.slot];
@@ -447,24 +473,20 @@ export function hitTestMarble(gameState, cx, cy) {
   return null;
 }
 
-// Highlight legal destination spaces (called after marble selection)
+// Highlight legal destination spaces — recolor the space instead of a white ring overlay
 export function highlightSpaces(spaces) {
-  const R = W * 0.022;
+  const R = W * 0.020;
   for (const sp of spaces) {
     const pos = getSpacePosition(sp);
     if (!pos) continue;
+    // Fill the space with a bright green highlight color
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, R * 1.7, 0, Math.PI * 2);
-    ctx.fillStyle   = '#ffffff33';
+    ctx.arc(pos.x, pos.y, R * 1.3, 0, Math.PI * 2);
+    ctx.fillStyle   = '#00e67655';
     ctx.fill();
-    ctx.strokeStyle = '#ffffffcc';
-    ctx.lineWidth   = 2;
+    ctx.strokeStyle = '#00e676cc';
+    ctx.lineWidth   = 2.5;
     ctx.stroke();
-    // Animated-looking inner dot
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, R * 0.45, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffffbb';
-    ctx.fill();
   }
 }
 
@@ -473,7 +495,7 @@ export function highlightMarbleAt(marble, playerIndex) {
   if (!marble) return;
   const pos = marblePosition(marble, playerIndex);
   if (!pos) return;
-  const R = W * 0.030;
+  const R = W * 0.026;
   ctx.save();
   ctx.beginPath();
   ctx.arc(pos.x, pos.y, R, 0, Math.PI * 2);

@@ -7,6 +7,7 @@ import {
   createRoom, joinRoom, addRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
+  handleUndo, handleCommit,
 } from './GameManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -104,6 +105,20 @@ function dispatch(ws, msg) {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
       handleForfeitDie(ws, roomId, msg.dieIndex);
+      break;
+    }
+
+    case 'undo': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      handleUndo(ws, roomId);
+      break;
+    }
+
+    case 'commit': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      handleCommit(ws, roomId);
       break;
     }
 

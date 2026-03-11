@@ -124,6 +124,10 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
         }
       }
     }
+    // die=6: full circuit of all 6 stars, returning to center (strategic no-op)
+    if (dieVal === 6) {
+      moves.push({ type: 'circleCenter', dieIndex, marbleId, toZone: 'center' });
+    }
     return moves;
   }
 
@@ -146,7 +150,14 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
 
     // Normal main-track movement (may redirect into home stretch)
     const dest = computeTrackMove(state, player, marble, dieVal);
-    if (dest) moves.push({ type: 'move', dieIndex, marbleId, ...dest });
+    if (dest) {
+      moves.push({ type: 'move', dieIndex, marbleId, ...dest });
+      // If the move enters home, also offer passing the home entry and continuing on track
+      if (dest.toZone === 'home') {
+        const passHome = computeTrackMove(state, player, marble, dieVal, true);
+        if (passHome) moves.push({ type: 'move', dieIndex, marbleId, ...passHome });
+      }
+    }
 
     return moves;
   }
@@ -248,14 +259,17 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
 // Compute where a track marble ends up after moving dieVal steps clockwise.
 // Returns { toZone, toSpace?, toSlot? } or null if the move is blocked.
 //
-// Special cases (checked in order):
+// When ignoreHome=true, the player chooses to pass their home entry and continue
+// on the main track (going around the board again instead of entering home).
+//
+// Special cases (checked in order, unless ignoreHome=true):
 //  1. The path crosses the player's homeEntry — redirect into the home stretch.
 //     stepsIntoHome = remaining steps after entering home.
 //     stepsIntoHome === 0  → lands on the entry square → slot 1
 //     stepsIntoHome  > 0  → advances that many slots deeper into home
 //     Overshoot (targetSlot > HOME_SLOTS) or blocked → null (no move)
 //  2. An own marble occupies any square along the path → blocked → null.
-function computeTrackMove(state, player, marble, dieVal) {
+function computeTrackMove(state, player, marble, dieVal, ignoreHome = false) {
   const { homeEntry } = player.config;
   let pos = marble.space;
 
@@ -263,7 +277,7 @@ function computeTrackMove(state, player, marble, dieVal) {
     const next = advanceTrack(pos, 1);
 
     // Check: does this step cross or land on homeEntry?
-    if (pos === homeEntry || (crossesHome(pos, homeEntry, next))) {
+    if (!ignoreHome && (pos === homeEntry || (crossesHome(pos, homeEntry, next)))) {
       const stepsToEntry = (marble.space === homeEntry) ? 0 : trackDistance(marble.space, homeEntry);
       const stepsIntoHome = dieVal - stepsToEntry;
       if (stepsIntoHome === 0) {
@@ -396,6 +410,11 @@ export function applyMove(state, playerIndex, move) {
     marble.starEligible = true;
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
       from, to: { zone: 'track', space: move.toStar } });
+
+  } else if (move.type === 'circleCenter') {
+    // Marble does a full circuit of all 6 stars and returns to center — strategic no-op.
+    events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
+      from: { zone: 'center' }, to: { zone: 'center' } });
 
   } else if (move.type === 'moveStar') {
     // Marble traveled along the star track (K steps to a star, then optionally

@@ -33,6 +33,18 @@ body {
 #screen-game.active {
   display: block;
   height: 100vh;
+  position: relative;  /* needed for win overlay absolute positioning */
+}
+
+/* ---- Win overlay (shown over board so final state is visible) ---- */
+#win-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
 }
 
 /* ---- Cards ---- */
@@ -144,6 +156,13 @@ button.secondary { background: #fff2; }
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+/* ---- Commit / Undo area ---- */
+#commit-area {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 .die {
   width: 52px; height: 52px;

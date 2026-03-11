@@ -3,6 +3,7 @@
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
+  MARBLES_PER_PLAYER,
 } from './GameEngine.js';
 import { robotTakeTurn } from './RobotPlayer.js';
 
@@ -147,6 +148,9 @@ function performRoll(game) {
   game.dice = dice;
   game.diceUsed = [false, false];
   game.phase = 'AWAITING_MOVE';
+  game._humanMadeMove = false;
+  // Snapshot marble positions for undo support
+  game._rollSnapshot = game.players.map(p => p.marbles.map(m => ({ ...m })));
   return dice;
 }
 
@@ -342,6 +346,7 @@ function tryApplyMove(room, playerIndex, move) {
 
   const events = applyMove(game, playerIndex, matched);
   events.forEach(ev => broadcast(room, ev));
+  game._humanMadeMove = true;
 
   if (game.phase === 'GAME_OVER') {
     room.state = 'finished';
@@ -360,34 +365,57 @@ function tryApplyMove(room, playerIndex, move) {
   return { ok: true };
 }
 
-// Called after every move or forfeit. When both dice are consumed, either:
-//   - award an extra roll if the player rolled a 6 (earnsExtraRoll), or
-//   - advance to the next player's turn.
-// In both cases scheduleCurrentTurn kicks off robot logic if applicable.
+// Called after every move or forfeit. When both dice are consumed:
+//   - For robots: immediately advance turn or award extra roll.
+//   - For humans who made a move: broadcast readyToCommit (wait for explicit commit).
+//   - For humans who made no move (all dice forfeited): auto-advance + log turn skip.
 function advanceTurnIfDone(room) {
   const { game } = room;
 
-  // Auto-forfeit any remaining dice that have no legal moves.
-  // Covers: all-in-base after rolling non-1/non-6; one die used and other has no plays.
+  // Auto-forfeit remaining dice that have no legal moves, but ONLY when the other die
+  // is also consumed or empty. This prevents eagerly forfeiting die=2 when die=6 hasn't
+  // been used yet — using die=6 first might open up die=2 moves.
   if (!game.diceUsed[0] || !game.diceUsed[1]) {
     const legal = allLegalMoves(game, game.turnIndex);
     for (let i = 0; i < 2; i++) {
       if (!game.diceUsed[i] && (!legal[i] || legal[i].length === 0)) {
-        game.diceUsed[i] = true;
+        const j = 1 - i;
+        if (game.diceUsed[j] || !legal[j] || legal[j].length === 0) {
+          game.diceUsed[i] = true;
+          broadcast(room, { event: 'dieForfeit', dieIndex: i });
+        }
       }
     }
   }
 
   if (game.diceUsed[0] && game.diceUsed[1]) {
-    if (earnsExtraRoll(game.dice)) {
-      startExtraRoll(game);
-      broadcast(room, { event: 'extraRoll', playerIndex: game.turnIndex });
+    const slot = room.slots[game.turnIndex];
+    const isRobot = slot?.isRobot ?? false;
+    if (!isRobot && game._humanMadeMove) {
+      // Human made at least one move — wait for explicit commit before advancing turn
+      broadcast(room, { event: 'readyToCommit', playerIndex: game.turnIndex });
     } else {
-      nextTurn(game);
-      broadcast(room, { event: 'turnChanged', playerIndex: game.turnIndex });
+      // Robot, or human with no legal moves at all — auto-advance immediately
+      if (!isRobot && !game._humanMadeMove) {
+        // Human turn with zero legal moves: log the skip
+        broadcast(room, { event: 'turnSkipped', playerIndex: game.turnIndex });
+      }
+      commitTurn(room);
     }
-    scheduleCurrentTurn(room);
   }
+}
+
+// Advance to the next turn (extra roll or next player). Called by commitTurn and robots.
+function commitTurn(room) {
+  const { game } = room;
+  if (earnsExtraRoll(game.dice)) {
+    startExtraRoll(game);
+    broadcast(room, { event: 'extraRoll', playerIndex: game.turnIndex });
+  } else {
+    nextTurn(game);
+    broadcast(room, { event: 'turnChanged', playerIndex: game.turnIndex });
+  }
+  scheduleCurrentTurn(room);
 }
 
 function scheduleCurrentTurn(room) {
@@ -498,6 +526,49 @@ function publicState(room) {
 export function getRoomByWs(ws) {
   const sess = sessions.get(ws._id);
   return sess ? sess.roomId : null;
+}
+
+// Undo all moves made this turn — restore marble positions to state at roll time.
+export function handleUndo(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'playing') return;
+  const { game } = room;
+  if (game.phase !== 'AWAITING_MOVE') return;
+
+  const sess = sessions.get(ws._id);
+  if (!sess || sess.playerIndex !== game.turnIndex) return;
+
+  if (!game._rollSnapshot) return;
+
+  // Restore every player's marble positions to the snapshot taken at roll time
+  game.players.forEach((p, pi) => {
+    for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
+      Object.assign(p.marbles[mi], game._rollSnapshot[pi][mi]);
+    }
+  });
+  game.diceUsed = [false, false];
+  game._humanMadeMove = false;
+
+  // Re-broadcast full game state so all clients see the restored positions
+  const legalMoves = allLegalMoves(game, game.turnIndex);
+  broadcast(room, { event: 'undone', gameState: publicState(room) });
+  sendTo(ws, { event: 'legalMoves', moves: legalMoves });
+}
+
+// Explicit turn commit — advance turn after human player has used their dice.
+export function handleCommit(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'playing') return;
+  const { game } = room;
+  if (game.phase !== 'AWAITING_MOVE') return;
+
+  const sess = sessions.get(ws._id);
+  if (!sess || sess.playerIndex !== game.turnIndex) return;
+
+  // Both dice must be consumed before committing
+  if (!game.diceUsed[0] || !game.diceUsed[1]) return;
+
+  commitTurn(room);
 }
 
 // For unit testing only — resets all module-level state between test cases.
