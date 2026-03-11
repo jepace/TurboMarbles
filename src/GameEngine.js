@@ -109,7 +109,7 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     if (dieVal === 1 || dieVal === 6) {
       // Can only exit if start space is not blocked by own marble
       if (!ownMarbleAt(player, { zone: 'track', space: player.config.start })) {
-        moves.push({ type: 'exitBase', dieIndex, marbleId });
+        moves.push({ type: 'exitBase', dieIndex, marbleId, toZone: 'track', toSpace: player.config.start });
       }
     }
     return moves;
@@ -120,7 +120,7 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     if (dieVal === 1) {
       for (const cfg of PLAYER_CONFIG) {
         if (!ownMarbleAt(player, { zone: 'track', space: cfg.star })) {
-          moves.push({ type: 'exitCenter', dieIndex, marbleId, toStar: cfg.star });
+          moves.push({ type: 'exitCenter', dieIndex, marbleId, toZone: 'track', toSpace: cfg.star, toStar: cfg.star });
         }
       }
     }
@@ -132,7 +132,7 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     // Any marble on the main track whose die count lands it exactly 1 step past
     // any star (dieVal = stepsToThatStar + 1) may divert into center instead.
     if (canEnterCenter(player, marble, dieVal)) {
-      moves.push({ type: 'enterCenter', dieIndex, marbleId });
+      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center' });
     }
 
     // Star-track movement: when sitting on any star (starEligible), the marble
@@ -156,7 +156,7 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     if (targetSlot <= HOME_SLOTS) {
       // Cannot be blocked by own marble in the path
       if (!homePathBlocked(player, marble.slot, targetSlot)) {
-        moves.push({ type: 'moveHome', dieIndex, marbleId, toSlot: targetSlot });
+        moves.push({ type: 'moveHome', dieIndex, marbleId, toZone: 'home', toSlot: targetSlot });
       }
     }
     // Overshoot (targetSlot > HOME_SLOTS) or blocked → no move available
@@ -230,7 +230,7 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
       moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar });
     } else if (remaining === 1) {
       // Enter center from this star (center is exactly 1 step from any star)
-      moves.push({ type: 'enterCenter', dieIndex, marbleId });
+      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center' });
       // OR continue 1 step on main track from this star
       const tempMarble = { zone: 'track', space: exitStar };
       const dest = computeTrackMove(state, player, tempMarble, 1);
@@ -299,15 +299,13 @@ function crossesHome(prev, homeEntry, next) {
 }
 
 // Returns true if the player already has a marble at the given location.
-// Space is only compared for 'track' locations; this function is currently
-// only called with track locations.  If you ever call it with a 'home' or
-// 'center' loc, add the appropriate space/slot comparison here — the current
-// fallback (true) would incorrectly match ANY marble in that zone.
 function ownMarbleAt(player, loc) {
-  return player.marbles.some(m =>
-    m.zone === loc.zone &&
-    (loc.zone === 'track' ? m.space === loc.space : true)
-  );
+  return player.marbles.some(m => {
+    if (m.zone !== loc.zone) return false;
+    if (loc.zone === 'track')  return m.space === loc.space;
+    if (loc.zone === 'home')   return m.slot  === loc.slot;
+    return true; // center — only one marble can be in center
+  });
 }
 
 function ownMarbleAtSpace(player, space) {

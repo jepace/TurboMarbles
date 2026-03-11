@@ -170,7 +170,9 @@ export function handleRoll(ws, roomId) {
   if (game.dice) return;
 
   const dice = performRoll(game);
-  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
+  // Compute legal moves and include in the event so clients can highlight destinations.
+  const legalMoves = allLegalMoves(game, game.turnIndex);
+  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, legalMoves });
   // Auto-forfeit and advance turn if this roll leaves no legal moves (e.g. all marbles
   // in base with a 3+4 roll).  No-op when at least one die has available moves.
   advanceTurnIfDone(room);
@@ -269,7 +271,9 @@ export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'playing') return { error: 'Invalid room' };
 
-  const slot = room.slots[playerIndex];
+  const pi = Number(playerIndex);
+  if (!Number.isInteger(pi) || pi < 0 || pi >= room.slots.length) return { error: 'Invalid player index' };
+  const slot = room.slots[pi];
   if (!slot || slot.isRobot) return { error: 'Slot not available' };
 
   // Validate using the playerId issued at join time, not just the player name.
@@ -345,6 +349,14 @@ function tryApplyMove(room, playerIndex, move) {
   }
 
   advanceTurnIfDone(room);
+
+  // If the same player still has moves left, send them updated legal moves so they
+  // can highlight valid destinations for the remaining die.
+  if (game.phase === 'AWAITING_MOVE' && game.turnIndex === playerIndex) {
+    const ws = room.slots[playerIndex]?.ws;
+    sendTo(ws, { event: 'legalMoves', moves: allLegalMoves(game, playerIndex) });
+  }
+
   return { ok: true };
 }
 
@@ -433,13 +445,15 @@ function broadcast(room, msg, excludeWs = null) {
   const data = JSON.stringify(msg);
   for (const slot of room.slots) {
     if (slot.ws && slot.ws !== excludeWs && slot.ws.readyState === 1) {
-      slot.ws.send(data);
+      try { slot.ws.send(data); } catch { /* ignore dead socket */ }
     }
   }
 }
 
 function sendTo(ws, msg) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+  if (ws && ws.readyState === 1) {
+    try { ws.send(JSON.stringify(msg)); } catch { /* ignore dead socket */ }
+  }
 }
 
 export function getLobbyState(ws) {

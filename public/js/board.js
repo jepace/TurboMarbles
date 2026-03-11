@@ -390,3 +390,16 @@ export function highlightSpaces(spaces) {
 }
 
 export function getColors() { return COLORS; }
+
+// Returns the canvas {x,y} for a space descriptor, or null.
+// space: { zone: 'track', space: N } | { zone: 'home', playerIndex, slot } | { zone: 'center' }
+export function getSpacePosition(space) {
+  if (!space) return null;
+  if (space.zone === 'track')  return trackPos[space.space] ?? null;
+  if (space.zone === 'center') return centerPos;
+  if (space.zone === 'home') {
+    const ai = playerToArm[space.playerIndex] ?? space.playerIndex;
+    return homePos[ai]?.[space.slot] ?? null;
+  }
+  return null;
+}

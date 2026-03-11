@@ -2,16 +2,16 @@
 
 import { connect, on, send, setReconnectInfo } from './socket.js';
 import { init as initBoard, drawBoard, resize as resizeBoard,
-         hitTestMarble, highlightSpaces, getColors } from './board.js';
+         hitTestMarble, highlightSpaces, getSpacePosition } from './board.js';
 
 // ---- State ----
 let myPlayerIndex = null;
 let myName = null;
 let roomId = null;
 let gameState = null;
-let pendingMoves = [];        // moves selected but not yet submitted
-let selectedMarble = null;    // { playerIndex, marbleId }
-let legalMovesCache = null;   // legal moves for current interaction
+let selectedMarble = null;      // { playerIndex, marbleId } currently selected
+let legalMovesCache = null;     // { 0: [...], 1: [...] } from server after roll
+let selectedMarbleMoves = [];   // filtered moves for selectedMarble (for highlighting)
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
 // a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
@@ -132,21 +132,32 @@ on('gameStarted', ({ gameState: gs }) => {
   if (isMyTurn()) enableRoll();
 });
 
-on('rolled', ({ playerIndex, dice }) => {
+on('rolled', ({ playerIndex, dice, legalMoves }) => {
   gameState.dice = dice;
   gameState.diceUsed = [false, false];
   gameState.phase = 'AWAITING_MOVE';
+  legalMovesCache = legalMoves ?? null;
+  selectedMarble = null;
+  selectedMarbleMoves = [];
   renderDice(dice);
   log(`${playerName(playerIndex)} rolled ${dice[0]} & ${dice[1]}`);
   $('btn-roll').disabled = true;
-  if (isMyTurn()) {
-    // Show possible moves via marble clicking
-  }
+});
+
+// Server sends updated legal moves after the player uses one die (so remaining
+// die destinations can be highlighted correctly).
+on('legalMoves', ({ moves }) => {
+  legalMovesCache = moves;
+  selectedMarble = null;
+  selectedMarbleMoves = [];
+  drawBoard(gameState);
 });
 
 on('marbleMoved', ({ playerIndex, marbleId, from, to }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
   Object.assign(marble, to);
+  selectedMarble = null;
+  selectedMarbleMoves = [];
   drawBoard(gameState);
   log(`${playerName(playerIndex)} moved marble`);
 });
@@ -165,6 +176,9 @@ on('turnChanged', ({ playerIndex }) => {
   gameState.phase = 'IN_TURN';
   gameState.dice = null;
   gameState.diceUsed = [false, false];
+  legalMovesCache = null;
+  selectedMarble = null;
+  selectedMarbleMoves = [];
   renderSidebar();
   renderDice(null);
   if (isMyTurn()) enableRoll();
@@ -210,54 +224,71 @@ function onCanvasClick(e) {
   const cx = e.clientX - rect.left;
   const cy = e.clientY - rect.top;
 
-  // Check if clicking a highlight (destination)
-  if (legalMovesCache && selectedMarble) {
-    const dest = hitTestDestination(cx, cy, legalMovesCache);
+  // Clicking a highlighted destination submits that move.
+  if (selectedMarbleMoves.length) {
+    const dest = hitTestDestination(cx, cy, selectedMarbleMoves);
     if (dest) {
       submitMove(dest);
       return;
     }
   }
 
-  // Check if clicking a marble
+  // Clicking a marble selects it and highlights its legal destinations.
   const hit = hitTestMarble(gameState, cx, cy);
-  if (!hit || hit.playerIndex !== myPlayerIndex) return;
+  if (!hit || hit.playerIndex !== myPlayerIndex) {
+    // Clicking empty space clears selection.
+    selectedMarble = null;
+    selectedMarbleMoves = [];
+    drawBoard(gameState);
+    return;
+  }
 
   selectedMarble = hit;
-  legalMovesCache = computeLegalDestinations(hit);
+  selectedMarbleMoves = computeLegalDestinations(hit);
   drawBoard(gameState);
-  highlightSpaces(legalMovesCache.map(m => moveToSpace(m)));
+  highlightSpaces(selectedMarbleMoves.map(moveToSpace).filter(Boolean));
 }
 
-function computeLegalDestinations(marble) {
-  // For both unused dice, find moves for this marble
+// Returns all legal moves for the given marble across all unused dice.
+function computeLegalDestinations({ marbleId }) {
+  if (!legalMovesCache) return [];
   const moves = [];
-  for (let dieIdx = 0; dieIdx < 2; dieIdx++) {
-    if (gameState.diceUsed[dieIdx]) continue;
-    // Request legal moves from server by sending an inquiry...
-    // Actually we don't have a server-side legal move query endpoint.
-    // We'll just let the server validate on submit.
-    // For highlighting purposes, collect plausible destinations.
+  for (let i = 0; i < 2; i++) {
+    if (gameState?.diceUsed?.[i]) continue;
+    for (const m of (legalMovesCache[i] ?? [])) {
+      if (m.marbleId === marbleId) moves.push(m);
+    }
   }
-  return moves; // highlighting is best-effort; server still validates
+  return moves;
 }
 
+// Converts a move to a space descriptor for board highlighting / hit-testing.
+// All move types now carry toZone (set by GameEngine), so this is a direct mapping.
 function moveToSpace(move) {
-  if (move.toZone === 'track') return { zone: 'track', space: move.toSpace };
-  if (move.toZone === 'home')  return { zone: 'home', playerIndex: myPlayerIndex, slot: move.toSlot };
-  if (move.type === 'enterCenter' || move.type === 'exitCenter') return { zone: 'center' };
+  if (!move.toZone) return null;
+  if (move.toZone === 'center') return { zone: 'center' };
+  if (move.toZone === 'track')  return { zone: 'track', space: move.toSpace };
+  if (move.toZone === 'home')   return { zone: 'home', playerIndex: myPlayerIndex, slot: move.toSlot };
   return null;
 }
 
+// Returns the move that the player clicked, or null.
 function hitTestDestination(cx, cy, moves) {
-  // Simple: not implemented yet — returns null (server will validate on submit)
+  const R = $('board-canvas').width * 0.028;
+  for (const move of moves) {
+    const pos = getSpacePosition(moveToSpace(move));
+    if (!pos) continue;
+    const dx = cx - pos.x, dy = cy - pos.y;
+    if (dx * dx + dy * dy <= R * R) return move;
+  }
   return null;
 }
 
 function submitMove(move) {
   send({ action: 'move', move });
   selectedMarble = null;
-  legalMovesCache = null;
+  selectedMarbleMoves = [];
+  legalMovesCache = null; // will be refreshed by server via 'legalMoves' event if turn continues
 }
 
 // ---- Render helpers ----
@@ -323,12 +354,15 @@ function playerName(index) {
   return gameState?.players?.[index]?.name ?? `Player ${index + 1}`;
 }
 
+const LOG_MAX = 60;
 function log(msg) {
   const el = $('game-log');
   const entry = document.createElement('div');
   entry.className = 'log-entry';
   entry.textContent = msg;
   el.appendChild(entry);
+  // Prevent unbounded growth on long games
+  while (el.children.length > LOG_MAX) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
 }
 

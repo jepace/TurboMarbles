@@ -21,7 +21,9 @@ export function connect() {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     const fns = handlers[msg.event] || [];
-    fns.forEach(fn => fn(msg));
+    for (const fn of fns) {
+      try { fn(msg); } catch (err) { console.error('Handler error for', msg.event, err); }
+    }
   });
 
   ws.addEventListener('close', () => {
