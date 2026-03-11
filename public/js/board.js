@@ -22,8 +22,8 @@ const ARM_MAP = {
   6: [0, 1, 2, 3, 4, 5],
 };
 
-// Space 6 of each arm (arm*14 + 6): innermost space of each arm's U
-const STAR_SPACES = new Set([6, 20, 34, 48, 62, 76]);
+// Space 7 of each arm (arm*14 + 7): apex of the U
+const STAR_SPACES = new Set([7, 21, 35, 49, 63, 77]);
 
 const BG_BLUE     = '#1565c0';
 const STAR_GOLD   = '#ffd600';
@@ -76,15 +76,22 @@ export function clearMarbleOverride(playerIndex, marbleId) {
 function armAngle(ai) { return ai * STEP + Math.PI / 2; }
 
 function computeLayout() {
-  // Radial constants
-  const R_OUTER    = W * 0.40;   // outer radius — where spaces 1 and 11 sit
-  const R_COL_TOP  = W * 0.22;   // inner top of left/right columns (spaces 5 and 7)
-  const R_STAR     = W * 0.17;   // star space (space 6) — apex of the U
-  const COL_OFF    = W * 0.052;  // perpendicular distance from arm axis to column centre
-  const R_HOME_OUT = W * 0.36;   // outermost home slot (slot 1)
-  const R_HOME_IN  = W * 0.24;   // innermost home slot (slot 4)
-  const BASE_R     = W * 0.455;  // base-grid centre radius (just outside track)
-  const BASE_G     = W * 0.038;  // base-grid cell spacing
+  // Geometry:
+  //   Per arm, 14 spaces: 6 up (left col) + star (apex) + 7 down (right col)
+  //   Space 1  = start (outer left col)
+  //   Spaces 2-6 = left column, outer→inner
+  //   Space 7  = star (apex, on arm axis, innermost)
+  //   Spaces 8-13 = right column, inner→outer
+  //   Space 14 = outer right col (adjacent to next arm's space 1)
+
+  const R_OUTER    = W * 0.40;   // outer radius (spaces 1 and 14)
+  const R_COL_TOP  = W * 0.22;   // top of columns (space 6, space 8)
+  const R_STAR     = W * 0.16;   // star apex (space 7)
+  const COL_OFF    = W * 0.052;  // perpendicular offset from arm axis to column centre
+  const R_HOME_OUT = W * 0.36;   // outermost home slot
+  const R_HOME_IN  = W * 0.24;   // innermost home slot
+  const BASE_R     = W * 0.455;  // base grid centre radius
+  const BASE_G     = W * 0.038;  // base grid spacing
 
   GEO = { R_OUTER, R_COL_TOP, R_STAR, COL_OFF, R_HOME_OUT, R_HOME_IN, BASE_R, BASE_G };
 
@@ -92,28 +99,15 @@ function computeLayout() {
   homePos  = [];
   basePos  = [];
 
-  // Pre-compute outer anchor points for each arm (used by connector interpolation)
-  const outerLeft  = [];
-  const outerRight = [];
-  for (let arm = 0; arm < ALL_ARMS; arm++) {
-    const ang = armAngle(arm);
-    const dx  = Math.cos(ang), dy = Math.sin(ang);
-    const px  = -Math.sin(ang), py = Math.cos(ang);
-    outerLeft[arm]  = { x: CX + dx * R_OUTER - px * COL_OFF,
-                        y: CY + dy * R_OUTER - py * COL_OFF };
-    outerRight[arm] = { x: CX + dx * R_OUTER + px * COL_OFF,
-                        y: CY + dy * R_OUTER + py * COL_OFF };
-  }
-
   for (let arm = 0; arm < ALL_ARMS; arm++) {
     const ang = armAngle(arm);
     const dx  = Math.cos(ang), dy = Math.sin(ang);
     const px  = -Math.sin(ang), py = Math.cos(ang);
     const base = arm * 14;
 
-    // Left column: spaces 1-5, outer→inner at -COL_OFF
-    for (let i = 0; i < 5; i++) {
-      const t = i / 4;
+    // Left column: spaces 1-6, outer (1) → inner-top (6), at -COL_OFF perpendicular
+    for (let i = 0; i < 6; i++) {
+      const t = i / 5;
       const r = R_OUTER + (R_COL_TOP - R_OUTER) * t;
       trackPos[base + 1 + i] = {
         x: CX + dx * r - px * COL_OFF,
@@ -121,29 +115,16 @@ function computeLayout() {
       };
     }
 
-    // Space 6: star — apex on arm axis
-    trackPos[base + 6] = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
+    // Space 7: star — apex on arm axis, innermost point
+    trackPos[base + 7] = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
 
-    // Right column: spaces 7-11, inner→outer at +COL_OFF
-    for (let i = 0; i < 5; i++) {
-      const t = i / 4;
+    // Right column: spaces 8-14, inner-top (8) → outer (14), at +COL_OFF perpendicular
+    for (let i = 0; i < 7; i++) {
+      const t = i / 6;
       const r = R_COL_TOP + (R_OUTER - R_COL_TOP) * t;
-      trackPos[base + 7 + i] = {
+      trackPos[base + 8 + i] = {
         x: CX + dx * r + px * COL_OFF,
         y: CY + dy * r + py * COL_OFF,
-      };
-    }
-
-    // Connectors: spaces 12-14
-    // Interpolate from this arm's outer-right (space 11) to next arm's outer-left (space 1)
-    const nextArm = (arm + 1) % ALL_ARMS;
-    const p0 = outerRight[arm];
-    const p1 = outerLeft[nextArm];
-    for (let i = 0; i < 3; i++) {
-      const t = (i + 1) / 4;   // t = 0.25, 0.50, 0.75  (space 1 of next arm is t=1.0)
-      trackPos[base + 12 + i] = {
-        x: p0.x + (p1.x - p0.x) * t,
-        y: p0.y + (p1.y - p0.y) * t,
       };
     }
 
@@ -251,16 +232,16 @@ function drawAllArms(n) {
       { x: CX + dx * R_HOME_IN  + px * HOME_HW, y: CY + dy * R_HOME_IN  + py * HOME_HW },
     ], color + homeAlpha, null);
 
-    // Star apex triangle connecting top of both columns to the star space
+    // Apex triangle: top of left col → star → top of right col
     const lTop = { x: CX + dx * R_COL_TOP - px * COL_OFF, y: CY + dy * R_COL_TOP - py * COL_OFF };
     const rTop = { x: CX + dx * R_COL_TOP + px * COL_OFF, y: CY + dy * R_COL_TOP + py * COL_OFF };
-    const star = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
+    const apex = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
     ctx.beginPath();
     ctx.moveTo(lTop.x, lTop.y);
-    ctx.lineTo(star.x, star.y);
+    ctx.lineTo(apex.x, apex.y);
     ctx.lineTo(rTop.x, rTop.y);
     ctx.closePath();
-    ctx.fillStyle = color + (isActive ? '88' : '22');
+    ctx.fillStyle = color + (isActive ? '99' : '28');
     ctx.fill();
   }
 }

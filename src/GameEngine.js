@@ -9,12 +9,12 @@ export const CENTER = 'center';       // zone name for the center circle
 
 // Per-player constants indexed by player index 0-5
 export const PLAYER_CONFIG = [
-  { color: 'yellow', start: 1,  star: 6,  homeEntry: 84 },
-  { color: 'orange', start: 15, star: 20, homeEntry: 14 },
-  { color: 'pink',   start: 29, star: 34, homeEntry: 28 },
-  { color: 'white',  start: 43, star: 48, homeEntry: 42 },
-  { color: 'green',  start: 57, star: 62, homeEntry: 56 },
-  { color: 'blue',   start: 71, star: 76, homeEntry: 70 },
+  { color: 'yellow', start: 1,  star: 7,  homeEntry: 84 },
+  { color: 'orange', start: 15, star: 21, homeEntry: 14 },
+  { color: 'pink',   start: 29, star: 35, homeEntry: 28 },
+  { color: 'white',  start: 43, star: 49, homeEntry: 42 },
+  { color: 'green',  start: 57, star: 63, homeEntry: 56 },
+  { color: 'blue',   start: 71, star: 77, homeEntry: 70 },
 ];
 
 // ARM_MAP[n][i] = arm index (0–5) for player i in an n-player game.
