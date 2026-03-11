@@ -64,7 +64,7 @@ export function createRoom(hostWs, hostName, totalPlayers) {
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
   // The client must store this and send it back in any 'reconnect' action.
-  return { roomId, code, reconnectToken: hostId };
+  return { roomId, code, reconnectToken: hostId, color: slots[0].color };
 }
 
 export function joinRoom(ws, code, playerName) {

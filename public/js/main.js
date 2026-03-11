@@ -44,16 +44,19 @@ function validateName() {
   myName = n;
   return true;
 }
+// Enter on name field → Create Game (most common action)
+$('landing-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create').click(); });
 
 // ---- Create ----
 $('btn-create-confirm').addEventListener('click', () => {
   const n = parseInt($('create-count').value, 10);
   if (n < 2 || n > 6) return;
   connect();
-  on('open', () => {}); // connect is sync on first call; ws ready after
   send({ action: 'createRoom', name: myName, totalPlayers: n });
 });
 $('btn-create-back').addEventListener('click', () => show('screen-landing'));
+// Enter on player-count field → confirm create
+$('create-count').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create-confirm').click(); });
 
 // ---- Join ----
 $('btn-join-confirm').addEventListener('click', () => {
@@ -63,6 +66,8 @@ $('btn-join-confirm').addEventListener('click', () => {
   send({ action: 'joinRoom', code, name: myName });
 });
 $('btn-join-back').addEventListener('click', () => show('screen-landing'));
+// Enter on room-code field → confirm join
+$('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join-confirm').click(); });
 
 // ---- Lobby ----
 $('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }));
@@ -83,14 +88,14 @@ on('error', ({ message }) => {
   alert(message);
 });
 
-on('roomCreated', ({ roomId: rid, code, reconnectToken }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color }) => {
   roomId = rid;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
-  renderLobbySlots([{ index: 0, name: myName, color: COLOR_NAMES[0], isRobot: false, filled: true }]);
+  renderLobbySlots([{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
   show('screen-lobby');
 });
 
