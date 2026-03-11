@@ -163,6 +163,7 @@ button.secondary { background: #fff2; }
   display: flex;
   gap: 0.4rem;
   flex-wrap: wrap;
+  min-height: 0;  /* collapse when both buttons are hidden */
 }
 .die {
   width: 52px; height: 52px;

@@ -205,13 +205,10 @@ function drawAllArms(n) {
       { x: CX + dx * r2 + px * HW, y: CY + dy * r2 + py * HW },
     ];
 
-    if (activeSet.has(ai)) {
-      const color = COLORS[ai];
-      fillQuad(quad(ARM_IN, R_OUT * 0.4), color + 'cc', '#00000044');
-    } else {
-      // Inactive arm in neutral grey
-      fillQuad(quad(ARM_IN, R_OUT * 0.4), 'rgba(80,90,110,0.35)', 'rgba(100,110,130,0.15)');
-    }
+    // Always use real arm color — active arms are brighter, inactive slightly dimmer
+    const color = COLORS[ai];
+    const alpha = activeSet.has(ai) ? 'cc' : '55';
+    fillQuad(quad(ARM_IN, R_OUT * 0.4), color + alpha, '#00000033');
   }
 }
 
@@ -282,14 +279,14 @@ function drawHomeAndBase(n) {
     const color = COLORS[ai];
     const dimColor = 'rgba(120,130,150,0.5)';
 
-    // Home slots
+    // Home slots — always show in arm color; active=bright, inactive=dim
     for (let s = 1; s <= HOME_SLOTS; s++) {
       const p = homePos[ai][s];
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.2, 0, Math.PI * 2);
       ctx.fillStyle   = '#00000055';
       ctx.fill();
-      ctx.strokeStyle = isActive ? (color + 'dd') : dimColor;
+      ctx.strokeStyle = color + (isActive ? 'dd' : '55');
       ctx.lineWidth   = 2;
       ctx.stroke();
     }
@@ -301,7 +298,7 @@ function drawHomeAndBase(n) {
       ctx.arc(p.x, p.y, R * 1.5, 0, Math.PI * 2);
       ctx.fillStyle   = '#00000055';
       ctx.fill();
-      ctx.strokeStyle = isActive ? (color + 'aa') : dimColor;
+      ctx.strokeStyle = color + (isActive ? 'aa' : '44');
       ctx.lineWidth   = 1.5;
       ctx.stroke();
     }

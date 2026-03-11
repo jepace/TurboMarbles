@@ -93,21 +93,23 @@ $('btn-undo').addEventListener('click', doUndo);
 function doCommit() {
   send({ action: 'commit' });
   commitPending = false;
-  setCommitVisible(false);
+  $('btn-commit').style.display = 'none';
+  $('btn-undo').style.display   = 'none';
 }
 
 function doUndo() {
   send({ action: 'undo' });
   commitPending = false;
-  setCommitVisible(false);
+  $('btn-commit').style.display = 'none';
+  $('btn-undo').style.display   = 'none';
   legalMovesCache = null;
   selectedMarble = null;
   selectedMarbleMoves = [];
 }
 
-function setCommitVisible(visible) {
-  $('commit-area').style.display = visible ? 'flex' : 'none';
-}
+// Undo available after any move; Commit only when both dice are used.
+function setUndoVisible(visible)   { $('btn-undo').style.display   = visible ? 'inline-flex' : 'none'; }
+function setCommitVisible(visible) { $('btn-commit').style.display  = visible ? 'inline-flex' : 'none'; }
 
 // ---- [Enter] key — roll dice when it's my turn, or commit when ready ----
 document.addEventListener('keydown', e => {
@@ -175,7 +177,7 @@ on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
   show('screen-game');
   initBoard($('board-canvas'));
-  setCommitVisible(false);
+  setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
   renderSidebar();
   drawBoard(gameState);
@@ -192,7 +194,7 @@ on('rolled', ({ playerIndex, dice, legalMoves }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
-  setCommitVisible(false);
+  setCommitVisible(false); setUndoVisible(false);
   renderDice(dice);
   $('btn-roll').disabled = true;
 
@@ -222,6 +224,10 @@ on('legalMoves', ({ moves, diceUsed }) => {
   if (diceUsed && gameState) {
     gameState.diceUsed = diceUsed;
     renderDice(gameState.dice);
+    // Show Undo as soon as any die has been used
+    if (isMyTurn() && (diceUsed[0] || diceUsed[1])) {
+      setUndoVisible(true);
+    }
   }
   selectedMarble = null;
   selectedMarbleMoves = [];
@@ -273,7 +279,7 @@ on('turnChanged', ({ playerIndex }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
-  setCommitVisible(false);
+  setCommitVisible(false); setUndoVisible(false);
   setHint('');
   renderSidebar();
   renderDice(null);
@@ -289,7 +295,7 @@ on('turnChanged', ({ playerIndex }) => {
 on('extraRoll', ({ playerIndex }) => {
   gameState.phase = 'EXTRA_ROLL';
   commitPending = false;
-  setCommitVisible(false);
+  setCommitVisible(false); setUndoVisible(false);
   if (playerIndex === myPlayerIndex) {
     log('🎲 You earned an extra roll!');
     enableRoll();
@@ -316,6 +322,7 @@ on('readyToCommit', ({ playerIndex }) => {
   if (playerIndex !== myPlayerIndex) return;
   commitPending = true;
   setCommitVisible(true);
+  setUndoVisible(true);
   setHint('Both dice used. Commit your turn or Undo to try again.');
 });
 
@@ -324,7 +331,7 @@ on('undone', ({ gameState: gs }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
-  setCommitVisible(false);
+  setCommitVisible(false); setUndoVisible(false);
   renderDice(gameState.dice);
   drawBoard(gameState);
   if (isMyTurn()) setHint('Undone. Click a marble to make your moves.');
@@ -351,7 +358,7 @@ on('reconnected', ({ gameState: gs }) => {
   gameState = gs;
   show('screen-game');
   initBoard($('board-canvas'));
-  setCommitVisible(false);
+  setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
   renderSidebar();
   drawBoard(gameState);
