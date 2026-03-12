@@ -4,7 +4,8 @@
 import {
   createGame, legalMovesForDie, allLegalMoves, applyMove,
   PLAYER_CONFIG, ALL_STARS, advanceTrack, trackDistance,
-  marbleOnTrack, marbleAtCenter, marbleInHome,
+  marbleOnTrack, marbleAtCenter, marbleInHome, marbleInBase,
+  earnsExtraRoll, MARBLES_PER_PLAYER,
 } from '../src/GameEngine.js';
 
 let passed = 0, failed = 0;
@@ -362,6 +363,365 @@ describe('home entry — landing exactly on homeEntry space', () => {
   const m4 = legalMovesForDie(state, 0, 0, 0);
   assert(m4.some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
     'die=3 from 82 → enter home slot 1');
+});
+
+// ---- trackDistance / advanceTrack — boundary values -------------------------
+
+describe('trackDistance — same-space = full lap, never zero', () => {
+  assert(trackDistance(8, 8)  === 84, 'trackDistance(8,8) === 84 (never 0)');
+  assert(trackDistance(1, 1)  === 84, 'trackDistance(1,1) === 84');
+  assert(trackDistance(84, 84) === 84, 'trackDistance(84,84) === 84');
+});
+
+describe('advanceTrack — boundary and wrap', () => {
+  assert(advanceTrack(5, 84) === 5,  'full lap (n=84) returns to same space');
+  assert(advanceTrack(83, 3) === 2,  '83 + 3 wraps to 2');
+  assert(advanceTrack(84, 1) === 1,  '84 + 1 = 1 (already tested, confirm)');
+  assert(advanceTrack(1, 0)  === 1,  'n=0: no movement');
+});
+
+// ---- exitBase — full die matrix ---------------------------------------------
+
+describe('exitBase — die matrix: only 1 and 6 allowed', () => {
+  for (const die of [2, 3, 4, 5]) {
+    const s = makeState();
+    setDice(s, die, 1);
+    const moves = legalMovesForDie(s, 0, 0, 0);
+    assert(moves.filter(m => m.type === 'exitBase').length === 0,
+      `die=${die} → no exitBase`);
+  }
+
+  const s1 = makeState();
+  setDice(s1, 1, 2);
+  assert(legalMovesForDie(s1, 0, 0, 0).some(m => m.type === 'exitBase'),
+    'die=1 → exitBase legal');
+
+  const s6 = makeState();
+  setDice(s6, 6, 2);
+  assert(legalMovesForDie(s6, 0, 0, 0).some(m => m.type === 'exitBase'),
+    'die=6 → exitBase legal');
+});
+
+describe('exitBase — own marble blocks start space', () => {
+  const s = makeState();
+  // Put marble 1 on start space (space 1) for player 0
+  setMarble(s, 0, 1, 'track', 1);
+
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.type === 'exitBase').length === 0,
+    'die=1, own marble at start → no exitBase');
+
+  setDice(s, 6, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.type === 'exitBase').length === 0,
+    'die=6, own marble at start → no exitBase');
+});
+
+describe('exitBase — opponent at start is bumpable', () => {
+  const s = makeState(2);
+  // Put player 1's marble on player 0's start space (space 1)
+  setMarble(s, 1, 0, 'track', 1);
+
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'exitBase'),
+    'die=1, opponent at start → exitBase still legal (will bump)');
+
+  setDice(s, 6, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'exitBase'),
+    'die=6, opponent at start → exitBase still legal (will bump)');
+
+  // Apply the exitBase and confirm opponent was bumped
+  const s2 = makeState(2);
+  setMarble(s2, 1, 0, 'track', 1);
+  setDice(s2, 1, 2);
+  const move = legalMovesForDie(s2, 0, 0, 0).find(m => m.type === 'exitBase');
+  const events = applyMove(s2, 0, move);
+  assert(events.some(e => e.event === 'marbleBumped'), 'exitBase bumps opponent at start');
+  assert(s2.players[1].marbles[0].zone === 'base', 'bumped marble returns to base');
+});
+
+describe('exitBase — marble lands at correct start space per player config', () => {
+  // Player 0 (yellow): start=1
+  const s0 = makeState(2);
+  setDice(s0, 1, 2);
+  const m0 = legalMovesForDie(s0, 0, 0, 0).find(m => m.type === 'exitBase');
+  applyMove(s0, 0, m0);
+  assert(s0.players[0].marbles[0].space === 1, 'player 0 exits to start=1');
+  assert(s0.players[0].marbles[0].starEligible === false, 'start space not a star → not starEligible');
+
+  // Player 1: exits to their own configured start space (ARM_MAP-determined)
+  const s1 = makeState(2);
+  setDice(s1, 1, 2);
+  s1.turnIndex = 1;
+  const m1 = legalMovesForDie(s1, 1, 0, 0);
+  const eb = m1.find(m => m.type === 'exitBase');
+  applyMove(s1, 1, eb);
+  assert(s1.players[1].marbles[0].space === s1.players[1].config.start,
+    'player 1 exits to their configured start space');
+});
+
+// ---- Win condition ----------------------------------------------------------
+
+describe('win condition — gameOver when last marble enters home zone', () => {
+  // Win = all marbles in home zone (any slot), not necessarily slot 4.
+  const s = makeState(2);
+  // 3 marbles already in home (distinct slots); marble 3 on track about to enter
+  setMarble(s, 0, 0, 'home', null, 2);
+  setMarble(s, 0, 1, 'home', null, 3);
+  setMarble(s, 0, 2, 'home', null, 4);
+  setMarble(s, 0, 3, 'track', 83, null, false); // one step from homeEntry=84
+  setDice(s, 1, 2);
+
+  // die=1 from space 83 → crosses homeEntry 84 → enters slot 1
+  const moves = legalMovesForDie(s, 0, 0, 3);
+  const enterMove = moves.find(m => m.toZone === 'home' && m.toSlot === 1);
+  assert(!!enterMove, 'die=1 from 83 → can enter home slot 1');
+
+  const events = applyMove(s, 0, enterMove);
+  assert(events.some(e => e.event === 'gameOver'), 'all 4 in home → gameOver');
+  assert(s.phase === 'GAME_OVER', 'phase set to GAME_OVER');
+  const go = events.find(e => e.event === 'gameOver');
+  assert(go && go.winnerIndex === 0, 'gameOver has correct winnerIndex');
+});
+
+describe('win condition — no gameOver when a marble remains outside home', () => {
+  const s = makeState(2);
+  // Only 2 in home; marble 2 in base; marble 3 enters home → still 1 in base
+  setMarble(s, 0, 0, 'home', null, 2);
+  setMarble(s, 0, 1, 'home', null, 3);
+  setMarble(s, 0, 2, 'base');
+  setMarble(s, 0, 3, 'track', 83, null, false);
+  setDice(s, 1, 2);
+
+  const moves = legalMovesForDie(s, 0, 0, 3);
+  const enterMove = moves.find(m => m.toZone === 'home');
+  const events = applyMove(s, 0, enterMove);
+  assert(!events.some(e => e.event === 'gameOver'), 'marble 2 still in base → no gameOver');
+  assert(s.phase !== 'GAME_OVER', 'phase not GAME_OVER');
+});
+
+// ---- Bump invariants --------------------------------------------------------
+
+describe('bump — bumped marble fully reset', () => {
+  const s = makeState(2);
+  // Put opponent marble on track with starEligible=true
+  setMarble(s, 1, 0, 'track', 10, null, true);
+  // Player 0 marble moves to space 10
+  setMarble(s, 0, 0, 'track', 8, null, false);
+  setDice(s, 2, 1);
+  const events = applyMove(s, 0, { type: 'move', dieIndex: 0, marbleId: 0, toZone: 'track', toSpace: 10 });
+  const bumped = s.players[1].marbles[0];
+  assert(bumped.zone === 'base',           'bumped marble zone=base');
+  assert(bumped.space === null,            'bumped marble space=null');
+  assert(bumped.slot  === null,            'bumped marble slot=null');
+  assert(bumped.starEligible === false,    'bumped marble starEligible cleared');
+  assert(events.some(e => e.event === 'marbleBumped'), 'marbleBumped event emitted');
+});
+
+describe('bump — own marble at destination blocks move (not bump)', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 8, null, false);
+  setMarble(s, 0, 1, 'track', 10, null, false); // own marble at target
+  setDice(s, 2, 1);
+  const moves = legalMovesForDie(s, 0, 0, 0);
+  assert(!moves.some(m => m.toSpace === 10), 'own marble at destination → blocked, no move to that space');
+});
+
+// ---- moveHome — overshoot and blocking -------------------------------------
+
+describe('moveHome — slot 4 ceiling: no moves past it', () => {
+  const s = makeState(2);
+
+  setMarble(s, 0, 0, 'home', null, 4);
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.type === 'moveHome').length === 0,
+    'slot 4, die=1 → no moveHome (already at max)');
+
+  // Various dice all overshoot from slot 3
+  for (const die of [2, 3, 4, 5, 6]) {
+    setMarble(s, 0, 0, 'home', null, 3);
+    setDice(s, die, 1);
+    assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.type === 'moveHome').length === 0,
+      `slot 3, die=${die} → overshoot → no moveHome`);
+  }
+});
+
+describe('moveHome — legal advances without overshoot', () => {
+  const s = makeState(2);
+
+  setMarble(s, 0, 0, 'home', null, 3);
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'moveHome' && m.toSlot === 4),
+    'slot 3, die=1 → slot 4');
+
+  setMarble(s, 0, 0, 'home', null, 1);
+  setDice(s, 3, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'moveHome' && m.toSlot === 4),
+    'slot 1, die=3 → slot 4 (exactly fills)');
+
+  setMarble(s, 0, 0, 'home', null, 2);
+  setDice(s, 2, 1);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'moveHome' && m.toSlot === 4),
+    'slot 2, die=2 → slot 4');
+});
+
+describe('moveHome — path blocked by own marble in home', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'home', null, 1);
+  setMarble(s, 0, 1, 'home', null, 2); // blocks path for die=2 (must pass slot 2)
+  setDice(s, 2, 1);
+  assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.type === 'moveHome').length === 0,
+    'slot 1 → slot 3, but own marble at slot 2 blocks path → no moveHome');
+
+  // die=1 → slot 2 is the TARGET and is blocked (own marble sitting there)
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.type === 'moveHome').length === 0,
+    'slot 1, die=1 → slot 2 occupied by own marble → no moveHome');
+});
+
+// ---- home entry — extended player configs -----------------------------------
+
+describe('home entry — player 1 orange config (homeEntry=14) via 6-player game', () => {
+  // In a 6-player game ARM_MAP[6]=[0,1,2,3,4,5] so player 1 uses PLAYER_CONFIG[1]
+  // (orange: start=15, star=22, homeEntry=14)
+  const s = makeState(6);
+  s.turnIndex = 1;
+
+  // From space 13, die=1 → crosses homeEntry=14 → enter slot 1
+  setMarble(s, 1, 0, 'track', 13, null, false);
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 1, 0, 0).some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
+    'player 1 (orange): die=1 from space 13 → enter home slot 1');
+
+  // From space 12, die=2 → stepsToEntry=2, intoHome=0 → slot 1
+  setMarble(s, 1, 0, 'track', 12, null, false);
+  setDice(s, 2, 1);
+  assert(legalMovesForDie(s, 1, 0, 0).some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
+    'player 1 (orange): die=2 from space 12 → enter home slot 1');
+});
+
+describe('home entry — marble starting at homeEntry space redirects to slot 1', () => {
+  const s = makeState(2);
+  // Yellow homeEntry=84; marble already sitting on space 84
+  setMarble(s, 0, 0, 'track', 84, null, false);
+  setDice(s, 1, 2);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
+    'marble at homeEntry, die=1 → enter slot 1');
+});
+
+describe('home entry — overshoot from near homeEntry', () => {
+  const s = makeState(2);
+
+  // From 82, die=6: stepsToEntry=2, into home=4 → slot 4 (legal, exactly fills)
+  setMarble(s, 0, 0, 'track', 82, null, false);
+  setDice(s, 6, 1);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 4),
+    'from 82, die=6 → slot 4 (exact)');
+
+  // From 83, die=6: stepsToEntry=1, into home=5 → overshoot slot 4 → no move
+  setMarble(s, 0, 0, 'track', 83, null, false);
+  setDice(s, 6, 1);
+  assert(legalMovesForDie(s, 0, 0, 0).filter(m => m.toZone === 'home').length === 0,
+    'from 83, die=6 → 5 steps into home → overshoot → no home move');
+
+  // From 81, die=6: stepsToEntry=3, into home=3 → slot 3 (legal)
+  setMarble(s, 0, 0, 'track', 81, null, false);
+  setDice(s, 6, 1);
+  assert(legalMovesForDie(s, 0, 0, 0).some(m => m.toZone === 'home' && m.toSlot === 3),
+    'from 81, die=6 → slot 3');
+});
+
+// ---- circleCenter -----------------------------------------------------------
+
+describe('circleCenter — die=6 from center stays in center', () => {
+  const s = makeState(6);
+  setMarble(s, 0, 0, 'center');
+
+  setDice(s, 6, 1);
+  assert(movesOfType(s, 'circleCenter').length === 1, 'die=6 from center → circleCenter available');
+
+  // Apply it — marble should remain in center
+  const move = movesOfType(s, 'circleCenter')[0];
+  applyMove(s, 0, move);
+  assert(s.players[0].marbles[0].zone === 'center', 'after circleCenter marble stays in center zone');
+});
+
+describe('circleCenter — die=2 from center → no moves', () => {
+  const s = makeState(6);
+  setMarble(s, 0, 0, 'center');
+  setDice(s, 2, 1);
+  assert(movesOfType(s, 'circleCenter').length === 0, 'die=2 from center → no circleCenter');
+  assert(movesOfType(s, 'exitCenter').length === 0,   'die=2 from center → no exitCenter either');
+});
+
+// ---- exitCenter — bump opponent at destination --------------------------------
+
+describe('exitCenter — bumps opponent at chosen star', () => {
+  const s = makeState(6);
+  setMarble(s, 0, 0, 'center');
+  setMarble(s, 1, 0, 'track', 22); // opponent at star 22
+
+  setDice(s, 1, 2);
+  // exitCenter to star 22 should still be offered (it's bumpable)
+  const exits = movesOfType(s, 'exitCenter');
+  assert(exits.some(m => m.toStar === 22), 'exitCenter to star 22 available despite opponent');
+
+  // Apply it — opponent gets bumped
+  const move = exits.find(m => m.toStar === 22);
+  const events = applyMove(s, 0, move);
+  assert(events.some(e => e.event === 'marbleBumped'), 'exitCenter bumps opponent at star 22');
+  assert(s.players[1].marbles[0].zone === 'base', 'bumped marble sent to base');
+});
+
+describe('exitCenter — own marble at star blocks that exit option', () => {
+  const s = makeState(6);
+  setMarble(s, 0, 0, 'center');
+  setMarble(s, 0, 1, 'track', 8); // own marble at star 8
+  setDice(s, 1, 2);
+  const exits = movesOfType(s, 'exitCenter');
+  assert(!exits.some(m => m.toStar === 8), 'own marble at star 8 → star 8 not offered as exit');
+  assert(exits.length === 5, '5 exits remain (not 6)');
+});
+
+// ---- earnsExtraRoll ---------------------------------------------------------
+
+describe('earnsExtraRoll', () => {
+  assert(earnsExtraRoll([6, 1]) === true,  '[6,1] → extra roll');
+  assert(earnsExtraRoll([1, 6]) === true,  '[1,6] → extra roll');
+  assert(earnsExtraRoll([6, 6]) === true,  '[6,6] → extra roll');
+  assert(earnsExtraRoll([1, 1]) === false, '[1,1] → no extra roll');
+  assert(earnsExtraRoll([3, 5]) === false, '[3,5] → no extra roll');
+  assert(earnsExtraRoll([2, 4]) === false, '[2,4] → no extra roll');
+});
+
+// ---- allLegalMoves — exhaustion and empty cases -----------------------------
+
+describe('allLegalMoves — all marbles in base, non-1/6 dice → no moves', () => {
+  const s = makeState(2);
+  s.dice = [3, 4]; s.diceUsed = [false, false]; s.phase = 'AWAITING_MOVE';
+  const legal = allLegalMoves(s, 0);
+  const total = [...(legal[0] || []), ...(legal[1] || [])].length;
+  assert(total === 0, 'dice=[3,4], all in base → 0 legal moves');
+});
+
+describe('allLegalMoves — both dice used → no moves returned', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 5);
+  s.dice = [1, 2]; s.diceUsed = [true, true]; s.phase = 'AWAITING_MOVE';
+  const legal = allLegalMoves(s, 0);
+  const total = [...(legal[0] || []), ...(legal[1] || [])].length;
+  assert(total === 0, 'both dice used → 0 legal moves');
+});
+
+// ---- moveStar — opponent at intermediate star does not block ---------------
+
+describe('moveStar — opponent at intermediate star is passable', () => {
+  const s = makeState(6);
+  setMarble(s, 0, 0, 'track', 8, null, true);
+  setMarble(s, 1, 0, 'track', 22); // opponent at star 22 (intermediate)
+  setDice(s, 2, 1);
+  const ms = movesOfType(s, 'moveStar');
+  assert(ms.some(m => m.toSpace === 36),
+    'opponent at star 22 does NOT block star-track traversal to star 36');
 });
 
 // ---- Summary ----------------------------------------------------------------
