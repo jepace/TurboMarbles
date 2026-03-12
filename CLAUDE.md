@@ -34,13 +34,27 @@ node test.mjs          # integration tests (requires server running)
 The board has **6 arms**, each a **U-shape**, arranged in a circle (60° apart) so the U openings face outward and the bottoms of adjacent Us connect to form a continuous ring.
 
 ```
-        ★  ← star (apex, top of U, closest to center)
-       | |
-       | |  ← home corridor (4 slots, inside the U)
-       | |
-  ─────┴─┴─────  ← bottom edge of U (5 spaces)
-       ↑
-    start space (center of the 5 bottom spaces)
+
+          [CS]
+
+[08*]     [H4]      [78*]
+[07]      [H3]      [79]
+[06]      [H2]      [80]
+[05]      [H1]      [81]
+[04]                [82]
+[03] [02] [01] [84] [83]
+
+   [B1] [B2] [B3] [B4]
+   
+where:
+01-08, 78-84 are the spaces on the track
+* indicates that space is on the star track
+CS is the center space
+H1 - H4 is the Home corridor
+B1 - B4 is the Base
+01 is the Start space for this player
+84 is the entry to Home space for this player
+
 ```
 
 ### Anatomy of One U-arm
