@@ -110,28 +110,43 @@ function computeLayout() {
     const px   = -Math.sin(ang), py = Math.cos(ang);
     const base = arm * 14;
 
-    // Left column: spaces base+1 … base+7 (7 spaces including start), at -COL_OFF
-    // i=0 (space base+1) = R_OUTER (start, outermost)
-    // i=6 (space base+7) = R_COL_TOP (inner top, just below star)
+    // Junction angles: where this arm meets the previous and next arm.
+    // Adjacent arms are 60° apart; junction is the midpoint angle = ±30° from arm axis.
+    // Space base+1 must land at prev_junction so it's co-located with space (base-1) from the
+    // prior arm. Similarly space base+14 must land at next_junction = space (base+15) start.
+    const prev_ang = ang - Math.PI / 6;
+    const next_ang = ang + Math.PI / 6;
+    const prev_jx  = CX + Math.cos(prev_ang) * R_OUTER;
+    const prev_jy  = CY + Math.sin(prev_ang) * R_OUTER;
+    const next_jx  = CX + Math.cos(next_ang) * R_OUTER;
+    const next_jy  = CY + Math.sin(next_ang) * R_OUTER;
+
+    // Column tops (unchanged — flanking the star near arm axis)
+    const lcx = CX + dx * R_COL_TOP - px * COL_OFF;
+    const lcy = CY + dy * R_COL_TOP - py * COL_OFF;
+    const rcx = CX + dx * R_COL_TOP + px * COL_OFF;
+    const rcy = CY + dy * R_COL_TOP + py * COL_OFF;
+
+    // Left column: spaces base+1 … base+7 (7 spaces)
+    // Lerp from prev_junction (t=0, outermost) to left_col_top (t=1, innermost)
     for (let i = 0; i < 7; i++) {
-      const r = R_OUTER + (R_COL_TOP - R_OUTER) * i / 6;
+      const t = i / 6;
       trackPos[base + 1 + i] = {
-        x: CX + dx * r - px * COL_OFF,
-        y: CY + dy * r - py * COL_OFF,
+        x: prev_jx + (lcx - prev_jx) * t,
+        y: prev_jy + (lcy - prev_jy) * t,
       };
     }
 
     // Space base+8: star apex, on arm axis
     trackPos[base + 8] = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
 
-    // Right column: spaces base+9 … base+14 (6 spaces), at +COL_OFF
-    // i=0 (space base+9)  = R_COL_TOP (inner top, just below star)
-    // i=5 (space base+14) = R_OUTER (outermost)
+    // Right column: spaces base+9 … base+14 (6 spaces)
+    // Lerp from right_col_top (t=0, innermost) to next_junction (t=1, outermost)
     for (let i = 0; i < 6; i++) {
-      const r = R_COL_TOP + (R_OUTER - R_COL_TOP) * i / 5;
+      const t = i / 5;
       trackPos[base + 9 + i] = {
-        x: CX + dx * r + px * COL_OFF,
-        y: CY + dy * r + py * COL_OFF,
+        x: rcx + (next_jx - rcx) * t,
+        y: rcy + (next_jy - rcy) * t,
       };
     }
 

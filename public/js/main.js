@@ -17,7 +17,8 @@ let selectedMarbleMoves = [];   // filtered moves for selectedMarble (for highli
 let commitPending = false;      // true when readyToCommit received, waiting for Commit click
 
 // ---- Per-turn move log accumulation (for backgammon notation) ----
-let turnLogMoves  = [];   // [{ fromStr, toStr, bumped }] for current turn
+let turnNumber    = 0;    // increments each turnChanged; set to 1 on gameStarted
+let turnLogMoves  = [];   // [{ marbleId, path: [str,...], bumped }] for current turn
 let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
 let lastBumpedAt  = null; // zone-descriptor set by marbleBumped, consumed by marbleMoved
@@ -186,11 +187,10 @@ on('gameStarted', ({ gameState: gs }) => {
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
+  turnNumber = 1;
   renderSidebar();
   drawBoard(gameState);
-  log('Game started! Good luck.');
-  if (isMyTurn()) { enableRoll(); log('⭐ You go first — roll the dice! (press Enter)'); }
-  else log(`${playerName(gs.turnIndex)} goes first.`);
+  if (isMyTurn()) enableRoll();
 });
 
 on('rolled', ({ playerIndex, dice, legalMoves }) => {
@@ -213,20 +213,10 @@ on('rolled', ({ playerIndex, dice, legalMoves }) => {
   turnLogDice = dice;
 
   const isMe = playerIndex === myPlayerIndex;
-  const d0 = dice[0], d1 = dice[1];
-  const hasSix = d0 === 6 || d1 === 6;
-
   if (isMe) {
-    log(`🎲 You rolled ${d0} and ${d1}!${hasSix ? ' (extra roll earned)' : ''}`);
     const totalMoves = Object.values(legalMoves ?? {}).reduce((s, a) => s + a.length, 0);
-    if (totalMoves === 0) {
-      log('No legal moves — turn will be skipped.');
-      setHint('');
-    } else {
-      setHint('Click one of your marbles to see where it can move.');
-    }
+    setHint(totalMoves === 0 ? '' : 'Click one of your marbles to see where it can move.');
   } else {
-    log(`${playerName(playerIndex)} rolled ${d0} and ${d1}.${hasSix ? ' (extra roll)' : ''}`);
     setHint('');
   }
 });
@@ -260,10 +250,18 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
 
-  // Accumulate move for backgammon notation
-  const bumped = lastBumpedAt !== null;
-  lastBumpedAt = null;
-  turnLogMoves.push({ fromStr: locNotation(from), toStr: locNotation(to), bumped });
+  // Accumulate move for backgammon notation; merge consecutive same-marble moves
+  const bumped  = lastBumpedAt !== null;
+  lastBumpedAt  = null;
+  const fromStr = locNotation(from);
+  const toStr   = locNotation(to);
+  const last    = turnLogMoves[turnLogMoves.length - 1];
+  if (last && last.marbleId === marbleId && last.path[last.path.length - 1] === fromStr) {
+    last.path.push(toStr);
+    last.bumped = last.bumped || bumped;
+  } else {
+    turnLogMoves.push({ marbleId, path: [fromStr, toStr], bumped });
+  }
 
   // Build canvas waypoints from server path
   const waypoints = (path ?? []).map(loc => getSpacePosition(zoneToSpace(loc, playerIndex))).filter(Boolean);
@@ -292,6 +290,7 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
 
 on('turnChanged', ({ playerIndex }) => {
   flushTurnLog();
+  turnNumber++;
   gameState.turnIndex = playerIndex;
   gameState.phase = 'IN_TURN';
   gameState.dice = null;
@@ -307,10 +306,8 @@ on('turnChanged', ({ playerIndex }) => {
   renderDice(null);
   if (isMyTurn()) {
     enableRoll();
-    log(`⭐ It's your turn! Press Enter to roll.`);
   } else {
     $('btn-roll').disabled = true;
-    log(`${playerName(playerIndex)}'s turn.`);
   }
 });
 
@@ -322,27 +319,18 @@ on('extraRoll', ({ playerIndex }) => {
   turnLogMoves = [];
   setCommitVisible(false); setUndoVisible(false);
   if (playerIndex === myPlayerIndex) {
-    log('🎲 You earned an extra roll!');
     enableRoll();
-  } else {
-    log(`${playerName(playerIndex)} earned an extra roll.`);
   }
 });
 
 on('dieForfeit', ({ dieIndex }) => {
   if (gameState?.diceUsed) gameState.diceUsed[dieIndex] = true;
   renderDice(gameState?.dice);
-  if (isMyTurn()) {
-    const val = gameState?.dice?.[dieIndex];
-    log(`Die ${val ?? dieIndex + 1} has no legal moves — forfeited.`);
-  }
 });
 
 on('turnSkipped', ({ playerIndex }) => {
   flushTurnLog();
   turnLogPlayer = null;
-  const who = playerIndex === myPlayerIndex ? 'You have' : `${playerName(playerIndex)} has`;
-  log(`${who} no valid moves — turn skipped.`);
 });
 
 on('readyToCommit', ({ playerIndex }) => {
@@ -391,7 +379,6 @@ on('reconnected', ({ gameState: gs }) => {
   commitPending = false;
   renderSidebar();
   drawBoard(gameState);
-  log('Reconnected.');
 });
 
 // ---- Canvas interaction ----
@@ -568,13 +555,15 @@ function locNotation(loc) {
   return '?';
 }
 
-// Emit accumulated moves for the current turn as a single backgammon-style log line.
+// Emit accumulated moves for the current turn as a single numbered log line.
 function flushTurnLog() {
-  if (!turnLogDice || turnLogMoves.length === 0) return;
-  const name = playerName(turnLogPlayer ?? gameState?.turnIndex);
+  if (!turnLogDice) return;
+  const name     = playerName(turnLogPlayer ?? gameState?.turnIndex);
   const diceStr  = `${turnLogDice[0]}-${turnLogDice[1]}`;
-  const movesStr = turnLogMoves.map(m => `${m.fromStr}/${m.toStr}${m.bumped ? '*' : ''}`).join(' ');
-  log(`${name}: ${diceStr}: ${movesStr}`);
+  const movesStr = turnLogMoves.length
+    ? turnLogMoves.map(m => `${m.path.join('/')}${m.bumped ? '*' : ''}`).join(' ')
+    : '--';
+  log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`);
   turnLogMoves = [];
   turnLogDice  = null;
 }
