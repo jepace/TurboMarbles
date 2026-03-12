@@ -724,6 +724,81 @@ describe('moveStar — opponent at intermediate star is passable', () => {
     'opponent at star 22 does NOT block star-track traversal to star 36');
 });
 
+// ---- Initial roll [6,1] and [1,6] — exit base then move --------------------
+// Player 0: start=1. "1 past start" = space 2. "6 past start" = space 7.
+
+describe('initial roll [6,1] — exitBase with die=6, then move 1 past start', () => {
+  const s = makeState(2);
+  setDice(s, 6, 1);
+
+  // Step 1: use die=0 (value=6) to exit base → marble lands on start space
+  const exitMove = legalMovesForDie(s, 0, 0, 0).find(m => m.type === 'exitBase');
+  assert(!!exitMove, '[6,1] die=6 → exitBase available');
+  applyMove(s, 0, exitMove);
+  assert(s.players[0].marbles[0].space === 1, 'marble placed at start (space 1)');
+
+  // Step 2: use die=1 (value=1) to move 1 step forward → space 2
+  const moveMoves = legalMovesForDie(s, 0, 1, 0);
+  assert(moveMoves.some(m => m.type === 'move' && m.toSpace === 2),
+    '[6,1] die=1 → can move marble to space 2 (1 past start)');
+  applyMove(s, 0, moveMoves.find(m => m.toSpace === 2));
+  assert(s.players[0].marbles[0].space === 2, 'marble now at space 2');
+});
+
+describe('initial roll [6,1] — exitBase with die=1, then move 6 past start', () => {
+  const s = makeState(2);
+  setDice(s, 6, 1);
+
+  // Step 1: use die=1 (value=1) to exit base → marble lands on start space
+  const exitMove = legalMovesForDie(s, 0, 1, 0).find(m => m.type === 'exitBase');
+  assert(!!exitMove, '[6,1] die=1 → exitBase available');
+  applyMove(s, 0, exitMove);
+  assert(s.players[0].marbles[0].space === 1, 'marble placed at start (space 1)');
+
+  // Step 2: use die=0 (value=6) to move 6 steps forward → space 7
+  const moveMoves = legalMovesForDie(s, 0, 0, 0);
+  assert(moveMoves.some(m => m.type === 'move' && m.toSpace === 7),
+    '[6,1] die=6 → can move marble to space 7 (6 past start)');
+  applyMove(s, 0, moveMoves.find(m => m.toSpace === 7));
+  assert(s.players[0].marbles[0].space === 7, 'marble now at space 7');
+});
+
+describe('initial roll [1,6] — exitBase with die=1, then move 6 past start', () => {
+  const s = makeState(2);
+  setDice(s, 1, 6);
+
+  // Step 1: use die=0 (value=1) to exit base → marble at start
+  const exitMove = legalMovesForDie(s, 0, 0, 0).find(m => m.type === 'exitBase');
+  assert(!!exitMove, '[1,6] die=1 → exitBase available');
+  applyMove(s, 0, exitMove);
+  assert(s.players[0].marbles[0].space === 1, 'marble placed at start (space 1)');
+
+  // Step 2: use die=1 (value=6) to move 6 steps forward → space 7
+  const moveMoves = legalMovesForDie(s, 0, 1, 0);
+  assert(moveMoves.some(m => m.type === 'move' && m.toSpace === 7),
+    '[1,6] die=6 → can move marble to space 7 (6 past start)');
+  applyMove(s, 0, moveMoves.find(m => m.toSpace === 7));
+  assert(s.players[0].marbles[0].space === 7, 'marble now at space 7');
+});
+
+describe('initial roll [1,6] — exitBase with die=6, then move 1 past start', () => {
+  const s = makeState(2);
+  setDice(s, 1, 6);
+
+  // Step 1: use die=1 (value=6) to exit base → marble at start
+  const exitMove = legalMovesForDie(s, 0, 1, 0).find(m => m.type === 'exitBase');
+  assert(!!exitMove, '[1,6] die=6 → exitBase available');
+  applyMove(s, 0, exitMove);
+  assert(s.players[0].marbles[0].space === 1, 'marble placed at start (space 1)');
+
+  // Step 2: use die=0 (value=1) to move 1 step forward → space 2
+  const moveMoves = legalMovesForDie(s, 0, 0, 0);
+  assert(moveMoves.some(m => m.type === 'move' && m.toSpace === 2),
+    '[1,6] die=1 → can move marble to space 2 (1 past start)');
+  applyMove(s, 0, moveMoves.find(m => m.toSpace === 2));
+  assert(s.players[0].marbles[0].space === 2, 'marble now at space 2');
+});
+
 // ---- Summary ----------------------------------------------------------------
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
