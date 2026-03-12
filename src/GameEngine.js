@@ -135,8 +135,9 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     // Enter center: the center hub is 1 step past any star on a shortcut branch.
     // Any marble on the main track whose die count lands it exactly 1 step past
     // any star (dieVal = stepsToThatStar + 1) may divert into center instead.
-    if (canEnterCenter(player, marble, dieVal)) {
-      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center' });
+    const enterStarSpace = canEnterCenter(player, marble, dieVal);
+    if (enterStarSpace !== null) {
+      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: enterStarSpace });
     }
 
     // Star-track movement: when sitting on any star (starEligible), the marble
@@ -177,10 +178,10 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
   return moves;
 }
 
-// Returns true when a marble can divert into the center hub on this die.
-// The center is 1 step past ANY star on a shortcut branch, so the marble needs
-// exactly (stepsToThatStar + 1) die steps.  We check every star; as long as
-// one is reachable the move is legal.  Special-cased guards per star:
+// Returns the star space to divert through when a marble can enter the center hub,
+// or null if no such divert is available.  The center is 1 step past ANY star on a
+// shortcut branch, so the marble needs exactly (stepsToThatStar + 1) die steps.
+// Special-cased guards per star:
 //   - the player's homeEntry must not lie along the path before that star
 //   - no own marble may block any step of the path up to (and onto) that star
 // Note: when the marble IS already on a star, stepsToThatStar is 0 (not 84),
@@ -205,9 +206,9 @@ function canEnterCenter(player, marble, dieVal) {
       pos = advanceTrack(pos, 1);
       if (ownMarbleAtSpace(player, pos)) { blocked = true; break; }
     }
-    if (!blocked) return true;
+    if (!blocked) return starSpace;
   }
-  return false;
+  return null;
 }
 
 // The ordered list of star spaces going clockwise around the star track.
@@ -236,21 +237,25 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
 
     const remaining = dieVal - k;
 
+    // Build the list of star spaces visited so far (for path animation)
+    const starsPath = [];
+    for (let i = 1; i <= k; i++) starsPath.push(STAR_TRACK[(startIdx + i) % 6]);
+
     if (remaining === 0) {
       // Stop on this star
-      moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar });
+      moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar, starsPath });
     } else if (remaining === 1) {
       // Enter center from this star (center is exactly 1 step from any star)
-      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center' });
+      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: exitStar, starsPath: [...starsPath] });
       // OR continue 1 step on main track from this star
       const tempMarble = { zone: 'track', space: exitStar };
       const dest = computeTrackMove(state, player, tempMarble, 1);
-      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot });
+      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot, starsPath });
     } else {
       // Continue on main track with remaining steps from exitStar
       const tempMarble = { zone: 'track', space: exitStar };
       const dest = computeTrackMove(state, player, tempMarble, remaining);
-      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot });
+      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot, starsPath });
     }
   }
   return moves;
@@ -349,12 +354,119 @@ export function allLegalMoves(state, playerIndex) {
   return result;
 }
 
+// --- Path computation for animation ---
+
+// Returns an ordered array of { zone, space?, slot?, playerIndex? } waypoints
+// representing every intermediate position a marble passes through during a move.
+// Must be called BEFORE state is mutated (reads current marble position).
+function computeMovePath(state, playerIndex, move) {
+  const player = state.players[playerIndex];
+  const marble = player.marbles[move.marbleId];
+  const dieVal = state.dice[move.dieIndex];
+  const { homeEntry } = player.config;
+  const path = [];
+
+  if (move.type === 'exitBase') {
+    path.push({ zone: 'track', space: player.config.start });
+    return path;
+  }
+
+  if (move.type === 'move') {
+    if (move.toZone === 'track') {
+      let pos = marble.space;
+      for (let i = 0; i < dieVal; i++) {
+        pos = advanceTrack(pos, 1);
+        path.push({ zone: 'track', space: pos });
+      }
+    } else {
+      // track → home: walk track steps to homeEntry, then home slots
+      const stepsToHome = trackDistance(marble.space, homeEntry);
+      let pos = marble.space;
+      for (let i = 0; i < stepsToHome; i++) {
+        pos = advanceTrack(pos, 1);
+        path.push({ zone: 'track', space: pos });
+      }
+      for (let s = 1; s <= move.toSlot; s++) {
+        path.push({ zone: 'home', slot: s, playerIndex });
+      }
+    }
+    return path;
+  }
+
+  if (move.type === 'moveHome') {
+    for (let s = marble.slot + 1; s <= move.toSlot; s++) {
+      path.push({ zone: 'home', slot: s, playerIndex });
+    }
+    return path;
+  }
+
+  if (move.type === 'enterCenter') {
+    if (move.starsPath) {
+      // Arrived via star track — starsPath lists each star visited
+      for (const s of move.starsPath) path.push({ zone: 'track', space: s });
+    } else if (move.viaStarSpace !== undefined) {
+      // Arrived from main track through viaStarSpace — walk there first
+      const stepsToStar = marble.space === move.viaStarSpace ? 0
+        : trackDistance(marble.space, move.viaStarSpace);
+      let pos = marble.space;
+      for (let i = 0; i < stepsToStar; i++) {
+        pos = advanceTrack(pos, 1);
+        path.push({ zone: 'track', space: pos });
+      }
+    }
+    path.push({ zone: 'center' });
+    return path;
+  }
+
+  if (move.type === 'exitCenter') {
+    path.push({ zone: 'track', space: move.toStar });
+    return path;
+  }
+
+  if (move.type === 'circleCenter') {
+    return path; // strategic no-op — no visual waypoints
+  }
+
+  if (move.type === 'moveStar') {
+    const starsPath = move.starsPath ?? [];
+    for (const s of starsPath) path.push({ zone: 'track', space: s });
+
+    const exitStar = starsPath.length > 0 ? starsPath[starsPath.length - 1] : marble.space;
+    const k = starsPath.length;
+    const remaining = dieVal - k;
+
+    if (move.toZone === 'track' && remaining > 0) {
+      let pos = exitStar;
+      for (let i = 0; i < remaining; i++) {
+        pos = advanceTrack(pos, 1);
+        path.push({ zone: 'track', space: pos });
+      }
+    } else if (move.toZone === 'home') {
+      const stepsToHome = trackDistance(exitStar, homeEntry);
+      let pos = exitStar;
+      for (let i = 0; i < stepsToHome; i++) {
+        pos = advanceTrack(pos, 1);
+        path.push({ zone: 'track', space: pos });
+      }
+      for (let s = 1; s <= move.toSlot; s++) {
+        path.push({ zone: 'home', slot: s, playerIndex });
+      }
+    }
+    return path;
+  }
+
+  return path;
+}
+
 // --- Apply a move (mutates state, returns events array) ---
 
 export function applyMove(state, playerIndex, move) {
   const events = [];
   const player = state.players[playerIndex];
   const marble = player.marbles[move.marbleId];
+
+  // Compute animation path before mutating state
+  const path = computeMovePath(state, playerIndex, move);
 
   if (move.type === 'exitBase') {
     const dest = player.config.start;
@@ -364,7 +476,7 @@ export function applyMove(state, playerIndex, move) {
     marble.space = dest;
     marble.starEligible = ALL_STARS.has(dest);
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-      from: { zone: 'base' }, to: { zone: 'track', space: dest } });
+      from: { zone: 'base' }, to: { zone: 'track', space: dest }, path });
 
   } else if (move.type === 'move') {
     const from = { zone: 'track', space: marble.space };
@@ -374,7 +486,7 @@ export function applyMove(state, playerIndex, move) {
       marble.space = move.toSpace;
       marble.starEligible = ALL_STARS.has(move.toSpace);
       events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-        from, to: { zone: 'track', space: move.toSpace } });
+        from, to: { zone: 'track', space: move.toSpace }, path });
     } else {
       // entering home
       marble.zone = 'home';
@@ -382,14 +494,14 @@ export function applyMove(state, playerIndex, move) {
       marble.slot = move.toSlot;
       marble.starEligible = false;
       events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-        from, to: { zone: 'home', slot: move.toSlot } });
+        from, to: { zone: 'home', slot: move.toSlot }, path });
     }
 
   } else if (move.type === 'moveHome') {
     const from = { zone: 'home', slot: marble.slot };
     marble.slot = move.toSlot;
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-      from, to: { zone: 'home', slot: move.toSlot } });
+      from, to: { zone: 'home', slot: move.toSlot }, path });
 
   } else if (move.type === 'enterCenter') {
     const from = { zone: 'track', space: marble.space };
@@ -399,7 +511,7 @@ export function applyMove(state, playerIndex, move) {
     marble.space = null;
     marble.starEligible = false;
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-      from, to: { zone: 'center' } });
+      from, to: { zone: 'center' }, path });
 
   } else if (move.type === 'exitCenter') {
     const from = { zone: 'center' };
@@ -409,12 +521,12 @@ export function applyMove(state, playerIndex, move) {
     marble.space = move.toStar;
     marble.starEligible = true;
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-      from, to: { zone: 'track', space: move.toStar } });
+      from, to: { zone: 'track', space: move.toStar }, path });
 
   } else if (move.type === 'circleCenter') {
     // Marble does a full circuit of all 6 stars and returns to center — strategic no-op.
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-      from: { zone: 'center' }, to: { zone: 'center' } });
+      from: { zone: 'center' }, to: { zone: 'center' }, path });
 
   } else if (move.type === 'moveStar') {
     // Marble traveled along the star track (K steps to a star, then optionally
@@ -427,7 +539,7 @@ export function applyMove(state, playerIndex, move) {
       marble.space = move.toSpace;
       marble.starEligible = ALL_STARS.has(move.toSpace);
       events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-        from, to: { zone: 'track', space: move.toSpace } });
+        from, to: { zone: 'track', space: move.toSpace }, path });
     } else {
       // continued from star track into home stretch
       marble.zone = 'home';
@@ -435,7 +547,7 @@ export function applyMove(state, playerIndex, move) {
       marble.slot = move.toSlot;
       marble.starEligible = false;
       events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-        from, to: { zone: 'home', slot: move.toSlot } });
+        from, to: { zone: 'home', slot: move.toSlot }, path });
     }
   }
 

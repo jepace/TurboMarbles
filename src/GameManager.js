@@ -104,7 +104,7 @@ export function addRobot(ws, roomId) {
   if (!slot) return { error: 'No empty slots' };
 
   slot.isRobot = true;
-  slot.name = `Robot ${slot.index + 1}`;
+  slot.name = slot.color.charAt(0).toUpperCase() + slot.color.slice(1);
   slot.playerId = 'robot-' + slot.index;
 
   broadcast(room, {

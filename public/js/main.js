@@ -3,7 +3,8 @@
 import { connect, on, send, setReconnectInfo } from './socket.js';
 import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
-         setMarbleOverride, clearMarbleOverride } from './board.js';
+         setMarbleOverride, clearMarbleOverride,
+         setAnimatingMarble, clearAnimatingMarble } from './board.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -14,6 +15,12 @@ let selectedMarble = null;      // { playerIndex, marbleId } currently selected
 let legalMovesCache = null;     // { 0: [...], 1: [...] } from server after roll
 let selectedMarbleMoves = [];   // filtered moves for selectedMarble (for highlighting)
 let commitPending = false;      // true when readyToCommit received, waiting for Commit click
+
+// ---- Per-turn move log accumulation (for backgammon notation) ----
+let turnLogMoves  = [];   // [{ fromStr, toStr, bumped }] for current turn
+let turnLogDice   = null; // [die0, die1] rolled this turn
+let turnLogPlayer = null; // playerIndex for current turn
+let lastBumpedAt  = null; // zone-descriptor set by marbleBumped, consumed by marbleMoved
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
 // a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
@@ -198,6 +205,13 @@ on('rolled', ({ playerIndex, dice, legalMoves }) => {
   renderDice(dice);
   $('btn-roll').disabled = true;
 
+  // Capture dice for backgammon notation (extra roll starts a fresh move list)
+  if (turnLogPlayer !== playerIndex) {
+    turnLogMoves  = [];
+    turnLogPlayer = playerIndex;
+  }
+  turnLogDice = dice;
+
   const isMe = playerIndex === myPlayerIndex;
   const d0 = dice[0], d1 = dice[1];
   const hasSix = d0 === 6 || d1 === 6;
@@ -235,42 +249,49 @@ on('legalMoves', ({ moves, diceUsed }) => {
   if (isMyTurn()) setHint('Click a marble to choose your next move.');
 });
 
-on('marbleMoved', ({ playerIndex, marbleId, from, to }) => {
+on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
 
-  // Capture from-position before updating state (for animation)
+  // Capture from-position before updating state (for animation start point)
   const fromPos = getSpacePosition(zoneToSpace(from, playerIndex));
 
-  // Update game state
+  // Update game state immediately so the board renders correctly after animation
   Object.assign(marble, to);
   selectedMarble = null;
   selectedMarbleMoves = [];
 
+  // Accumulate move for backgammon notation
+  const bumped = lastBumpedAt !== null;
+  lastBumpedAt = null;
+  turnLogMoves.push({ fromStr: locNotation(from), toStr: locNotation(to), bumped });
+
+  // Build canvas waypoints from server path
+  const waypoints = (path ?? []).map(loc => getSpacePosition(zoneToSpace(loc, playerIndex))).filter(Boolean);
+
+  // Always ensure at least the final position is animated to
   const toPos = getSpacePosition(zoneToSpace(to, playerIndex));
-  if (fromPos && toPos && (fromPos.x !== toPos.x || fromPos.y !== toPos.y)) {
-    animateMarble(playerIndex, marbleId, fromPos, toPos);
+  if (waypoints.length === 0 && toPos) waypoints.push(toPos);
+
+  if (fromPos && waypoints.length > 0) {
+    animateMarblePath(playerIndex, marbleId, fromPos, waypoints);
   } else {
     drawBoard(gameState);
   }
-
-  const who = playerIndex === myPlayerIndex ? 'Your' : `${playerName(playerIndex)}'s`;
-  const dest = to.zone === 'track'  ? `space ${to.space}` :
-               to.zone === 'home'   ? `home slot ${to.slot}` :
-               to.zone === 'center' ? 'the hub' : to.zone;
-  log(`${who} marble moved to ${dest}.`);
 });
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   const marble = gameState.players[ownerIndex].marbles[marbleId];
+  // Record where the bump happened so marbleMoved can annotate the move with '*'
+  lastBumpedAt = from;
   marble.zone = 'base';
   marble.space = null;
   marble.slot = null;
+  marble.starEligible = false;
   drawBoard(gameState);
-  const victim = ownerIndex === myPlayerIndex ? 'YOUR marble' : `${playerName(ownerIndex)}'s marble`;
-  log(`💥 ${victim} was bumped back to base!`);
 });
 
 on('turnChanged', ({ playerIndex }) => {
+  flushTurnLog();
   gameState.turnIndex = playerIndex;
   gameState.phase = 'IN_TURN';
   gameState.dice = null;
@@ -279,6 +300,7 @@ on('turnChanged', ({ playerIndex }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
+  turnLogPlayer = null;
   setCommitVisible(false); setUndoVisible(false);
   setHint('');
   renderSidebar();
@@ -293,8 +315,11 @@ on('turnChanged', ({ playerIndex }) => {
 });
 
 on('extraRoll', ({ playerIndex }) => {
+  flushTurnLog();
   gameState.phase = 'EXTRA_ROLL';
   commitPending = false;
+  // Start fresh move accumulation for the extra roll
+  turnLogMoves = [];
   setCommitVisible(false); setUndoVisible(false);
   if (playerIndex === myPlayerIndex) {
     log('🎲 You earned an extra roll!');
@@ -314,6 +339,8 @@ on('dieForfeit', ({ dieIndex }) => {
 });
 
 on('turnSkipped', ({ playerIndex }) => {
+  flushTurnLog();
+  turnLogPlayer = null;
   const who = playerIndex === myPlayerIndex ? 'You have' : `${playerName(playerIndex)} has`;
   log(`${who} no valid moves — turn skipped.`);
 });
@@ -338,6 +365,8 @@ on('undone', ({ gameState: gs }) => {
 });
 
 on('gameOver', ({ winnerIndex }) => {
+  flushTurnLog();
+  turnLogPlayer = null;
   gameState.phase = 'GAME_OVER';
   const name = playerName(winnerIndex);
   $('winner-msg').textContent = `${name} wins! 🎉`;
@@ -477,26 +506,77 @@ function submitMove(move) {
 
 // ---- Marble animation ----
 
-function animateMarble(playerIndex, marbleId, fromPos, toPos) {
-  const duration = 320;
-  const start = performance.now();
-
-  function step(now) {
-    const t = Math.min((now - start) / duration, 1);
-    const ease = t * t * (3 - 2 * t); // smoothstep
-    setMarbleOverride(playerIndex, marbleId, {
-      x: fromPos.x + (toPos.x - fromPos.x) * ease,
-      y: fromPos.y + (toPos.y - fromPos.y) * ease,
-    });
+// Animate a marble through a sequence of canvas-coordinate waypoints.
+// Each step uses smoothstep easing; total duration scales with step count
+// so short moves feel snappy and long moves stay readable.
+function animateMarblePath(playerIndex, marbleId, fromPos, waypoints) {
+  if (!waypoints || waypoints.length === 0) {
     drawBoard(gameState);
-    if (t < 1) {
-      requestAnimationFrame(step);
-    } else {
-      clearMarbleOverride(playerIndex, marbleId);
-      drawBoard(gameState);
-    }
+    return;
   }
-  requestAnimationFrame(step);
+
+  const STEP_MS = 120;  // ms per intermediate space
+  const MIN_MS  = 200;  // minimum step duration (for single-step moves)
+  const stepDuration = Math.max(MIN_MS, STEP_MS * (waypoints.length <= 1 ? 1 : 1));
+
+  let step = 0;
+  let prevPos = fromPos;
+
+  setAnimatingMarble(playerIndex, marbleId);
+
+  function animateToNext() {
+    if (step >= waypoints.length) {
+      clearMarbleOverride(playerIndex, marbleId);
+      clearAnimatingMarble();
+      drawBoard(gameState);
+      return;
+    }
+    const targetPos = waypoints[step++];
+    const startPos  = prevPos;
+    const start     = performance.now();
+
+    function frame(now) {
+      const t    = Math.min((now - start) / stepDuration, 1);
+      const ease = t * t * (3 - 2 * t); // smoothstep
+      setMarbleOverride(playerIndex, marbleId, {
+        x: startPos.x + (targetPos.x - startPos.x) * ease,
+        y: startPos.y + (targetPos.y - startPos.y) * ease,
+      });
+      drawBoard(gameState);
+      if (t < 1) {
+        requestAnimationFrame(frame);
+      } else {
+        prevPos = targetPos;
+        animateToNext();
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  animateToNext();
+}
+
+// ---- Backgammon-style notation helpers ----
+
+// Convert a zone-descriptor { zone, space?, slot? } to a notation string.
+function locNotation(loc) {
+  if (!loc) return '?';
+  if (loc.zone === 'base')   return 'bar';
+  if (loc.zone === 'center') return 'hub';
+  if (loc.zone === 'home')   return `h${loc.slot}`;
+  if (loc.zone === 'track')  return String(loc.space);
+  return '?';
+}
+
+// Emit accumulated moves for the current turn as a single backgammon-style log line.
+function flushTurnLog() {
+  if (!turnLogDice || turnLogMoves.length === 0) return;
+  const name = playerName(turnLogPlayer ?? gameState?.turnIndex);
+  const diceStr  = `${turnLogDice[0]}-${turnLogDice[1]}`;
+  const movesStr = turnLogMoves.map(m => `${m.fromStr}/${m.toStr}${m.bumped ? '*' : ''}`).join(' ');
+  log(`${name}: ${diceStr}: ${movesStr}`);
+  turnLogMoves = [];
+  turnLogDice  = null;
 }
 
 // ---- Render helpers ----

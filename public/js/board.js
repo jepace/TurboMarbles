@@ -38,6 +38,7 @@ let centerPos = { x: 0, y: 0 };
 let bubbles   = [];
 let playerToArm = [0, 1, 2, 3, 4, 5];
 let marbleOverrides = {};
+let animatingMarble = null; // { playerIndex, marbleId } of the marble currently in motion
 let GEO = {};
 
 export function init(canvasEl) {
@@ -71,6 +72,14 @@ export function setMarbleOverride(playerIndex, marbleId, pos) {
 
 export function clearMarbleOverride(playerIndex, marbleId) {
   if (marbleOverrides[playerIndex]) delete marbleOverrides[playerIndex][marbleId];
+}
+
+export function setAnimatingMarble(playerIndex, marbleId) {
+  animatingMarble = { playerIndex, marbleId };
+}
+
+export function clearAnimatingMarble() {
+  animatingMarble = null;
 }
 
 function armAngle(ai) { return ai * STEP + Math.PI / 2; }
@@ -384,24 +393,36 @@ function drawMarbles(gameState) {
     for (const marble of player.marbles) {
       const pos = marblePosition(marble, player.index);
       if (!pos) continue;
+      const isAnimating = animatingMarble &&
+        animatingMarble.playerIndex === player.index &&
+        animatingMarble.marbleId   === marble.id;
+      const r = isAnimating ? R * 1.25 : R;
       // Drop shadow
       ctx.beginPath();
-      ctx.arc(pos.x + 2, pos.y + 2, R, 0, Math.PI * 2);
-      ctx.fillStyle = '#0006';
+      ctx.arc(pos.x + 2, pos.y + 2, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#0008';
       ctx.fill();
+      // Glow for animating marble
+      if (isAnimating) {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r * 1.6, 0, Math.PI * 2);
+        ctx.fillStyle = color + '44';
+        ctx.fill();
+      }
       // Marble with radial gradient
       const grad = ctx.createRadialGradient(
-        pos.x - R * 0.3, pos.y - R * 0.3, R * 0.05,
-        pos.x, pos.y, R
+        pos.x - r * 0.3, pos.y - r * 0.3, r * 0.05,
+        pos.x, pos.y, r
       );
-      grad.addColorStop(0, lighten(color));
+      grad.addColorStop(0, isAnimating ? '#ffffff' : lighten(color));
+      grad.addColorStop(0.35, lighten(color));
       grad.addColorStop(1, color);
       ctx.beginPath();
-      ctx.arc(pos.x, pos.y, R, 0, Math.PI * 2);
+      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
       ctx.fillStyle   = grad;
       ctx.fill();
-      ctx.strokeStyle = '#fff5';
-      ctx.lineWidth   = 1;
+      ctx.strokeStyle = isAnimating ? '#ffffcccc' : '#fff5';
+      ctx.lineWidth   = isAnimating ? 2 : 1;
       ctx.stroke();
     }
   }
