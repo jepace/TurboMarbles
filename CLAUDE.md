@@ -64,6 +64,5 @@ The board has **6 arms**, each a **U-shape**, arranged in a circle (60° apart) 
 - First player with all 4 marbles in home wins.
 
 ## Do Not Change Without Asking
-- The space numbering / `PLAYER_CONFIG` in `GameEngine.js` (star/start/homeEntry positions) — the renderer and engine must stay in sync.
 - The board shape described above — it has been carefully specified and previous attempts to "improve" it broke the layout.
 - The server-authoritative model — clients must never compute or trust their own move validation.
