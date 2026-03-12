@@ -6,7 +6,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   _reset,
-} from './src/GameManager.js';
+} from '../src/GameManager.js';
 
 // ---- Harness ----------------------------------------------------------------
 

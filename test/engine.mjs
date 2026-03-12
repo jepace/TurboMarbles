@@ -5,7 +5,7 @@ import {
   createGame, legalMovesForDie, allLegalMoves, applyMove,
   PLAYER_CONFIG, ALL_STARS, advanceTrack, trackDistance,
   marbleOnTrack, marbleAtCenter, marbleInHome,
-} from './src/GameEngine.js';
+} from '../src/GameEngine.js';
 
 let passed = 0, failed = 0;
 

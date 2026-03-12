@@ -47,7 +47,7 @@ class MockWebSocket {
 global.WebSocket = MockWebSocket;
 global.location = { protocol: 'http:', host: 'localhost:3000' };
 
-import { connect, send, on, off, setReconnectInfo, _reset } from './public/js/socket.js';
+import { connect, send, on, off, setReconnectInfo, _reset } from '../public/js/socket.js';
 
 // ---- Harness ----------------------------------------------------------------
 
