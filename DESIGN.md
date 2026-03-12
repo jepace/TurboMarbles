@@ -1,5 +1,20 @@
 # TurboMarbles — Design Document
 
+> **Note (2026-03-12):** This document is outdated. It was written during early
+> planning and contains several inaccuracies: it references SQLite persistence
+> (never implemented — all state is in-memory), files `marbles.js` and `dice.js`
+> (don't exist), the old field name `shortcutEligible` (now `starEligible`), a
+> `STARTING` game phase (doesn't exist), and an incomplete WebSocket protocol.
+>
+> For accurate current documentation, read:
+> - **`ARCHITECTURE.md`** — data model, WebSocket protocol, state machine, file map
+> - **`ONBOARDING.md`** — getting started, common tasks, key concepts
+> - **`public/js/board-spec.md`** — board geometry reference
+>
+> This file is preserved as historical context only.
+
+---
+
 ## 1. Overview
 
 TurboMarbles is a turn-based multiplayer browser game for 2–6 players. The server is the authoritative source of all game state. Clients render the board and send player actions; the server validates moves, advances state, and broadcasts updates to all players in the room.
