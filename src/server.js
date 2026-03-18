@@ -4,7 +4,7 @@ import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, addRobot, startGame,
+  createRoom, joinRoom, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit,
@@ -53,11 +53,11 @@ wss.on('connection', (ws, req) => {
 function dispatch(ws, msg) {
   switch (msg.action) {
     case 'createRoom': {
-      const { name, totalPlayers } = msg;
+      const { name, totalPlayers, hostColor } = msg;
       if (!name || !totalPlayers) return send(ws, { event: 'error', message: 'Missing fields' });
       const n = parseInt(totalPlayers, 10);
       if (n < 2 || n > 6) return send(ws, { event: 'error', message: 'Players must be 2-6' });
-      const result = createRoom(ws, name.trim().slice(0, 20), n);
+      const result = createRoom(ws, name.trim().slice(0, 20), n, hostColor);
       send(ws, { event: 'roomCreated', ...result });
       break;
     }
@@ -76,6 +76,14 @@ function dispatch(ws, msg) {
       if (!roomId) return;
       const result = addRobot(ws, roomId);
       if (result.error) send(ws, { event: 'error', message: result.error });
+      break;
+    }
+
+    case 'removeRobot': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      const result = removeRobot(ws, roomId, msg.playerIndex);
+      if (result?.error) send(ws, { event: 'error', message: result.error });
       break;
     }
 

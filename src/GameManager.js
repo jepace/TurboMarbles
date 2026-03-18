@@ -35,7 +35,7 @@ function genId() {
 //   robotTurnTimer: TimeoutId | null,           // pending robot-move setTimeout handle
 // }
 
-export function createRoom(hostWs, hostName, totalPlayers) {
+export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
   const roomId = genId();
   let code;
   do { code = genCode(); } while ([...rooms.values()].some(r => r.code === code));
@@ -44,11 +44,22 @@ export function createRoom(hostWs, hostName, totalPlayers) {
   sessions.set(hostWs._id, { roomId, playerIndex: 0 });
 
   const armMap = ARM_MAP[totalPlayers] ?? Array.from({ length: totalPlayers }, (_, i) => i);
+
+  // Reorder so host's chosen arm (by color) is first
+  const hostArmIndex = PLAYER_CONFIG.findIndex(c => c.color === hostColor);
+  let orderedArmMap;
+  if (hostArmIndex >= 0 && armMap.includes(hostArmIndex)) {
+    orderedArmMap = [hostArmIndex, ...armMap.filter(a => a !== hostArmIndex)];
+  } else {
+    orderedArmMap = armMap;  // fallback: no change
+  }
+
   const slots = Array.from({ length: totalPlayers }, (_, i) => ({
     index: i,
     playerId: i === 0 ? hostId : null,
     name: i === 0 ? hostName : null,
-    color: PLAYER_CONFIG[armMap[i]].color,  // arm-mapped color so lobby matches game
+    color: PLAYER_CONFIG[orderedArmMap[i]].color,  // arm-mapped color so lobby matches game
+    armIndex: orderedArmMap[i],
     isRobot: false,
     ws: i === 0 ? hostWs : null,
   }));
@@ -118,6 +129,19 @@ export function addRobot(ws, roomId) {
   return { ok: true };
 }
 
+export function removeRobot(ws, roomId, playerIndex) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
+  if (!isHost(ws, room)) return { error: 'Only host can remove robots' };
+  const slot = room.slots[playerIndex];
+  if (!slot || !slot.isRobot) return { error: 'Not a robot slot' };
+  slot.isRobot = false;
+  slot.name = null;
+  slot.playerId = null;
+  broadcast(room, { event: 'playerLeft', playerIndex });
+  return { ok: true };
+}
+
 export function startGame(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
@@ -131,7 +155,7 @@ export function startGame(ws, roomId) {
     isRobot: s.isRobot,
   }));
 
-  room.game = createGame(players);
+  room.game = createGame(players, room.slots.map(s => s.armIndex));
   room.state = 'playing';
 
   broadcast(room, { event: 'gameStarted', gameState: publicState(room) });

@@ -8,13 +8,14 @@ export const MARBLES_PER_PLAYER = 4;  // marbles per player
 export const CENTER = 'center';       // zone name for the center circle
 
 // Per-player constants indexed by player index 0-5
+// Colors go clockwise from bottom: blue, pink, orange, yellow, green, white
 export const PLAYER_CONFIG = [
-  { color: 'yellow', start: 1,  star: 8,  homeEntry: 84 },
-  { color: 'orange', start: 15, star: 22, homeEntry: 14 },
-  { color: 'pink',   start: 29, star: 36, homeEntry: 28 },
-  { color: 'white',  start: 43, star: 50, homeEntry: 42 },
+  { color: 'blue',   start: 1,  star: 8,  homeEntry: 84 },
+  { color: 'pink',   start: 15, star: 22, homeEntry: 14 },
+  { color: 'orange', start: 29, star: 36, homeEntry: 28 },
+  { color: 'yellow', start: 43, star: 50, homeEntry: 42 },
   { color: 'green',  start: 57, star: 64, homeEntry: 56 },
-  { color: 'blue',   start: 71, star: 78, homeEntry: 70 },
+  { color: 'white',  start: 71, star: 78, homeEntry: 70 },
 ];
 
 // ARM_MAP[n][i] = arm index (0–5) for player i in an n-player game.
@@ -49,12 +50,13 @@ export function trackDistance(from, to) {
 
 // --- State factory ---
 
-export function createGame(players) {
+export function createGame(players, armIndices) {
   // players: array of { id, name, color, isRobot }
+  // armIndices: optional explicit arm index per player (overrides ARM_MAP default)
   // Assign player indices and configs; use ARM_MAP so each player occupies the
   // arm slot appropriate for the player count (opposite for 2p, evenly spaced for 3p, etc.)
   const n = players.length;
-  const armMap = ARM_MAP[n] ?? players.map((_, i) => i);
+  const armMap = armIndices ?? ARM_MAP[n] ?? players.map((_, i) => i);
   const gamePlayers = players.map((p, i) => ({
     ...p,
     index: i,

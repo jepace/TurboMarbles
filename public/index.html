@@ -28,8 +28,9 @@
     <label>Players (2–6)
       <input id="create-count" type="number" min="2" max="6" value="4">
     </label>
+    <div id="create-colors" class="color-picker-row"></div>
     <div class="btn-row">
-      <button id="btn-create-confirm">Create</button>
+      <button id="btn-create-confirm" class="btn-go">Create</button>
       <button class="secondary" id="btn-create-back">Back</button>
     </div>
   </div>
@@ -49,11 +50,11 @@
 <div id="screen-lobby" class="screen">
   <div class="card wide">
     <h2>Waiting Room</h2>
-    <p>Room code: <strong id="lobby-code"></strong></p>
+    <p>Room code: <strong id="lobby-code"></strong><button id="btn-copy-code" class="btn-icon" title="Copy code">⧉</button></p>
     <ul id="lobby-slots"></ul>
     <div class="btn-row" id="host-controls" style="display:none">
-      <button id="btn-add-robot">Add Robot Player</button>
-      <button id="btn-start">Start Game</button>
+      <button id="btn-add-robot" class="secondary">+ Robot</button>
+      <button id="btn-start" class="btn-go">Start Game</button>
     </div>
     <p id="lobby-wait-msg" style="display:none">Waiting for host to start…</p>
   </div>

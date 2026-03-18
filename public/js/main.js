@@ -30,6 +30,13 @@ const COLOR_MAP = {
   white:  '#e0e0e0', green:  '#44bb44', blue: '#2288f0',
 };
 
+// Color picker: mirrors GameEngine ARM_MAP and PLAYER_CONFIG order
+const ARM_MAP_CLIENT = { 2:[0,3], 3:[0,2,4], 4:[0,1,3,4], 5:[0,1,2,3,4], 6:[0,1,2,3,4,5] };
+// Color per arm index 0-5 (mirrors new GameEngine PLAYER_CONFIG)
+const ARM_COLORS = ['blue','pink','orange','yellow','green','white'];
+
+let selectedHostColor = 'blue';
+
 // ---- Screen management ----
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
@@ -58,15 +65,47 @@ function validateName() {
 $('landing-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create').click(); });
 
 // ---- Create ----
+function updateColorPicker(n) {
+  const el = $('create-colors');
+  if (!el) return;
+  const arms = ARM_MAP_CLIENT[n] ?? [0];
+  el.innerHTML = '';
+  for (const arm of arms) {
+    const color = ARM_COLORS[arm];
+    const swatch = document.createElement('button');
+    swatch.className = 'color-swatch' + (color === selectedHostColor ? ' selected' : '');
+    swatch.style.background = COLOR_MAP[color];
+    swatch.title = color;
+    swatch.dataset.color = color;
+    swatch.addEventListener('click', e => {
+      e.preventDefault();
+      selectedHostColor = color;
+      updateColorPicker(n);
+    });
+    el.appendChild(swatch);
+  }
+  // If current selectedHostColor not in available arms, reset to first
+  const available = arms.map(a => ARM_COLORS[a]);
+  if (!available.includes(selectedHostColor)) {
+    selectedHostColor = available[0];
+    updateColorPicker(n);
+  }
+}
+
 $('btn-create-confirm').addEventListener('click', () => {
   const n = parseInt($('create-count').value, 10);
   if (n < 2 || n > 6) return;
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n });
+  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor });
 });
 $('btn-create-back').addEventListener('click', () => show('screen-landing'));
 // Enter on player-count field → confirm create
 $('create-count').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create-confirm').click(); });
+$('create-count').addEventListener('input', () => {
+  const n = parseInt($('create-count').value, 10);
+  if (n >= 2 && n <= 6) updateColorPicker(n);
+});
+updateColorPicker(4); // initialize with default
 
 // ---- Join ----
 $('btn-join-confirm').addEventListener('click', () => {
@@ -82,6 +121,14 @@ $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-
 // ---- Lobby ----
 $('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }));
 $('btn-start').addEventListener('click', () => send({ action: 'startGame' }));
+$('btn-copy-code').addEventListener('click', () => {
+  const code = $('lobby-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = $('btn-copy-code');
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = '⧉'; }, 1500);
+  });
+});
 
 // ---- Roll ----
 $('btn-roll').addEventListener('click', doRoll);
@@ -119,11 +166,22 @@ function doUndo() {
 function setUndoVisible(visible)   { $('btn-undo').style.display   = visible ? 'inline-flex' : 'none'; }
 function setCommitVisible(visible) { $('btn-commit').style.display  = visible ? 'inline-flex' : 'none'; }
 
-// ---- [Enter] key — roll dice when it's my turn, or commit when ready ----
+// ---- [Enter] key — create/start/roll/commit shortcuts ----
 document.addEventListener('keydown', e => {
   if (e.key !== 'Enter') return;
   // Don't fire if user is typing in an input/textarea
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  // Create screen: Enter confirms
+  if ($('screen-create').classList.contains('active')) {
+    $('btn-create-confirm').click(); return;
+  }
+  // Lobby: host can Enter to start
+  if ($('screen-lobby').classList.contains('active')) {
+    if ($('host-controls').style.display !== 'none') $('btn-start').click();
+    return;
+  }
+  // Game: roll or commit
   if (!gameState) return;
   if (commitPending && isMyTurn()) {
     doCommit();
@@ -170,15 +228,26 @@ on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState, reconnectToken }) => {
 });
 
 on('playerJoined', ({ playerIndex, name, color, isRobot }) => {
+  const iAmHost = ($('host-controls').style.display !== 'none');
   const li = $(`slot-${playerIndex}`);
-  if (li) {
-    li.querySelector('.slot-name').textContent = name + (isRobot ? ' 🤖' : '');
+  if (!li) return;
+  li.querySelector('.slot-name').textContent = name + (isRobot ? ' 🤖' : '');
+  if (isRobot && iAmHost && !li.querySelector('.btn-remove-robot')) {
+    const del = document.createElement('button');
+    del.className = 'btn-remove-robot';
+    del.textContent = '×';
+    del.title = 'Remove robot';
+    del.addEventListener('click', () => send({ action: 'removeRobot', playerIndex }));
+    li.appendChild(del);
   }
 });
 
 on('playerLeft', ({ playerIndex }) => {
   const li = $(`slot-${playerIndex}`);
-  if (li) li.querySelector('.slot-name').textContent = '(empty)';
+  if (!li) return;
+  li.querySelector('.slot-name').textContent = '(empty)';
+  const del = li.querySelector('.btn-remove-robot');
+  if (del) del.remove();
 });
 
 on('gameStarted', ({ gameState: gs }) => {
@@ -572,6 +641,7 @@ function flushTurnLog() {
 
 function renderLobbySlots(slots) {
   const ul = $('lobby-slots');
+  const iAmHost = ($('host-controls').style.display !== 'none');
   ul.innerHTML = '';
   for (const slot of slots) {
     const li = document.createElement('li');
@@ -584,6 +654,14 @@ function renderLobbySlots(slots) {
     name.textContent = slot.filled ? slot.name + (slot.isRobot ? ' 🤖' : '') : '(empty)';
     li.appendChild(dot);
     li.appendChild(name);
+    if (slot.isRobot && iAmHost) {
+      const del = document.createElement('button');
+      del.className = 'btn-remove-robot';
+      del.textContent = '×';
+      del.title = 'Remove robot';
+      del.addEventListener('click', () => send({ action: 'removeRobot', playerIndex: slot.index }));
+      li.appendChild(del);
+    }
     ul.appendChild(li);
   }
 }

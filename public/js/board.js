@@ -15,8 +15,9 @@ const ALL_ARMS          = 6;
 const MARBLES_PER_PLAYER = 4;
 const HOME_SLOTS        = 4;
 
-const COLORS = ['#f5d000','#ff7800','#e8208c','#e0e0e0','#44bb44','#2288f0'];
-const DARK_C  = ['#b09800','#c05000','#a01060','#909090','#228822','#1155cc'];
+// arms 0-5: blue, pink, orange, yellow, green, white (clockwise from bottom)
+const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
+const DARK_C  = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
 
 const ARM_MAP = {
   2: [0, 3],
