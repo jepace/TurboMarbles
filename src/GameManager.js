@@ -173,8 +173,9 @@ function performRoll(game) {
   game.diceUsed = [false, false];
   game.phase = 'AWAITING_MOVE';
   game._humanMadeMove = false;
-  // Snapshot marble positions so the whole turn can be undone in one step
+  // Snapshot marble positions for undo support
   game._rollSnapshot = game.players.map(p => p.marbles.map(m => ({ ...m })));
+  game._undoStack = []; // reset undo stack on new roll
   return dice;
 }
 
@@ -367,6 +368,12 @@ function tryApplyMove(room, playerIndex, move) {
     (move.toSlot  === undefined || m.toSlot  === move.toSlot)
   );
   if (!matched) return { error: 'Move not in legal set' };
+
+  // Save state before move for undo support (LIFO: last move undone first)
+  game._undoStack.push({
+    marbles: game.players.map(p => p.marbles.map(m => ({ ...m }))),
+    diceUsed: [...game.diceUsed],
+  });
 
   const events = applyMove(game, playerIndex, matched);
   events.forEach(ev => broadcast(room, ev));
@@ -563,16 +570,19 @@ export function handleUndo(ws, roomId) {
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;
 
-  // Restore to the snapshot taken at the start of this roll (undoes both dice at once)
-  if (!game._rollSnapshot || !game._humanMadeMove) return;
+  // Pop the last move's pre-state from undo stack
+  if (!game._undoStack || game._undoStack.length === 0) return;
 
+  const snapshot = game._undoStack.pop();
+
+  // Restore marble positions and diceUsed
   game.players.forEach((p, pi) => {
     for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
-      Object.assign(p.marbles[mi], game._rollSnapshot[pi][mi]);
+      Object.assign(p.marbles[mi], snapshot.marbles[pi][mi]);
     }
   });
-  game.diceUsed = [false, false];
-  game._humanMadeMove = false;
+  game.diceUsed = snapshot.diceUsed;
+  game._humanMadeMove = game._undoStack.length > 0; // no moves if stack empty
 
   // Re-broadcast full game state so all clients see the restored positions
   const legalMoves = allLegalMoves(game, game.turnIndex);
