@@ -424,27 +424,125 @@ describe('handleUndo — no crash before any move', () => {
   assert(!threw, 'handleUndo before any move does not throw');
 });
 
-describe('handleUndo — restores marble position after exitBase', () => {
+describe('handleUndo — no-op when no move made this turn', () => {
   setup();
   const host = mockWs();
   const { roomId } = createRoom(host, 'Alice', 2);
   addRobot(host, roomId);
   startGame(host, roomId);
 
-  // Roll die=1 so exitBase is available
   const origRandom = Math.random;
-  Math.random = () => 0;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+  host.sent = [];
+
+  handleUndo(host, roomId);
+  assert(host.find('undone').length === 0, 'undone not sent when no move made this turn');
+});
+
+describe('handleUndo — restores marble to base and frees die after first-die move', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
   handleRoll(host, roomId);
   Math.random = origRandom;
 
-  // Apply exitBase for marble 0
   handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
-  // Undo it
+  host.sent = [];
+
   handleUndo(host, roomId);
 
-  // After undo, marble should be back in base → exitBase legal again for die 0
-  // We can verify by checking that the undoMove event was broadcast
-  assert(host.find('undone').length >= 1, 'undone event sent after undo');
+  const undone = host.find('undone')[0];
+  assert(!!undone, 'undone event broadcast');
+  assert(undone.gameState.players[0].marbles[0].zone === 'base', 'marble 0 back in base');
+
+  const legal = host.find('legalMoves')[0];
+  assert(!!legal, 'legalMoves resent after undo');
+  assert(legal.diceUsed[0] === false, 'die 0 restored to unused');
+  assert(legal.diceUsed[1] === false, 'die 1 still unused');
+});
+
+describe('handleUndo — second undo only, first move preserved', () => {
+  // exitBase puts marble 0 on the start space, blocking a second exitBase.
+  // Use the server-returned legalMoves after die 0 to pick a valid die-1 move.
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
+  // Pick the first legal move for die 1 as returned by the server.
+  // legalMoves.moves is keyed by die index string: { "0": [...], "1": [...] }
+  const secondMove = host.find('legalMoves').slice(-1)[0].moves['1'][0];
+  handleMove(host, roomId, secondMove);
+  host.sent = [];
+
+  handleUndo(host, roomId); // undo only die 1
+
+  const undone = host.find('undone')[0];
+  assert(!!undone, 'undone event broadcast');
+  assert(undone.gameState.players[0].marbles[0].zone !== 'base', 'marble 0 still on track (first move intact)');
+
+  const legal = host.find('legalMoves')[0];
+  assert(legal.diceUsed[0] === true,  'die 0 still used');
+  assert(legal.diceUsed[1] === false, 'die 1 freed');
+});
+
+describe('handleUndo — two undos fully restore both dice', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
+  const secondMove2 = host.find('legalMoves').slice(-1)[0].moves['1'][0];
+  handleMove(host, roomId, secondMove2);
+
+  handleUndo(host, roomId); // undo die 1
+  handleUndo(host, roomId); // undo die 0
+  host.sent = [];
+
+  // Stack is empty — a third undo should be a no-op
+  handleUndo(host, roomId);
+  assert(host.find('undone').length === 0, 'third undo is no-op (stack empty)');
+});
+
+describe('handleUndo — non-current-player cannot undo', () => {
+  setup();
+  const host = mockWs();
+  const { code, roomId } = createRoom(host, 'Alice', 2);
+  const guest = mockWs();
+  joinRoom(guest, code, 'Bob');
+  startGame(host, roomId);
+
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
+  host.sent = [];
+
+  handleUndo(guest, roomId);
+  assert(host.find('undone').length === 0, 'opponent cannot undo current player\'s move');
 });
 
 // ---- handleCommit — guards --------------------------------------------------
