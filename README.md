@@ -39,23 +39,30 @@ Be the first player to move all of your marbles from your **Base** into your **H
 - **Base** and **Home** are untouchable — marbles there cannot be bumped.
 - Everywhere else on the track is fair game.
 
-### Shortcut Spaces
-- The board includes a **center shortcut** accessible from specific spaces. Landing on a shortcut entry point lets you cut across the board on your next turn for a significant leap forward.
+### Star Spaces and the Center Hub
+- Each arm has a **star space** at its apex.
+- Landing on your **own star** lets you use the **star track** (an inner ring connecting all 6 stars), which can teleport your marble across the board in a single die move.
+- Moving exactly one step past any star puts your marble in the **center hub**. From there, a die=1 lets you exit onto any unblocked star.
+
+### Entering Home
+- Once a marble reaches your home entry space, it can move into your Home corridor (slots 1–4).
+- Your marble advances as many slots as the die value allows, but **cannot overshoot slot 4** — if the die would move it past slot 4, the move is illegal.
+- Marbles in Home cannot be bumped.
 
 ### Winning
-- To enter your Home zone, you must roll the **exact number** needed to reach it.
 - The first player to get all 4 marbles into Home wins.
 
 ---
 
 ## Features
 
-- **2–6 Player Support** — online multiplayer; optional heuristic robo-player for empty slots
+- **2–6 Player Support** — online multiplayer; optional heuristic robot player fills empty slots
 - **Two-Dice Mechanics** — independent dice with player-chosen order create tactical decisions every turn
+- **Star Track Shortcuts** — use star spaces and the center hub to leapfrog opponents
+- **Undo Support** — undo your last die move before committing your turn
 - **Animated Board** — smooth marble movement and dice roll animations
-- **Color Themes** — choose from classic colors for each player
-- **Turn Timer** (optional) — keep the game moving with a configurable per-turn clock
 - **Game Log** — real-time event feed showing every roll and capture
+- **CLI Client** — play from the terminal with `node cli.mjs`
 - **Responsive Design** — playable on desktop and tablet
 
 ---
@@ -97,6 +104,13 @@ npm run dev
 
 This starts the server with hot-reload via `nodemon`.
 
+### Terminal Client
+
+```bash
+node cli.mjs                    # connect to localhost:3000
+node cli.mjs ws://host:3000     # connect to a remote server
+```
+
 ---
 
 ## Project Structure
@@ -104,19 +118,25 @@ This starts the server with hot-reload via `nodemon`.
 ```
 TurboMarbles/
 ├── public/
-│   ├── index.html        # Game shell
-│   ├── style.css         # Board and UI styles
+│   ├── index.html           # Game shell
+│   ├── style.css            # Board and UI styles
 │   └── js/
-│       ├── main.js       # Entry point
-│       ├── board.js      # Canvas rendering
-│       ├── dice.js       # Dice animation and logic
-│       └── client.js     # WebSocket client
+│       ├── constants.js     # Shared board constants (source of truth)
+│       ├── main.js          # UI controller, WebSocket event handling
+│       ├── board.js         # Canvas renderer
+│       └── socket.js        # WebSocket client wrapper
 ├── src/
-│   ├── server.js         # Express + WebSocket server
-│   ├── GameRoom.js       # Room and session management
-│   └── GameEngine.js     # Core rules and state machine
-├── package.json
-└── README.md
+│   ├── server.js            # Express + WebSocket server entry point
+│   ├── GameEngine.js        # Pure rule engine — move validation, state mutation
+│   ├── GameManager.js       # Room/session management, WebSocket dispatch
+│   └── RobotPlayer.js       # Heuristic AI player
+├── test/
+│   ├── engine.mjs           # GameEngine unit tests
+│   ├── manager.mjs          # GameManager unit tests
+│   ├── integration.mjs      # End-to-end tests (server required)
+│   └── cli.mjs              # CLI helper unit tests
+├── cli.mjs                  # Standalone terminal client
+└── package.json
 ```
 
 ---
@@ -129,7 +149,9 @@ TurboMarbles/
 | Bump opponent | Send their marble back to Base |
 | Base / Home | Marbles there cannot be bumped |
 | Roll a 6 | Take one extra roll (never stacks) |
-| Entering Home | Must roll exact count |
+| Star space | Enables star-track shortcut movement |
+| Center hub | Enter by stepping 1 past any star; exit with die=1 |
+| Entering Home | Cannot overshoot slot 4 |
 
 ---
 
