@@ -12,9 +12,9 @@ npm run dev        # nodemon watch mode
 ## Running Tests
 Always run tests after code changes:
 ```
-node test-engine.mjs   # GameEngine unit tests (no server needed)
-node test-manager.mjs  # GameManager unit tests (no server needed)
-node test.mjs          # integration tests (requires server running)
+node test/engine.mjs      # GameEngine unit tests (no server needed)
+node test/manager.mjs     # GameManager unit tests (no server needed)
+node test/integration.mjs # integration tests (requires server running)
 ```
 
 ## Architecture
@@ -27,6 +27,7 @@ node test.mjs          # integration tests (requires server running)
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.
 - `public/js/main.js` — UI controller. Handles WebSocket events, marble animation, game log.
 - `public/js/socket.js` — thin WebSocket client wrapper.
+- `cli.mjs` — standalone terminal client. ASCII board renderer, interactive play via readline.
 
 ## Board Layout
 
@@ -45,7 +46,7 @@ The board has **6 arms**, each a **U-shape**, arranged in a circle (60° apart) 
 [03] [02] [01] [84] [83]
 
    [B1] [B2] [B3] [B4]
-   
+
 where:
 01-08, 78-84 are the spaces on the track
 * indicates that space is on the star track
@@ -80,3 +81,88 @@ B1 - B4 is the Base
 ## Do Not Change Without Asking
 - The board shape described above — it has been carefully specified and previous attempts to "improve" it broke the layout.
 - The server-authoritative model — clients must never compute or trust their own move validation.
+
+---
+
+## Architect's Review — Open Issues
+
+The following problems were identified in a full codebase review. They are prioritized by impact.
+Do not close an item until the fix is verified by tests.
+
+### P1 — Correctness
+
+- **Race condition: undo after commit** (`GameManager.js`).
+  A client can send `undo` after both dice are used if `readyToCommit` is in flight.
+  The server has no guard; `_undoStack` can be popped against an already-committed turn.
+  Fix: reject `undo` when `phase === 'COMMITTED'` (or equivalent); add a test that sends
+  undo and commit in the same tick.
+
+- **No bounds validation on incoming move fields** (`GameManager.js` `handleMove`).
+  `toSpace`, `toSlot`, `dieIndex` are passed straight through to `applyMove` after only a
+  legal-set membership check. A crafted message with `dieIndex: 999` could throw or
+  corrupt state. Fix: validate numeric fields against known ranges before the lookup.
+
+- **Unknown actions silently dropped** (`server.js` dispatch).
+  An unrecognised `action` string produces no response to the sender. Clients that typo an
+  action name get no feedback. Fix: send `{ event: 'error', code: 'UNKNOWN_ACTION' }` for
+  unrecognised actions.
+
+### P2 — Maintainability (constants duplication)
+
+- **`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS` are duplicated in four files**:
+  `src/GameEngine.js`, `public/js/board.js`, `public/js/main.js`, `cli.mjs`.
+  The CLI even comments that its copy "mirrors GameEngine.js … display only", which is
+  precisely the kind of comment that signals the duplication is known and unresolved.
+  Fix: export a `PROTOCOL` object from `GameEngine.js`; import it in `board.js` and
+  `main.js`; bundle or inline it for `cli.mjs` (or import via the same path).
+  **Do not touch the board shape or numbering while doing this.**
+
+- **Inconsistent `legalMoves` field name on the wire**.
+  The `rolled` event carries `legalMoves` (plural); the subsequent per-move `legalMoves`
+  event carries `moves`. Both `main.js` and `cli.mjs` compensate by accessing both field
+  names. Pick one name and use it everywhere; update both clients and the test fixtures.
+
+- **Error messages lack a `code` field** in half of the code paths.
+  `GameManager.js` line 226 sends `{ event:'error', code:'ILLEGAL_MOVE', message }`;
+  `server.js` sends `{ event:'error', message }` with no code. Clients can't branch on
+  error type reliably. Fix: add a `code` string to every error emission.
+
+### P3 — Observability
+
+- **No logging on socket send errors**.
+  Both `sendTo` and `broadcast` swallow all exceptions with a bare `catch {}`.
+  Silent failures hide bugs: an OOM error looks the same as a closed socket.
+  Fix: log unexpected errors (`err.code !== 'ERB_CLOSED'` or similar) at minimum.
+
+- **No server-side logging of illegal move attempts**.
+  Cheating or bugs produce a silent `{ event:'error', code:'ILLEGAL_MOVE' }` to the
+  sender only. Add a server-side `console.warn` with room, player, and move details.
+
+### P4 — Test coverage gaps
+
+- **`undo`/`commit` edge cases** are not tested:
+  - undo with empty `_undoStack`
+  - commit when `diceUsed = [true, false]`
+  - two undos in a row (should restore earlier snapshot)
+
+- **`cli.mjs` has zero tests**.
+  The ASCII board geometry (`buildSpaceGrid`) is testable in isolation — no server needed.
+  The move description formatter (`describeMove`) is pure — add at least a table-driven test
+  covering all 7 move types.
+
+- **Concurrent-action stress path** is untested.
+  Two clients sending `move` in the same event-loop tick. The integration test is sequential;
+  add one test that interleaves sends.
+
+### P5 — Minor / cosmetic
+
+- **Test entry-point paths are stale** in the original CLAUDE.md (`test-engine.mjs`,
+  `test-manager.mjs`, `test.mjs`). The actual files are under `test/`. Fixed above.
+
+- **`cli.mjs` board redraws on every `marbleMoved` event**, including events for other
+  players mid-roll. This floods the terminal during robot turns. Rate-limit redraws to
+  one per turn boundary (`turnChanged`) except when it's the human's own marble moving.
+
+- **Robot win-score constant** (`RobotPlayer.js` line 49) is `10000` with no comment.
+  Name it `WIN_SCORE` and add a comment explaining why it must dominate all other scores.
+
