@@ -50,13 +50,23 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+const KNOWN_ACTIONS = new Set([
+  'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
+  'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect',
+]);
+
 function dispatch(ws, msg) {
+  if (!KNOWN_ACTIONS.has(msg.action)) {
+    send(ws, { event: 'error', code: 'UNKNOWN_ACTION', message: `Unknown action: ${msg.action}` });
+    return;
+  }
+
   switch (msg.action) {
     case 'createRoom': {
       const { name, totalPlayers, hostColor } = msg;
-      if (!name || !totalPlayers) return send(ws, { event: 'error', message: 'Missing fields' });
+      if (!name || !totalPlayers) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
       const n = parseInt(totalPlayers, 10);
-      if (n < 2 || n > 6) return send(ws, { event: 'error', message: 'Players must be 2-6' });
+      if (n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
       const result = createRoom(ws, name.trim().slice(0, 20), n, hostColor);
       send(ws, { event: 'roomCreated', ...result });
       break;
@@ -64,9 +74,9 @@ function dispatch(ws, msg) {
 
     case 'joinRoom': {
       const { code, name } = msg;
-      if (!code || !name) return send(ws, { event: 'error', message: 'Missing fields' });
+      if (!code || !name) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
       const result = joinRoom(ws, code.toUpperCase().trim(), name.trim().slice(0, 20));
-      if (result.error) return send(ws, { event: 'error', message: result.error });
+      if (result.error) return send(ws, { event: 'error', code: 'JOIN_FAILED', message: result.error });
       send(ws, { event: 'joinedRoom', ...result });
       break;
     }
@@ -75,7 +85,7 @@ function dispatch(ws, msg) {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
       const result = addRobot(ws, roomId);
-      if (result.error) send(ws, { event: 'error', message: result.error });
+      if (result.error) send(ws, { event: 'error', code: 'ADD_ROBOT_FAILED', message: result.error });
       break;
     }
 
@@ -83,7 +93,7 @@ function dispatch(ws, msg) {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
       const result = removeRobot(ws, roomId, msg.playerIndex);
-      if (result?.error) send(ws, { event: 'error', message: result.error });
+      if (result?.error) send(ws, { event: 'error', code: 'REMOVE_ROBOT_FAILED', message: result.error });
       break;
     }
 
@@ -91,7 +101,7 @@ function dispatch(ws, msg) {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
       const result = startGame(ws, roomId);
-      if (result.error) send(ws, { event: 'error', message: result.error });
+      if (result.error) send(ws, { event: 'error', code: 'START_FAILED', message: result.error });
       break;
     }
 
@@ -133,7 +143,7 @@ function dispatch(ws, msg) {
     case 'reconnect': {
       const { roomId, playerIndex, reconnectToken } = msg;
       const result = handleReconnect(ws, roomId, playerIndex, reconnectToken);
-      if (result && result.error) send(ws, { event: 'error', message: result.error });
+      if (result && result.error) send(ws, { event: 'error', code: 'RECONNECT_FAILED', message: result.error });
       break;
     }
   }

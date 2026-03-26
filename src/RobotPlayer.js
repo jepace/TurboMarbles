@@ -1,4 +1,8 @@
 // RobotPlayer.js — heuristic robot player
+// WIN_SCORE must be higher than any non-winning score so the robot always
+// chooses a winning move first, regardless of other heuristic values.
+const WIN_SCORE = 10000;
+
 // Strategy priority (highest first):
 //   1. Win move (place last marble in final home slot)
 //   2. Bump an opponent
@@ -46,7 +50,7 @@ function scoreMove(game, playerIndex, move) {
       // (Previous bug: condition was inverted, checking home||base instead of !home)
       const isLast = player.marbles.every((m, i) =>
         i === move.marbleId || m.zone === 'home');
-      if (move.toSlot === 4 && isLast) return 10000; // win
+      if (move.toSlot === 4 && isLast) return WIN_SCORE;
       return 600 + move.toSlot * 40;
     }
 

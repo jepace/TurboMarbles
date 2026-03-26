@@ -4,23 +4,17 @@
 
 import WebSocket  from 'ws';
 import * as rl_   from 'readline';
+import { fileURLToPath } from 'url';
+import { PLAYER_CONFIG, ARM_MAP, ARM_COLORS, ALL_STARS } from './public/js/constants.js';
 
 // ===== SECTION 1: CONFIG & CONSTANTS =====
 
 const WS_URL = process.argv[2] ?? 'ws://localhost:3000';
 
-// Mirrors GameEngine.js PLAYER_CONFIG (display only — server is authoritative)
-const PLAYER_CONFIG = [
-  { color: 'blue',   initial: 'B', start: 1,  star: 8,  homeEntry: 84 },
-  { color: 'pink',   initial: 'P', start: 15, star: 22, homeEntry: 14 },
-  { color: 'orange', initial: 'O', start: 29, star: 36, homeEntry: 28 },
-  { color: 'yellow', initial: 'Y', start: 43, star: 50, homeEntry: 42 },
-  { color: 'green',  initial: 'G', start: 57, star: 64, homeEntry: 56 },
-  { color: 'white',  initial: 'W', start: 71, star: 78, homeEntry: 70 },
-];
-const ARM_MAP    = { 2:[0,3], 3:[0,2,4], 4:[0,1,3,4], 5:[0,1,2,3,4], 6:[0,1,2,3,4,5] };
-const ARM_COLORS = PLAYER_CONFIG.map(p => p.color);
-const ALL_STARS  = new Set([8, 22, 36, 50, 64, 78]);
+// PLAYER_CONFIG entries don't carry a single-char initial — derive one for display.
+const PLAYER_INITIAL = Object.fromEntries(
+  PLAYER_CONFIG.map(p => [p.color, p.color[0].toUpperCase()])
+);
 
 // ===== SECTION 2: WEBSOCKET LAYER =====
 
@@ -140,7 +134,7 @@ function toGrid(x, y) {
 function armAngle(a) { return a * ASTEP + Math.PI / 2; }
 
 /** Build Map<key,{row,col}> for all spaces. Called once and cached. */
-function buildSpaceGrid() {
+export function buildSpaceGrid() {
   const m = new Map();
 
   for (let arm = 0; arm < 6; arm++) {
@@ -246,7 +240,7 @@ function findMarbleAtCenter(gameState) {
 
 function marbleInitial(playerIndex, gameState) {
   const color = gameState.players[playerIndex].color;
-  return PLAYER_CONFIG.find(c => c.color === color)?.initial ?? '?';
+  return PLAYER_INITIAL[color] ?? '?';
 }
 function marbleLabel(playerIndex, marbleId, gameState) {
   return marbleInitial(playerIndex, gameState) + (marbleId + 1);
@@ -349,7 +343,7 @@ function locStr(loc) {
 
 // ===== SECTION 5: MOVE DESCRIPTION FORMATTING =====
 
-function describeMove(move, dice) {
+export function describeMove(move, dice) {
   const dieVal = dice ? dice[move.dieIndex] : '?';
   const dieTag = `[die ${move.dieIndex + 1}=${dieVal}]`;
 
@@ -564,7 +558,9 @@ async function gameLoop(initialState) {
   on('marbleMoved', ({ playerIndex, marbleId, to }) => {
     const marble = gameState.players[playerIndex]?.marbles[marbleId];
     if (marble) Object.assign(marble, to);
-    if (gameState) drawBoardAscii(gameState);
+    // Only redraw immediately for the human player's own moves; other players'
+    // moves are shown at the next turn boundary to avoid flooding the terminal.
+    if (playerIndex === myPlayerIndex && gameState) drawBoardAscii(gameState);
   });
   on('marbleBumped', ({ ownerIndex, marbleId }) => {
     const marble = gameState.players[ownerIndex]?.marbles[marbleId];
@@ -574,6 +570,8 @@ async function gameLoop(initialState) {
     gameState.turnIndex = playerIndex;
     gameState.phase     = 'IN_TURN';
     gameState.dice      = null;
+    // Redraw once at turn boundary so the human always sees the latest board.
+    if (gameState) drawBoardAscii(gameState);
     gameState.diceUsed  = [false, false];
   });
   on('extraRoll', ({ playerIndex }) => {
@@ -633,7 +631,7 @@ async function takeTurn() {
   console.log(`You rolled: ${rolled.dice[0]} and ${rolled.dice[1]}`);
   drawBoardAscii(gameState);
 
-  let legalMoves = rolled.legalMoves;
+  let legalMoves = rolled.moves;
 
   // Move phase — repeat until readyToCommit or game over
   let commitReady = false;
@@ -789,4 +787,6 @@ async function main() {
   await lobbyFlow();
 }
 
-main().catch(e => { console.error(e); process.exit(1); });
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(e => { console.error(e); process.exit(1); });
+}

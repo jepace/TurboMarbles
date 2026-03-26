@@ -1,35 +1,15 @@
 // GameEngine.js — authoritative rule engine for TurboMarbles
 // All game logic lives here. No I/O, no WebSocket knowledge.
 
-// Board constants
-export const TRACK_SIZE = 84;         // total squares in the outer ring (1-indexed)
-export const HOME_SLOTS = 4;          // slots in each player's home stretch (1–4)
-export const MARBLES_PER_PLAYER = 4;  // marbles per player
-export const CENTER = 'center';       // zone name for the center circle
+import {
+  TRACK_SIZE, HOME_SLOTS, MARBLES_PER_PLAYER,
+  PLAYER_CONFIG, ARM_MAP, ALL_STARS,
+} from '../public/js/constants.js';
 
-// Per-player constants indexed by player index 0-5
-// Colors go clockwise from bottom: blue, pink, orange, yellow, green, white
-export const PLAYER_CONFIG = [
-  { color: 'blue',   start: 1,  star: 8,  homeEntry: 84 },
-  { color: 'pink',   start: 15, star: 22, homeEntry: 14 },
-  { color: 'orange', start: 29, star: 36, homeEntry: 28 },
-  { color: 'yellow', start: 43, star: 50, homeEntry: 42 },
-  { color: 'green',  start: 57, star: 64, homeEntry: 56 },
-  { color: 'white',  start: 71, star: 78, homeEntry: 70 },
-];
+// Re-export so consumers that import from GameEngine.js continue to work.
+export { TRACK_SIZE, HOME_SLOTS, MARBLES_PER_PLAYER, PLAYER_CONFIG, ARM_MAP, ALL_STARS };
 
-// ARM_MAP[n][i] = arm index (0–5) for player i in an n-player game.
-// Determines which PLAYER_CONFIG slot (start/star/homeEntry/color) each player uses,
-// ensuring good visual spacing around the board.
-export const ARM_MAP = {
-  2: [0, 3],           // opposite arms
-  3: [0, 2, 4],        // evenly spaced (every other arm)
-  4: [0, 1, 3, 4],     // 2 adjacent, gap, 2 adjacent
-  5: [0, 1, 2, 3, 4],  // first 5 arms
-  6: [0, 1, 2, 3, 4, 5],
-};
-
-export const ALL_STARS = new Set(PLAYER_CONFIG.map(p => p.star));
+export const CENTER = 'center'; // zone name for the center circle
 
 // --- Marble location helpers ---
 

@@ -7,28 +7,15 @@
 //   base+2..+7    = left column (6 spaces, outer→inner), at -COL_OFF from arm axis
 //   base+8        = STAR (apex, on arm axis, innermost)
 //   base+9..+14   = right column (6 spaces, inner→outer), at +COL_OFF from arm axis
-//
-// STAR_SPACES = {8,22,36,50,64,78}  ← must match GameEngine PLAYER_CONFIG
 
-const TRACK_SIZE        = 84;
-const ALL_ARMS          = 6;
-const MARBLES_PER_PLAYER = 4;
-const HOME_SLOTS        = 4;
+import {
+  TRACK_SIZE, ALL_ARMS, MARBLES_PER_PLAYER, HOME_SLOTS,
+  ARM_MAP, ALL_STARS as STAR_SPACES,
+} from './constants.js';
 
 // arms 0-5: blue, pink, orange, yellow, green, white (clockwise from bottom)
 const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
 const DARK_C  = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
-
-const ARM_MAP = {
-  2: [0, 3],
-  3: [0, 2, 4],
-  4: [0, 1, 3, 4],
-  5: [0, 1, 2, 3, 4],
-  6: [0, 1, 2, 3, 4, 5],
-};
-
-// Stars at arm*14+8 — matches GameEngine PLAYER_CONFIG stars {8,22,36,50,64,78}
-const STAR_SPACES = new Set([8, 22, 36, 50, 64, 78]);
 
 const BG_BLUE     = '#1565c0';
 const STAR_GOLD   = '#ffd600';

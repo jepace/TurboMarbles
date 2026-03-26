@@ -173,6 +173,7 @@ function performRoll(game) {
   game.diceUsed = [false, false];
   game.phase = 'AWAITING_MOVE';
   game._humanMadeMove = false;
+  game._committed = false; // guard: reject undo after commitTurn fires
   // Snapshot marble positions for undo support
   game._rollSnapshot = game.players.map(p => p.marbles.map(m => ({ ...m })));
   game._undoStack = []; // reset undo stack on new roll
@@ -200,8 +201,8 @@ export function handleRoll(ws, roomId) {
 
   const dice = performRoll(game);
   // Compute legal moves and include in the event so clients can highlight destinations.
-  const legalMoves = allLegalMoves(game, game.turnIndex);
-  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, legalMoves });
+  const moves = allLegalMoves(game, game.turnIndex);
+  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, moves });
   // Auto-forfeit and advance turn if this roll leaves no legal moves (e.g. all marbles
   // in base with a 3+4 roll).  No-op when at least one die has available moves.
   advanceTurnIfDone(room);
@@ -223,6 +224,7 @@ export function handleMove(ws, roomId, move) {
   // Illegal moves are reported back to the sender only (not broadcast).
   const result = tryApplyMove(room, game.turnIndex, move);
   if (result.error) {
+    console.warn(`[game] illegal move room=${roomId} player=${sess.playerIndex} move=${JSON.stringify(move)} error=${result.error}`);
     sendTo(ws, { event: 'error', code: 'ILLEGAL_MOVE', message: result.error });
   }
 }
@@ -345,6 +347,25 @@ function cleanupIfAbandoned(room) {
 
 // ---------- Internal helpers ----------
 
+// Basic shape validation for incoming move objects.
+// Catches obviously malformed messages before they reach the legal-set lookup.
+function validateMoveShape(move) {
+  if (!move || typeof move !== 'object') return 'Move must be an object';
+  const idx = Number(move.dieIndex);
+  if (idx !== 0 && idx !== 1) return 'dieIndex must be 0 or 1';
+  const mid = Number(move.marbleId);
+  if (!Number.isInteger(mid) || mid < 0 || mid > 3) return 'marbleId must be 0–3';
+  if (move.toSpace !== undefined) {
+    const sp = Number(move.toSpace);
+    if (!Number.isInteger(sp) || sp < 1 || sp > 84) return 'toSpace must be 1–84';
+  }
+  if (move.toSlot !== undefined) {
+    const sl = Number(move.toSlot);
+    if (!Number.isInteger(sl) || sl < 1 || sl > 4) return 'toSlot must be 1–4';
+  }
+  return null; // valid
+}
+
 // Validate `move` against the computed legal set, then apply it.
 // We re-derive legal moves server-side so clients cannot send arbitrary moves.
 // For moveStar moves the client must specify toZone+toSpace (or toSlot) because
@@ -352,9 +373,11 @@ function cleanupIfAbandoned(room) {
 function tryApplyMove(room, playerIndex, move) {
   const { game } = room;
 
-  // Reject any move with an invalid dieIndex before touching game state.
-  const idx = Number(move?.dieIndex);
-  if (idx !== 0 && idx !== 1) return { error: 'Invalid dieIndex' };
+  // Reject obviously malformed move objects before touching game state.
+  const shapeError = validateMoveShape(move);
+  if (shapeError) return { error: shapeError };
+
+  const idx = Number(move.dieIndex); // already validated as 0 or 1 by validateMoveShape
 
   const legal = allLegalMoves(game, playerIndex);
   const validForDie = (legal[idx] || []);
@@ -440,6 +463,7 @@ function advanceTurnIfDone(room) {
 // Advance to the next turn (extra roll or next player). Called by commitTurn and robots.
 function commitTurn(room) {
   const { game } = room;
+  game._committed = true; // prevent undo from popping the stack after turn has advanced
   if (earnsExtraRoll(game.dice)) {
     startExtraRoll(game);
     broadcast(room, { event: 'extraRoll', playerIndex: game.turnIndex });
@@ -505,14 +529,27 @@ function broadcast(room, msg, excludeWs = null) {
   const data = JSON.stringify(msg);
   for (const slot of room.slots) {
     if (slot.ws && slot.ws !== excludeWs && slot.ws.readyState === 1) {
-      try { slot.ws.send(data); } catch { /* ignore dead socket */ }
+      try {
+        slot.ws.send(data);
+      } catch (err) {
+        // Closed sockets are expected; anything else is a real error worth logging.
+        if (slot.ws.readyState === 1) {
+          console.warn(`[ws] send error slot=${slot.index} event=${msg.event}`, err.message);
+        }
+      }
     }
   }
 }
 
 function sendTo(ws, msg) {
   if (ws && ws.readyState === 1) {
-    try { ws.send(JSON.stringify(msg)); } catch { /* ignore dead socket */ }
+    try {
+      ws.send(JSON.stringify(msg));
+    } catch (err) {
+      if (ws.readyState === 1) {
+        console.warn(`[ws] sendTo error event=${msg.event}`, err.message);
+      }
+    }
   }
 }
 
@@ -566,6 +603,10 @@ export function handleUndo(ws, roomId) {
   if (!room || room.state !== 'playing') return;
   const { game } = room;
   if (game.phase !== 'AWAITING_MOVE') return;
+
+  // Explicit guard: once commitTurn() has fired the turn cannot be undone.
+  // (The phase check above catches this too, but _committed makes the intent explicit.)
+  if (game._committed) return;
 
   const sess = sessions.get(ws._id);
   if (!sess || sess.playerIndex !== game.turnIndex) return;

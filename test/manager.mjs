@@ -684,6 +684,103 @@ describe('joinRoom — rejected after game has started', () => {
     'joinRoom after game started → correct error');
 });
 
+// ---- handleUndo after commit (P1 guard) -------------------------------------
+
+describe('handleUndo — rejected after commit (_committed flag)', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  // Roll dice [1,1] — both dice can exit base
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
+  const secondMove = host.find('legalMoves').slice(-1)[0].moves['1'][0];
+  handleMove(host, roomId, secondMove);
+
+  handleCommit(host, roomId);
+  host.sent = [];
+
+  // Undo after commit must be rejected
+  handleUndo(host, roomId);
+  assert(host.find('undone').length === 0, 'undo after commit is a no-op (_committed guard)');
+  assert(host.find('turnChanged').length === 0, 'no spurious turnChanged after blocked undo');
+});
+
+describe('handleCommit — rejected when second die still unused (diceUsed=[true,false])', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  // Roll dice [1,1]; move one marble with die 0; attempt commit without using die 1
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
+  host.sent = [];
+
+  // Commit while diceUsed=[true,false] → guard should block it
+  handleCommit(host, roomId);
+  assert(host.find('turnChanged').length === 0, 'commit with diceUsed=[true,false] → no turn change (guard)');
+});
+
+describe('handleUndo — two undos in a row restore both dice and both marbles', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  const origRandom = Math.random;
+  Math.random = () => 0; // dice [1,1]
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+
+  handleMove(host, roomId, { type: 'exitBase', marbleId: 0, dieIndex: 0 });
+  const secondMove = host.find('legalMoves').slice(-1)[0].moves['1'][0];
+  handleMove(host, roomId, secondMove);
+
+  // First undo
+  handleUndo(host, roomId);
+  const undone1 = host.find('undone').slice(-1)[0];
+  assert(!!undone1, 'first undone event');
+  const legal1 = host.find('legalMoves').slice(-1)[0];
+  assert(legal1.diceUsed[0] === true && legal1.diceUsed[1] === false, 'after first undo: die 0 used, die 1 free');
+
+  // Second undo
+  host.sent = [];
+  handleUndo(host, roomId);
+  const undone2 = host.find('undone').slice(-1)[0];
+  assert(!!undone2, 'second undone event');
+  const legal2 = host.find('legalMoves').slice(-1)[0];
+  assert(legal2.diceUsed[0] === false && legal2.diceUsed[1] === false, 'after second undo: both dice free');
+  assert(undone2.gameState.players[0].marbles[0].zone === 'base', 'marble 0 back in base');
+});
+
+describe('handleUndo — undo with empty stack is no-op (pre-roll)', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+  host.sent = [];
+
+  // Undo before any roll / move — stack is empty
+  let threw = false;
+  try { handleUndo(host, roomId); } catch { threw = true; }
+  assert(!threw, 'undo with empty stack does not throw');
+  assert(host.find('undone').length === 0, 'no undone event when stack is empty');
+});
+
 // ---- Summary ----------------------------------------------------------------
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

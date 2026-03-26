@@ -5,6 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble } from './board.js';
+import { ARM_MAP, ARM_COLORS } from './constants.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -30,10 +31,7 @@ const COLOR_MAP = {
   white:  '#e0e0e0', green:  '#44bb44', blue: '#2288f0',
 };
 
-// Color picker: mirrors GameEngine ARM_MAP and PLAYER_CONFIG order
-const ARM_MAP_CLIENT = { 2:[0,3], 3:[0,2,4], 4:[0,1,3,4], 5:[0,1,2,3,4], 6:[0,1,2,3,4,5] };
-// Color per arm index 0-5 (mirrors new GameEngine PLAYER_CONFIG)
-const ARM_COLORS = ['blue','pink','orange','yellow','green','white'];
+// ARM_MAP and ARM_COLORS imported from ./constants.js
 
 let selectedHostColor = 'blue';
 
@@ -68,7 +66,7 @@ $('landing-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('b
 function updateColorPicker(n) {
   const el = $('create-colors');
   if (!el) return;
-  const arms = ARM_MAP_CLIENT[n] ?? [0];
+  const arms = ARM_MAP[n] ?? [0];
   el.innerHTML = '';
   for (const arm of arms) {
     const color = ARM_COLORS[arm];
@@ -262,11 +260,11 @@ on('gameStarted', ({ gameState: gs }) => {
   if (isMyTurn()) enableRoll();
 });
 
-on('rolled', ({ playerIndex, dice, legalMoves }) => {
+on('rolled', ({ playerIndex, dice, moves }) => {
   gameState.dice = dice;
   gameState.diceUsed = [false, false];
   gameState.phase = 'AWAITING_MOVE';
-  legalMovesCache = legalMoves ?? null;
+  legalMovesCache = moves ?? null;
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
