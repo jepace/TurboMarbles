@@ -1,5 +1,6 @@
 // GameManager.js — room registry, session tracking, disconnect timers
 
+import { randomBytes } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
@@ -9,19 +10,23 @@ import { robotTakeTurn } from './RobotPlayer.js';
 
 const DISCONNECT_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
 const ROBOT_TURN_DELAY_MS   = 800;            // brief pause so it feels natural
+const MAX_TOTAL_ROOMS       = 200;            // global cap — prevents memory exhaustion
+const MAX_ROOMS_PER_WS      = 3;             // per-connection cap
 
 const rooms = new Map();    // roomId → Room
 const sessions = new Map(); // wsId → { roomId, playerIndex }
 
 function genCode() {
+  // 32 printable chars; Math.random() excluded — use crypto PRNG so room codes
+  // cannot be predicted even if an attacker observes many codes from the same process.
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
-  return code;
+  const bytes = randomBytes(4);
+  return Array.from(bytes, b => chars[b % chars.length]).join('');
 }
 
 function genId() {
-  return Math.random().toString(36).slice(2, 10);
+  // 128-bit token — unguessable even with knowledge of other tokens.
+  return randomBytes(16).toString('hex');
 }
 
 // ---------- Room structure ----------
@@ -36,6 +41,10 @@ function genId() {
 // }
 
 export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
+  if (rooms.size >= MAX_TOTAL_ROOMS) return { error: 'Server is full' };
+  hostWs._roomsCreated = (hostWs._roomsCreated ?? 0) + 1;
+  if (hostWs._roomsCreated > MAX_ROOMS_PER_WS) return { error: 'Room limit reached' };
+
   const roomId = genId();
   let code;
   do { code = genCode(); } while ([...rooms.values()].some(r => r.code === code));
