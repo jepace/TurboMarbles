@@ -17,9 +17,7 @@ import {
 const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
 const DARK_C  = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
 
-const BG_BLUE     = '#1565c0';
-const STAR_GOLD   = '#ffd600';
-const CENTER_PINK = '#e91e63';
+const STAR_GOLD = '#f5c842';
 const STEP = (2 * Math.PI) / ALL_ARMS;
 
 let canvas, ctx, W, CX, CY;
@@ -27,7 +25,6 @@ let trackPos  = [];
 let homePos   = [];
 let basePos   = [];
 let centerPos = { x: 0, y: 0 };
-let bubbles   = [];
 let playerToArm = [0, 1, 2, 3, 4, 5];
 let marbleOverrides = {};
 let animatingMarble = null; // { playerIndex, marbleId }
@@ -54,7 +51,6 @@ export function resize() {
   W  = size;
   CX = CY = size / 2;
   computeLayout();
-  computeBubbles();
 }
 
 export function setMarbleOverride(playerIndex, marbleId, pos) {
@@ -98,10 +94,6 @@ function computeLayout() {
     const px   = -Math.sin(ang), py = Math.cos(ang);
     const base = arm * 14;
 
-    // Junction angles: where this arm meets the previous and next arm.
-    // Adjacent arms are 60° apart; junction is the midpoint angle = ±30° from arm axis.
-    // Space base+1 must land at prev_junction so it's co-located with space (base-1) from the
-    // prior arm. Similarly space base+14 must land at next_junction = space (base+15) start.
     const prev_ang = ang - Math.PI / 6;
     const next_ang = ang + Math.PI / 6;
     const prev_jx  = CX + Math.cos(prev_ang) * R_OUTER;
@@ -109,14 +101,12 @@ function computeLayout() {
     const next_jx  = CX + Math.cos(next_ang) * R_OUTER;
     const next_jy  = CY + Math.sin(next_ang) * R_OUTER;
 
-    // Column tops (unchanged — flanking the star near arm axis)
     const lcx = CX + dx * R_COL_TOP - px * COL_OFF;
     const lcy = CY + dy * R_COL_TOP - py * COL_OFF;
     const rcx = CX + dx * R_COL_TOP + px * COL_OFF;
     const rcy = CY + dy * R_COL_TOP + py * COL_OFF;
 
     // Left column: spaces base+1 … base+7 (7 spaces)
-    // Lerp from prev_junction (t=0, outermost) to left_col_top (t=1, innermost)
     for (let i = 0; i < 7; i++) {
       const t = i / 6;
       trackPos[base + 1 + i] = {
@@ -129,7 +119,6 @@ function computeLayout() {
     trackPos[base + 8] = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
 
     // Right column: spaces base+9 … base+14 (6 spaces)
-    // Lerp from right_col_top (t=0, innermost) to next_junction (t=1, outermost)
     for (let i = 0; i < 6; i++) {
       const t = i / 5;
       trackPos[base + 9 + i] = {
@@ -163,15 +152,6 @@ function computeLayout() {
   centerPos = { x: CX, y: CY };
 }
 
-function computeBubbles() {
-  bubbles = [];
-  let s = 0x12345678;
-  const rand = () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; return (s >>> 0) / 0xffffffff; };
-  for (let i = 0; i < 200; i++) {
-    bubbles.push({ x: rand() * W, y: rand() * W, r: W * (0.007 + rand() * 0.018), a: 0.08 + rand() * 0.18 });
-  }
-}
-
 export function drawBoard(gameState) {
   if (!ctx || !W) return;
   const n = gameState?.players?.length ?? ALL_ARMS;
@@ -187,22 +167,45 @@ export function drawBoard(gameState) {
   if (gameState) drawMarbles(gameState);
 }
 
+// ---- Background: dark navy board with brass rim ----
+
 function drawBackground() {
-  ctx.fillStyle = BG_BLUE;
+  ctx.fillStyle = '#050b1e';
   ctx.fillRect(0, 0, W, W);
-  for (const b of bubbles) {
-    ctx.beginPath();
-    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(25,118,210,${b.a.toFixed(2)})`;
-    ctx.fill();
-  }
+
+  // Outer brass/gold rim circle
+  const rimR = W * 0.493;
+  ctx.beginPath();
+  ctx.arc(CX, CY, rimR, 0, Math.PI * 2);
+  ctx.strokeStyle = '#c8920a';
+  ctx.lineWidth   = W * 0.009;
+  ctx.stroke();
+
+  // Inner thin accent ring
+  ctx.beginPath();
+  ctx.arc(CX, CY, rimR - W * 0.006, 0, Math.PI * 2);
+  ctx.strokeStyle = '#f5c84280';
+  ctx.lineWidth   = W * 0.002;
+  ctx.stroke();
+
+  // Board surface: dark navy radial gradient
+  const grad = ctx.createRadialGradient(CX, CY * 0.85, 0, CX, CY, rimR);
+  grad.addColorStop(0,   '#1e2f60');
+  grad.addColorStop(0.45, '#121e4a');
+  grad.addColorStop(1,   '#07101e');
+  ctx.beginPath();
+  ctx.arc(CX, CY, rimR - W * 0.009, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
 }
+
+// ---- Arm zones: solid opaque colored strips ----
 
 function drawAllArms(n) {
   const { R_OUTER, R_COL_TOP, R_STAR, COL_OFF, R_HOME_OUT, R_HOME_IN } = GEO;
 
-  const COL_HW  = COL_OFF * 0.80;
-  const HOME_HW = COL_OFF * 0.52;
+  const COL_HW  = COL_OFF * 0.94;
+  const HOME_HW = COL_OFF * 0.65;
 
   const activeSet = new Set(playerToArm.slice(0, n));
 
@@ -211,25 +214,26 @@ function drawAllArms(n) {
     const dx       = Math.cos(ang), dy = Math.sin(ang);
     const px       = -Math.sin(ang), py = Math.cos(ang);
     const color    = COLORS[ai];
+    const dark     = DARK_C[ai];
     const isActive = activeSet.has(ai);
-    const colAlpha  = isActive ? 'bb' : '33';
-    const homeAlpha = isActive ? '66' : '18';
+    const colAlpha  = isActive ? 'ff' : '38';
+    const homeAlpha = isActive ? 'ee' : '28';
 
     // Left column strip at -COL_OFF
     fillQuad([
-      { x: CX + dx * R_OUTER  + px * (-COL_OFF + COL_HW), y: CY + dy * R_OUTER  + py * (-COL_OFF + COL_HW) },
-      { x: CX + dx * R_OUTER  + px * (-COL_OFF - COL_HW), y: CY + dy * R_OUTER  + py * (-COL_OFF - COL_HW) },
+      { x: CX + dx * R_OUTER   + px * (-COL_OFF + COL_HW), y: CY + dy * R_OUTER   + py * (-COL_OFF + COL_HW) },
+      { x: CX + dx * R_OUTER   + px * (-COL_OFF - COL_HW), y: CY + dy * R_OUTER   + py * (-COL_OFF - COL_HW) },
       { x: CX + dx * R_COL_TOP + px * (-COL_OFF - COL_HW), y: CY + dy * R_COL_TOP + py * (-COL_OFF - COL_HW) },
       { x: CX + dx * R_COL_TOP + px * (-COL_OFF + COL_HW), y: CY + dy * R_COL_TOP + py * (-COL_OFF + COL_HW) },
-    ], color + colAlpha, '#00000033');
+    ], color + colAlpha, dark + (isActive ? '99' : '44'), 1.5);
 
     // Right column strip at +COL_OFF
     fillQuad([
-      { x: CX + dx * R_OUTER  + px * ( COL_OFF - COL_HW), y: CY + dy * R_OUTER  + py * ( COL_OFF - COL_HW) },
-      { x: CX + dx * R_OUTER  + px * ( COL_OFF + COL_HW), y: CY + dy * R_OUTER  + py * ( COL_OFF + COL_HW) },
+      { x: CX + dx * R_OUTER   + px * ( COL_OFF - COL_HW), y: CY + dy * R_OUTER   + py * ( COL_OFF - COL_HW) },
+      { x: CX + dx * R_OUTER   + px * ( COL_OFF + COL_HW), y: CY + dy * R_OUTER   + py * ( COL_OFF + COL_HW) },
       { x: CX + dx * R_COL_TOP + px * ( COL_OFF + COL_HW), y: CY + dy * R_COL_TOP + py * ( COL_OFF + COL_HW) },
       { x: CX + dx * R_COL_TOP + px * ( COL_OFF - COL_HW), y: CY + dy * R_COL_TOP + py * ( COL_OFF - COL_HW) },
-    ], color + colAlpha, '#00000033');
+    ], color + colAlpha, dark + (isActive ? '99' : '44'), 1.5);
 
     // Home corridor strip along arm axis
     fillQuad([
@@ -237,7 +241,7 @@ function drawAllArms(n) {
       { x: CX + dx * R_HOME_OUT - px *  HOME_HW, y: CY + dy * R_HOME_OUT - py *  HOME_HW },
       { x: CX + dx * R_HOME_IN  - px *  HOME_HW, y: CY + dy * R_HOME_IN  - py *  HOME_HW },
       { x: CX + dx * R_HOME_IN  + px *  HOME_HW, y: CY + dy * R_HOME_IN  + py *  HOME_HW },
-    ], color + homeAlpha, null);
+    ], color + homeAlpha, dark + (isActive ? '99' : '30'), 1);
 
     // Apex triangle: top of left col → star → top of right col
     const lTop = { x: CX + dx * R_COL_TOP - px * COL_OFF, y: CY + dy * R_COL_TOP - py * COL_OFF };
@@ -248,8 +252,13 @@ function drawAllArms(n) {
     ctx.lineTo(apex.x, apex.y);
     ctx.lineTo(rTop.x, rTop.y);
     ctx.closePath();
-    ctx.fillStyle = color + (isActive ? '99' : '28');
+    ctx.fillStyle = color + (isActive ? 'ee' : '28');
     ctx.fill();
+    if (isActive) {
+      ctx.strokeStyle = dark + 'aa';
+      ctx.lineWidth   = 1;
+      ctx.stroke();
+    }
   }
 }
 
@@ -262,6 +271,8 @@ function fillQuad(pts, fillStyle, strokeStyle, lineWidth = 1.5) {
   if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
 }
 
+// ---- Track rail: subtle path line ----
+
 function drawTrackRail() {
   ctx.beginPath();
   for (let i = 1; i <= TRACK_SIZE; i++) {
@@ -270,119 +281,222 @@ function drawTrackRail() {
     i === 1 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
   }
   ctx.closePath();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-  ctx.lineWidth   = W * 0.015;
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.lineWidth   = W * 0.010;
   ctx.lineJoin    = 'round';
-  ctx.stroke();
-
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-  ctx.lineWidth   = W * 0.006;
   ctx.stroke();
 }
 
+// ---- Track spaces: drilled-hole look ----
+
 function drawTrack() {
-  const R = W * 0.018;
+  const R = W * 0.020;
 
   for (let i = 1; i <= TRACK_SIZE; i++) {
     const p = trackPos[i];
     if (!p) continue;
 
     if (STAR_SPACES.has(i)) {
+      // Gold shortcut marker — bold circle with 6-pointed star
+      // Outer glow ring
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.8, 0, Math.PI * 2);
-      ctx.fillStyle   = '#7a5000cc';
+      ctx.arc(p.x, p.y, R * 2.6, 0, Math.PI * 2);
+      ctx.fillStyle = '#c8920a30';
+      ctx.fill();
+      // Gold disc
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R * 2.0, 0, Math.PI * 2);
+      ctx.fillStyle = '#c8920a';
       ctx.fill();
       ctx.strokeStyle = STAR_GOLD;
       ctx.lineWidth   = 2;
       ctx.stroke();
-      drawStar8(p.x, p.y, R * 1.3, STAR_GOLD);
+      // 6-pointed star inset
+      drawStar6(p.x, p.y, R * 1.35, STAR_GOLD, '#8a5e00');
     } else {
+      // Drilled hole: near-black fill with inner highlight arc for depth
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
-      ctx.fillStyle   = '#1a3a8faa';
+      ctx.fillStyle = '#06080f';
       ctx.fill();
-      ctx.strokeStyle = '#ffffffaa';
+      // Subtle outer rim
+      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
       ctx.lineWidth   = 1;
+      ctx.stroke();
+      // Inner highlight arc (top-left quadrant) simulates concave depression
+      ctx.beginPath();
+      ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.68, Math.PI * 1.05, Math.PI * 1.75);
+      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+      ctx.lineWidth   = R * 0.38;
       ctx.stroke();
     }
   }
 }
 
+// 6-pointed star (12 vertices, alternating outer/inner radii at 30° each)
+function drawStar6(cx, cy, R, fillColor, strokeColor) {
+  const r = R * 0.45;
+  ctx.beginPath();
+  for (let i = 0; i < 12; i++) {
+    const ang = (i * Math.PI) / 6 - Math.PI / 2;
+    const rad = i % 2 === 0 ? R : r;
+    const x   = cx + Math.cos(ang) * rad;
+    const y   = cy + Math.sin(ang) * rad;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle   = fillColor;
+  ctx.fill();
+  ctx.strokeStyle = strokeColor;
+  ctx.lineWidth   = 1;
+  ctx.stroke();
+}
+
+// ---- Home slots + Base panels ----
+
 function drawHomeAndBase(n) {
-  const R = W * 0.018;
+  const R = W * 0.020;
+  const { BASE_R, BASE_G } = GEO;
   const activeSet = new Set(playerToArm.slice(0, n));
 
   for (let ai = 0; ai < ALL_ARMS; ai++) {
     const isActive = activeSet.has(ai);
     const color    = COLORS[ai];
+    const dark     = DARK_C[ai];
+    const ang      = armAngle(ai);
+    const dx       = Math.cos(ang), dy = Math.sin(ang);
+    const px       = -Math.sin(ang), py = Math.cos(ang);
 
+    // -- Home slots --
     for (let s = 1; s <= HOME_SLOTS; s++) {
       const p = homePos[ai]?.[s];
       if (!p) continue;
+      // Filled slot with player color
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.25, 0, Math.PI * 2);
-      ctx.fillStyle   = '#00000055';
+      ctx.arc(p.x, p.y, R * 1.45, 0, Math.PI * 2);
+      ctx.fillStyle   = color + (isActive ? '88' : '18');
       ctx.fill();
-      ctx.strokeStyle = color + (isActive ? 'dd' : '44');
+      ctx.strokeStyle = dark + (isActive ? 'cc' : '30');
       ctx.lineWidth   = 2;
       ctx.stroke();
+      // Inner highlight arc
+      if (isActive) {
+        ctx.beginPath();
+        ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.9, Math.PI * 1.05, Math.PI * 1.75);
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth   = R * 0.40;
+        ctx.stroke();
+      }
     }
 
+    // -- Base panel: solid colored background behind the 2×2 marble grid --
+    const panW  = BASE_G * 1.65;  // half-width of panel
+    const panH1 = BASE_G * 1.30;  // inward overhang from BASE_R
+    const panH2 = BASE_G * 1.55;  // outward overhang from BASE_R
+    const panAlpha = isActive ? 'ff' : '30';
+    const panBorder = isActive ? dark + 'ff' : dark + '40';
+
+    fillQuad([
+      { x: CX + dx * (BASE_R - panH1) + px * ( panW), y: CY + dy * (BASE_R - panH1) + py * ( panW) },
+      { x: CX + dx * (BASE_R - panH1) + px * (-panW), y: CY + dy * (BASE_R - panH1) + py * (-panW) },
+      { x: CX + dx * (BASE_R + panH2) + px * (-panW), y: CY + dy * (BASE_R + panH2) + py * (-panW) },
+      { x: CX + dx * (BASE_R + panH2) + px * ( panW), y: CY + dy * (BASE_R + panH2) + py * ( panW) },
+    ], color + panAlpha, panBorder, 2.5);
+
+    // Darker inner band across top of panel (label area on classic board)
+    const bandH = BASE_G * 0.42;
+    fillQuad([
+      { x: CX + dx * (BASE_R - panH1)        + px * ( panW), y: CY + dy * (BASE_R - panH1)        + py * ( panW) },
+      { x: CX + dx * (BASE_R - panH1)        + px * (-panW), y: CY + dy * (BASE_R - panH1)        + py * (-panW) },
+      { x: CX + dx * (BASE_R - panH1 + bandH) + px * (-panW), y: CY + dy * (BASE_R - panH1 + bandH) + py * (-panW) },
+      { x: CX + dx * (BASE_R - panH1 + bandH) + px * ( panW), y: CY + dy * (BASE_R - panH1 + bandH) + py * ( panW) },
+    ], dark + (isActive ? 'cc' : '20'), null);
+
+    // -- Marble holes on base panel --
     for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
       const p = basePos[ai]?.[mi];
       if (!p) continue;
+      // Drilled hole (same style as track spaces but larger)
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.55, 0, Math.PI * 2);
-      ctx.fillStyle   = '#00000055';
+      ctx.fillStyle = '#06080f';
       ctx.fill();
-      ctx.strokeStyle = color + (isActive ? 'aa' : '33');
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
       ctx.lineWidth   = 1.5;
       ctx.stroke();
+      if (isActive) {
+        ctx.beginPath();
+        ctx.arc(p.x - R * 0.15, p.y - R * 0.15, R * 1.0, Math.PI * 1.05, Math.PI * 1.75);
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth   = R * 0.45;
+        ctx.stroke();
+      }
     }
   }
 }
 
-function drawCenter() {
-  const outerR = W * 0.065;
-  const innerR = W * 0.025;
+// ---- Center hub: colored wedge sections + gold star ----
 
+function drawCenter() {
+  const outerR = W * 0.075;
+  const innerR = W * 0.028;
+
+  // Outer ring (dark navy, brass border)
   ctx.beginPath();
   ctx.arc(CX, CY, outerR, 0, Math.PI * 2);
-  ctx.fillStyle   = '#0a1040';
+  ctx.fillStyle = '#06101e';
   ctx.fill();
-  ctx.strokeStyle = '#4060cc';
-  ctx.lineWidth   = 2;
+  ctx.strokeStyle = '#c8920a';
+  ctx.lineWidth   = 3;
   ctx.stroke();
 
-  ctx.save();
-  ctx.translate(CX, CY);
-
+  // Six colored wedge sections (one per arm color)
+  const wedgeR = outerR * 0.82;
   for (let i = 0; i < 6; i++) {
-    ctx.save();
-    ctx.rotate(i * Math.PI / 3 + Math.PI / 12);
+    const startAng = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    const endAng   = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2;
     ctx.beginPath();
-    ctx.ellipse(0, outerR * 0.52, outerR * 0.28, outerR * 0.54, 0, 0, Math.PI * 2);
-    ctx.fillStyle   = CENTER_PINK;
+    ctx.moveTo(CX, CY);
+    ctx.arc(CX, CY, wedgeR, startAng, endAng);
+    ctx.closePath();
+    ctx.fillStyle = COLORS[i] + 'cc';
     ctx.fill();
-    ctx.strokeStyle = '#ad004066';
-    ctx.lineWidth   = 1;
-    ctx.stroke();
-    ctx.restore();
   }
 
+  // Brass dividers between wedges
+  for (let i = 0; i < 6; i++) {
+    const ang = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(CX, CY);
+    ctx.lineTo(CX + Math.cos(ang) * wedgeR, CY + Math.sin(ang) * wedgeR);
+    ctx.strokeStyle = '#c8920acc';
+    ctx.lineWidth   = 1.5;
+    ctx.stroke();
+  }
+
+  // Inner dark ring to frame the center star
   ctx.beginPath();
-  ctx.arc(0, 0, innerR, 0, Math.PI * 2);
-  ctx.fillStyle   = STAR_GOLD;
+  ctx.arc(CX, CY, innerR * 1.6, 0, Math.PI * 2);
+  ctx.fillStyle = '#06101e';
   ctx.fill();
-  ctx.strokeStyle = '#c8a000';
+  ctx.strokeStyle = '#c8920a88';
   ctx.lineWidth   = 1.5;
   ctx.stroke();
 
-  ctx.restore();
+  // Gold 6-pointed star in the center
+  drawStar6(CX, CY, innerR * 1.25, STAR_GOLD, '#8a6000');
+
+  // Bright gold dot at absolute center
+  ctx.beginPath();
+  ctx.arc(CX, CY, innerR * 0.35, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff8d0';
+  ctx.fill();
 }
 
+// ---- Marbles: glass sphere with specular highlight ----
+
 function drawMarbles(gameState) {
-  const R = W * 0.016;
+  const R = W * 0.019;
   for (const player of gameState.players) {
     const ai    = playerToArm[player.index] ?? player.index;
     const color = COLORS[ai];
@@ -396,33 +510,46 @@ function drawMarbles(gameState) {
 
       // Drop shadow
       ctx.beginPath();
-      ctx.arc(pos.x + 2, pos.y + 2, r, 0, Math.PI * 2);
-      ctx.fillStyle = '#0008';
+      ctx.arc(pos.x + r * 0.18, pos.y + r * 0.22, r * 0.88, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fill();
 
       // Glow for animating marble
       if (isAnimating) {
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r * 1.6, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, r * 1.7, 0, Math.PI * 2);
         ctx.fillStyle = color + '44';
         ctx.fill();
       }
 
-      // Marble with radial gradient
+      // Main marble body with radial gradient (dark at edge, bright at highlight)
       const grad = ctx.createRadialGradient(
-        pos.x - r * 0.3, pos.y - r * 0.3, r * 0.05,
-        pos.x, pos.y, r
+        pos.x - r * 0.32, pos.y - r * 0.32, r * 0.04,
+        pos.x,            pos.y,             r
       );
-      grad.addColorStop(0, isAnimating ? '#ffffff' : lighten(color));
-      grad.addColorStop(0.35, lighten(color));
-      grad.addColorStop(1, color);
+      grad.addColorStop(0,    isAnimating ? '#ffffff' : lighten(color, 0.75));
+      grad.addColorStop(0.25, lighten(color, 0.45));
+      grad.addColorStop(0.65, color);
+      grad.addColorStop(1,    darken(color, 0.25));
       ctx.beginPath();
       ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
       ctx.fillStyle   = grad;
       ctx.fill();
-      ctx.strokeStyle = isAnimating ? '#ffffcccc' : '#fff5';
+      ctx.strokeStyle = isAnimating ? '#ffffcc' : 'rgba(255,255,255,0.35)';
       ctx.lineWidth   = isAnimating ? 2 : 1;
       ctx.stroke();
+
+      // Specular highlight — small bright spot (glass sphere reflection)
+      const specR = r * 0.24;
+      const specX = pos.x - r * 0.30;
+      const specY = pos.y - r * 0.30;
+      const specG = ctx.createRadialGradient(specX, specY, 0, specX, specY, specR);
+      specG.addColorStop(0, 'rgba(255,255,255,0.92)');
+      specG.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.beginPath();
+      ctx.arc(specX, specY, specR, 0, Math.PI * 2);
+      ctx.fillStyle = specG;
+      ctx.fill();
     }
   }
 }
@@ -438,30 +565,20 @@ function marblePosition(marble, playerIndex) {
   return null;
 }
 
-function drawStar8(cx, cy, R, color) {
-  const r = R * 0.4;
-  ctx.beginPath();
-  for (let i = 0; i < 16; i++) {
-    const ang = (i * Math.PI) / 8 - Math.PI / 2;
-    const rad = i % 2 === 0 ? R : r;
-    const x   = cx + Math.cos(ang) * rad;
-    const y   = cy + Math.sin(ang) * rad;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.closePath();
-  ctx.fillStyle   = color;
-  ctx.fill();
-  ctx.strokeStyle = '#ff8f00';
-  ctx.lineWidth   = 1;
-  ctx.stroke();
-}
-
-function lighten(hex) {
+function lighten(hex, t = 0.5) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  const m = (a, t) => Math.round(a + (255 - a) * t);
-  return `rgb(${m(r, 0.5)},${m(g, 0.5)},${m(b, 0.5)})`;
+  const m = (a) => Math.round(a + (255 - a) * t);
+  return `rgb(${m(r)},${m(g)},${m(b)})`;
+}
+
+function darken(hex, t = 0.25) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const m = (a) => Math.round(a * (1 - t));
+  return `rgb(${m(r)},${m(g)},${m(b)})`;
 }
 
 export function hitTestMarble(gameState, cx, cy) {
@@ -479,12 +596,12 @@ export function hitTestMarble(gameState, cx, cy) {
 }
 
 export function highlightSpaces(spaces) {
-  const R = W * 0.018;
+  const R = W * 0.020;
   for (const sp of spaces) {
     const pos = getSpacePosition(sp);
     if (!pos) continue;
     ctx.beginPath();
-    ctx.arc(pos.x, pos.y, R * 1.4, 0, Math.PI * 2);
+    ctx.arc(pos.x, pos.y, R * 1.5, 0, Math.PI * 2);
     ctx.fillStyle   = '#00ff8844';
     ctx.fill();
     ctx.strokeStyle = '#00ff88ee';

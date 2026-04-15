@@ -112,10 +112,16 @@ r = BASE_R,  perp_offset = dp  (and add dr along axis)
 
 ## Colors
 
+Arms 0–5 map to: Blue, Pink, Orange, Yellow, Green, White (clockwise from bottom).
+
 ```js
-const COLORS = ['#f5d000','#ff7800','#e8208c','#e0e0e0','#44bb44','#2288f0']; // arms 0-5
-const DARK_C  = ['#b09800','#c05000','#a01060','#909090','#228822','#1155cc'];
+const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0']; // arms 0-5
+const DARK_C  = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
+const STAR_GOLD = '#f5c842'; // shortcut star markers
 ```
+
+Star spaces use a gold `#c8920a` background circle with a 6-pointed `STAR_GOLD` star drawn on top.
+The board background is a dark navy radial gradient (`#1e2f60` → `#07101e`) with a gold rim border.
 
 ---
 
