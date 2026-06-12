@@ -13,6 +13,21 @@ const WIN_SCORE = 10000;
 
 import { allLegalMoves, TRACK_SIZE } from './GameEngine.js';
 
+// Pick the single best move for the next unused die, or null to forfeit.
+export function pickNextRobotMove(game, playerIndex) {
+  if (game.diceUsed[0] && game.diceUsed[1]) return null;
+  const legal = allLegalMoves(game, playerIndex);
+  let chosen = null, bestScore = -Infinity;
+  for (const dieIdx of [0, 1]) {
+    if (game.diceUsed[dieIdx]) continue;
+    for (const move of (legal[dieIdx] || [])) {
+      const s = scoreMove(game, playerIndex, move);
+      if (s > bestScore) { bestScore = s; chosen = move; }
+    }
+  }
+  return chosen; // null means forfeit the next unused die
+}
+
 export function robotTakeTurn(game, playerIndex, applyCallback) {
   for (let pass = 0; pass < 2; pass++) {
     if (game.diceUsed[0] && game.diceUsed[1]) break;

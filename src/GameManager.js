@@ -6,10 +6,11 @@ import {
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
   MARBLES_PER_PLAYER,
 } from './GameEngine.js';
-import { robotTakeTurn } from './RobotPlayer.js';
+import { robotTakeTurn, pickNextRobotMove } from './RobotPlayer.js';
 
 const DISCONNECT_TIMEOUT_MS  = 2 * 60 * 1000; // 2 minutes
-const ROBOT_TURN_DELAY_MS    = 800;            // brief pause so it feels natural
+const ROBOT_TURN_DELAY_MS    = 800;            // pause before robot's turn starts
+const ROBOT_MOVE_DELAY_MS    = 600;            // pause between robot's individual moves
 const MAX_TOTAL_ROOMS        = 200;            // global cap — prevents memory exhaustion
 const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
 export const config = {
@@ -530,19 +531,28 @@ function doRobotTurn(room) {
     broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
   }
 
-  // robotTakeTurn calls applyCallback for each die it uses.
-  // null callback means no legal move found — the die is already forfeited inside
-  // robotTakeTurn; we just broadcast the events for any moves that were made.
-  robotTakeTurn(game, game.turnIndex, (move) => {
-    if (move) {
-      const events = applyMove(game, game.turnIndex, move);
+  // Apply each robot move with a delay so clients can animate them sequentially.
+  applyNextRobotMove(room);
+}
+
+function applyNextRobotMove(room) {
+  const { game } = room;
+  if (!game || game.phase === 'GAME_OVER') { room.state = 'finished'; return; }
+  if (game.diceUsed[0] && game.diceUsed[1]) { advanceTurnIfDone(room); return; }
+
+  const chosen = pickNextRobotMove(game, game.turnIndex);
+
+  setTimeout(() => {
+    if (chosen) {
+      const events = applyMove(game, game.turnIndex, chosen);
       events.forEach(ev => broadcast(room, ev));
+    } else {
+      const dieIdx = game.diceUsed[0] ? 1 : 0;
+      game.diceUsed[dieIdx] = true;
+      broadcast(room, { event: 'dieForfeit', dieIndex: dieIdx });
     }
-  });
-
-  if (game.phase === 'GAME_OVER') { room.state = 'finished'; return; }
-
-  advanceTurnIfDone(room);
+    applyNextRobotMove(room);
+  }, ROBOT_MOVE_DELAY_MS);
 }
 
 function isHost(ws, room) {
