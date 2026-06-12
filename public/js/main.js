@@ -281,7 +281,7 @@ on('rolled', ({ playerIndex, dice, moves }) => {
 
   const isMe = playerIndex === myPlayerIndex;
   if (isMe) {
-    const totalMoves = Object.values(legalMoves ?? {}).reduce((s, a) => s + a.length, 0);
+    const totalMoves = Object.values(legalMovesCache ?? {}).reduce((s, a) => s + a.length, 0);
     setHint(totalMoves === 0 ? '' : 'Click one of your marbles to see where it can move.');
   } else {
     setHint('');
