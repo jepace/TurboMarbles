@@ -285,7 +285,7 @@ on('rolled', ({ playerIndex, dice, moves }) => {
   selectedMarbleMoves = [];
   commitPending = false;
   setCommitVisible(false); setUndoVisible(false);
-  renderDice(dice);
+  renderDice(dice, gameState.players[playerIndex]?.color);
   $('btn-roll').disabled = true;
 
   // Capture dice for backgammon notation (extra roll starts a fresh move list)
@@ -391,7 +391,7 @@ on('turnChanged', ({ playerIndex }) => {
   setCommitVisible(false); setUndoVisible(false);
   setHint('');
   renderSidebar();
-  renderDice(null);
+  renderDice(null, null);
   if (isMyTurn()) {
     enableRoll();
   } else {
@@ -720,11 +720,12 @@ function renderSidebar() {
   banner.style.color = isMyTurn() ? '#f0c040' : '#aaa';
 }
 
-function renderDice(dice) {
+function renderDice(dice, color) {
   for (let i = 0; i < 2; i++) {
     const el = $(`die-${i}`);
     el.textContent = dice ? dice[i] : '–';
     el.classList.toggle('used', !!(gameState?.diceUsed?.[i]));
+    if (color !== undefined) el.style.setProperty('--die-color', color ? COLOR_MAP[color] ?? '' : '');
   }
 }
 

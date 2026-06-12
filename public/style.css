@@ -167,14 +167,14 @@ button.secondary { background: #fff2; }
 }
 .die {
   width: 52px; height: 52px;
-  background: #fff;
+  background: color-mix(in srgb, var(--die-color, #fff) 55%, #fff);
   color: #111;
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   font-size: 1.8rem;
   font-weight: 900;
   box-shadow: 2px 3px 6px #0006;
-  transition: background 0.2s;
+  transition: background 0.3s;
 }
 .die.used { background: #555; color: #888; }
 .die.rolling { animation: shake 0.4s ease; }
