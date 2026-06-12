@@ -214,6 +214,7 @@ on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slo
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
   renderLobbySlots(slots ?? [{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
+  updateStartButton();
   show('screen-lobby');
 });
 
@@ -242,6 +243,7 @@ on('playerJoined', ({ playerIndex, name, color, isRobot }) => {
     del.addEventListener('click', () => send({ action: 'removeRobot', playerIndex }));
     li.appendChild(del);
   }
+  if (iAmHost) updateStartButton();
 });
 
 on('playerLeft', ({ playerIndex }) => {
@@ -250,7 +252,16 @@ on('playerLeft', ({ playerIndex }) => {
   li.querySelector('.slot-name').textContent = '(empty)';
   const del = li.querySelector('.btn-remove-robot');
   if (del) del.remove();
+  if ($('host-controls').style.display !== 'none') updateStartButton();
 });
+
+function updateStartButton() {
+  const empty = document.querySelectorAll('#lobby-slots .slot-name');
+  const waiting = [...empty].filter(el => el.textContent === '(empty)').length;
+  const btn = $('btn-start');
+  btn.disabled = waiting > 0;
+  btn.title = waiting > 0 ? `Waiting for ${waiting} more player${waiting > 1 ? 's' : ''}…` : '';
+}
 
 on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
