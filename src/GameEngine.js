@@ -362,7 +362,7 @@ function computeMovePath(state, playerIndex, move) {
       }
     } else {
       // track → home: walk track steps to homeEntry, then home slots
-      const stepsToHome = trackDistance(marble.space, homeEntry);
+      const stepsToHome = marble.space === homeEntry ? 0 : trackDistance(marble.space, homeEntry);
       let pos = marble.space;
       for (let i = 0; i < stepsToHome; i++) {
         pos = advanceTrack(pos, 1);
@@ -424,7 +424,7 @@ function computeMovePath(state, playerIndex, move) {
         path.push({ zone: 'track', space: pos });
       }
     } else if (move.toZone === 'home') {
-      const stepsToHome = trackDistance(exitStar, homeEntry);
+      const stepsToHome = exitStar === homeEntry ? 0 : trackDistance(exitStar, homeEntry);
       let pos = exitStar;
       for (let i = 0; i < stepsToHome; i++) {
         pos = advanceTrack(pos, 1);
