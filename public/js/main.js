@@ -6,6 +6,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble } from './board.js';
 import { ARM_MAP, ARM_COLORS } from './constants.js';
+import { playBonk, playClick, playHomeChime } from './sounds.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -329,6 +330,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 
   // Update game state immediately so the board renders correctly after animation
   Object.assign(marble, to);
+  if (to.zone === 'home') playHomeChime(); else playClick();
   selectedMarble = null;
   selectedMarbleMoves = [];
 
@@ -360,6 +362,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 });
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
+  playBonk();
   const marble = gameState.players[ownerIndex].marbles[marbleId];
   lastBumpedAt = from;
   marble.zone = 'base';
