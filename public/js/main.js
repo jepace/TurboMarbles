@@ -346,7 +346,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 
   // Update game state immediately so the board renders correctly after animation
   Object.assign(marble, to);
-  if (to.zone === 'home') playHomeChime();
+  if (to.zone === 'home' && from.zone !== 'home') playHomeChime();
   selectedMarble = null;
   selectedMarbleMoves = [];
 
