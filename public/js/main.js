@@ -205,7 +205,7 @@ on('error', ({ message }) => {
   alert(message);
 });
 
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots }) => {
   roomId = rid;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
@@ -213,7 +213,7 @@ on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers }) =
   $('lobby-size').textContent = `${totalPlayers} players`;
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
-  renderLobbySlots([{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
+  renderLobbySlots(slots ?? [{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
   show('screen-lobby');
 });
 
