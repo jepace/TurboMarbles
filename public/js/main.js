@@ -287,6 +287,7 @@ on('gameStarted', ({ gameState: gs }) => {
   commitPending = false;
   turnNumber = 1;
   renderSidebar();
+  renderDice(null, gameState.players[gameState.turnIndex]?.color);
   drawBoard(gameState);
   if (isMyTurn()) enableRoll();
 });
@@ -407,7 +408,7 @@ on('turnChanged', ({ playerIndex }) => {
   setCommitVisible(false); setUndoVisible(false);
   setHint('');
   renderSidebar();
-  renderDice(null, null);
+  renderDice(null, gameState.players[playerIndex]?.color);
   if (isMyTurn()) {
     enableRoll();
   } else {
