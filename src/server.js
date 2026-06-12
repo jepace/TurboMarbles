@@ -90,7 +90,8 @@ wss.on('connection', (ws, req) => {
 
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
-    console.log(`[ws] message  id=${ws._id} action=${msg.action}`);
+    const room = ws._room ? ` room=${ws._room}` : '';
+    console.log(`[ws] message  id=${ws._id}${room} action=${msg.action}`);
     dispatch(ws, msg);
   });
 
@@ -125,6 +126,7 @@ function dispatch(ws, msg) {
       if (n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
       const result = createRoom(ws, name.trim().slice(0, 20), n, hostColor);
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
+      ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });
       break;
     }
@@ -134,6 +136,7 @@ function dispatch(ws, msg) {
       if (!code || !name) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
       const result = joinRoom(ws, code.toUpperCase().trim(), name.trim().slice(0, 20));
       if (result.error) return send(ws, { event: 'error', code: 'JOIN_FAILED', message: result.error });
+      ws._room = result.code;
       send(ws, { event: 'joinedRoom', ...result });
       break;
     }
@@ -199,6 +202,7 @@ function dispatch(ws, msg) {
 
     case 'reconnect': {
       const { roomId, playerIndex, reconnectToken } = msg;
+      if (roomId) ws._room = roomId;
       const result = handleReconnect(ws, roomId, playerIndex, reconnectToken);
       if (result && result.error) send(ws, { event: 'error', code: 'RECONNECT_FAILED', message: result.error });
       break;
