@@ -12,7 +12,10 @@ const DISCONNECT_TIMEOUT_MS  = 2 * 60 * 1000; // 2 minutes
 const ROBOT_TURN_DELAY_MS    = 800;            // brief pause so it feels natural
 const MAX_TOTAL_ROOMS        = 200;            // global cap — prevents memory exhaustion
 const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
-export const config = { skipTurnDelayMs: 1500 }; // show dice before auto-advancing a skipped turn
+export const config = {
+  skipTurnDelayMs: 1500,  // show dice before auto-advancing a skipped turn
+  initialTurnIndex: null, // null = random; set to 0 in tests to pin first player
+};
 
 const rooms = new Map();    // roomId → Room
 const sessions = new Map(); // wsId → { roomId, playerIndex }
@@ -170,7 +173,7 @@ export function startGame(ws, roomId) {
     isRobot: s.isRobot,
   }));
 
-  room.game = createGame(players, room.slots.map(s => s.armIndex));
+  room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex);
   room.state = 'playing';
 
   broadcast(room, { event: 'gameStarted', gameState: publicState(room) });

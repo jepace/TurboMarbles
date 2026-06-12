@@ -34,7 +34,7 @@ function mockWs() {
   return ws;
 }
 
-function setup() { _reset(); }
+function setup() { _reset(); gmConfig.initialTurnIndex = 0; }
 
 // ---- createRoom -------------------------------------------------------------
 

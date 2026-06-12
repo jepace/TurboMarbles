@@ -30,7 +30,7 @@ export function trackDistance(from, to) {
 
 // --- State factory ---
 
-export function createGame(players, armIndices) {
+export function createGame(players, armIndices, initialTurnIndex) {
   // players: array of { id, name, color, isRobot }
   // armIndices: optional explicit arm index per player (overrides ARM_MAP default)
   // Assign player indices and configs; use ARM_MAP so each player occupies the
@@ -52,7 +52,7 @@ export function createGame(players, armIndices) {
 
   return {
     players: gamePlayers,
-    turnIndex: 0,
+    turnIndex: initialTurnIndex ?? Math.floor(Math.random() * gamePlayers.length),
     // Phase state machine:
     //   IN_TURN      — waiting for the current player to roll
     //   AWAITING_MOVE — player has rolled; waiting for move(s) or forfeit
