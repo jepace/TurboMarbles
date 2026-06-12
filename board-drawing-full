@@ -1,0 +1,55 @@
+
+
+
+                                                            B4    B3   B2    B1
+
+
+                                                         41    42   43    44    45
+                                                         40                     46
+
+                                                         39         H1          47
+                       B1      31                                                                         55      B4
+                    B2              32                   38          H2         48                   54              B3
+                            30           33                                                     53           56
+                  B3     29                    34        37          H3         49        52                    57     B2
+               B4      28                           35                               51                           58      B1
+                                    H1                   36*         H4         50*                  H1
+                    27                   H2                                                     H2                   59
+                         26                   H3                                           H3                   60
+                              25                    H4                               H4                    61
+                                    24                                                               62
+                                         23                                                64*  63
+                                         21   22*                    CS                         65
+                                    20                                                               66
+                              19                    H4                               H4                    67
+                         18                   H3                                           H3                   68
+                    17                   H2                                                     H2                   69
+                                    H1                    8*         H4         78*                  H1
+               B1      16                            9                               77                           70      B4
+                  B2     15                    10         7          H3         79        76                    71     B3
+                            14           11                                                     75           72
+                    B3              12                    6          H2         80                   74              B2
+                       B4      13                                                                         73      B1
+                                                          5          H1         81
+
+                                                          4                     82
+                                                          3     2     1   84    83
+
+
+                                                            B1    B2   B3    B4
+
+
+
+
+where:
+1-84 are the spaces on the main track (wraps 84 -> 1)
+* indicates a star space (8, 22, 36, 50, 64, 78) — the 6 stars form the
+  inner star-track ring; each star is shared between the two arms it sits
+  between (top of one arm's left column, top of the next arm's right column)
+CS is the center space
+H1 - H4 is each arm's Home corridor
+B1 - B4 is each arm's Base, ordered left to right from that player's seat
+
+This is the full-circle companion to `board-drawing` (single-arm view).
+Generated from buildSpaceGrid() in cli.mjs — the same geometry used by the
+canvas renderer (public/js/board.js).

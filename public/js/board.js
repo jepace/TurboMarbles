@@ -1,12 +1,22 @@
 // board.js — TurboMarbles board renderer
 // See board-spec.md for the authoritative layout reference before editing this file.
 //
-// Space numbering (84 spaces total, 6 arms × 14):
-//   arm a, base = a*14
-//   base+1        = start (outermost, left col bottom)
-//   base+2..+7    = left column (6 spaces, outer→inner), at -COL_OFF from arm axis
-//   base+8        = STAR (apex, on arm axis, innermost)
-//   base+9..+14   = right column (6 spaces, inner→outer), at +COL_OFF from arm axis
+// Each arm is a wide U (see board-drawing in the repo root). For arm a, base = a*14,
+// prev = previous arm's base ((a+5)%6 * 14):
+//
+//             [CS]
+//   [b+8*]    [H4]     [p+8*]      ← stars on inner ring, SHARED with adjacent arms
+//   [b+7]     [H3]     [p+9]
+//   [b+6]     [H2]     [p+10]
+//   [b+5]     [H1]     [p+11]
+//   [b+4]              [p+12]
+//   [b+3][b+2][b+1][p+14][p+13]    ← bottom row at R_OUTER; b+1 = start
+//      [B1] [B2] [B3] [B4]         ← base, 1×4 row outside the U
+//
+// The left column (perp +COL_OFF) rises to this arm's own star (base+8); the right
+// column (perp -COL_OFF) descends from the PREVIOUS arm's star (prev+8). Each star
+// sits on the boundary ray between two arms, at radius STAR_RING, and belongs to
+// both columns at once — the 6 stars form the inner star-track ring.
 
 import {
   TRACK_SIZE, ALL_ARMS, MARBLES_PER_PLAYER, HOME_SLOTS,
@@ -73,16 +83,15 @@ export function clearAnimatingMarble() {
 function armAngle(ai) { return ai * STEP + Math.PI / 2; }
 
 function computeLayout() {
-  const R_OUTER    = W * 0.40;
-  const R_COL_TOP  = W * 0.22;
-  const R_STAR     = W * 0.16;
-  const COL_OFF    = W * 0.052;
-  const R_HOME_OUT = W * 0.36;
-  const R_HOME_IN  = W * 0.24;
-  const BASE_R     = W * 0.455;
-  const BASE_G     = W * 0.038;
+  const STAR_RING = W * 0.18;                  // radius of the inner star-track ring
+  const COL_OFF   = STAR_RING / 2;             // perp offset of U columns from arm axis
+  const COL_TOP   = COL_OFF * Math.sqrt(3);    // along-axis coord of star row (row 1)
+  const R_OUTER   = W * 0.40;                  // bottom row of each U (row 6)
+  const ROW_STEP  = (R_OUTER - COL_TOP) / 5;   // along-axis spacing of column rows 1–6
+  const BASE_R    = W * 0.452;                 // base row radius (outside the U)
+  const BASE_G    = W * 0.044;                 // spacing between base slots
 
-  GEO = { R_OUTER, R_COL_TOP, R_STAR, COL_OFF, R_HOME_OUT, R_HOME_IN, BASE_R, BASE_G };
+  GEO = { STAR_RING, COL_OFF, COL_TOP, R_OUTER, ROW_STEP, BASE_R, BASE_G };
 
   trackPos = new Array(TRACK_SIZE + 1);
   homePos  = [];
@@ -93,59 +102,40 @@ function computeLayout() {
     const dx   = Math.cos(ang), dy = Math.sin(ang);
     const px   = -Math.sin(ang), py = Math.cos(ang);
     const base = arm * 14;
+    const prev = ((arm + 5) % ALL_ARMS) * 14;
 
-    const prev_ang = ang - Math.PI / 6;
-    const next_ang = ang + Math.PI / 6;
-    const prev_jx  = CX + Math.cos(prev_ang) * R_OUTER;
-    const prev_jy  = CY + Math.sin(prev_ang) * R_OUTER;
-    const next_jx  = CX + Math.cos(next_ang) * R_OUTER;
-    const next_jy  = CY + Math.sin(next_ang) * R_OUTER;
+    // Point at along-axis distance r, perpendicular offset p (positive = left
+    // column side, i.e. toward the next arm clockwise).
+    const pt   = (r, p) => ({ x: CX + dx * r + px * p, y: CY + dy * r + py * p });
+    // Along-axis coordinate of column row k (1 = star row … 6 = bottom row)
+    const rowR = (k) => COL_TOP + ROW_STEP * (k - 1);
 
-    const lcx = CX + dx * R_COL_TOP - px * COL_OFF;
-    const lcy = CY + dy * R_COL_TOP - py * COL_OFF;
-    const rcx = CX + dx * R_COL_TOP + px * COL_OFF;
-    const rcy = CY + dy * R_COL_TOP + py * COL_OFF;
+    // Bottom row of this arm's U: [base+3][base+2][base+1][prev+14][prev+13]
+    trackPos[base + 1] = pt(R_OUTER, 0);             // start, on the arm axis
+    trackPos[base + 2] = pt(R_OUTER, COL_OFF / 2);
+    trackPos[base + 3] = pt(R_OUTER, COL_OFF);       // corner, bottom of left column
 
-    // Left column: spaces base+1 … base+7 (7 spaces)
-    for (let i = 0; i < 7; i++) {
-      const t = i / 6;
-      trackPos[base + 1 + i] = {
-        x: prev_jx + (lcx - prev_jx) * t,
-        y: prev_jy + (lcy - prev_jy) * t,
-      };
-    }
+    // Left column rises to this arm's own star (rows 5 → 2)
+    for (let i = 0; i < 4; i++) trackPos[base + 4 + i] = pt(rowR(5 - i), COL_OFF);
 
-    // Space base+8: star apex, on arm axis
-    trackPos[base + 8] = { x: CX + dx * R_STAR, y: CY + dy * R_STAR };
+    // Star (row 1): on the boundary ray shared with the next arm's right column.
+    // (COL_TOP, COL_OFF) ≡ radius STAR_RING at angle ang + 30°.
+    trackPos[base + 8] = pt(COL_TOP, COL_OFF);
 
-    // Right column: spaces base+9 … base+14 (6 spaces)
-    for (let i = 0; i < 6; i++) {
-      const t = i / 5;
-      trackPos[base + 9 + i] = {
-        x: rcx + (next_jx - rcx) * t,
-        y: rcy + (next_jy - rcy) * t,
-      };
-    }
+    // Right column of this U descends from the PREVIOUS arm's star (rows 2 → 6)
+    for (let i = 0; i < 4; i++) trackPos[prev + 9 + i] = pt(rowR(2 + i), -COL_OFF);
+    trackPos[prev + 13] = pt(R_OUTER, -COL_OFF);     // corner, bottom of right column
+    trackPos[prev + 14] = pt(R_OUTER, -COL_OFF / 2); // home entry, next to start
 
-    // Home slots 1–4, along arm axis from outer to inner
+    // Home corridor: on the arm axis, aligned with column rows 4 (H1) … 1 (H4)
     homePos[arm] = new Array(HOME_SLOTS + 1);
-    for (let s = 1; s <= HOME_SLOTS; s++) {
-      const t = (s - 1) / (HOME_SLOTS - 1);
-      const r = R_HOME_OUT + (R_HOME_IN - R_HOME_OUT) * t;
-      homePos[arm][s] = { x: CX + dx * r, y: CY + dy * r };
-    }
+    for (let s = 1; s <= HOME_SLOTS; s++) homePos[arm][s] = pt(rowR(5 - s), 0);
 
-    // Base: 2×2 grid of 4 slots just outside the track
+    // Base: 1×4 row outside the bottom edge; slot 0 on the left from the
+    // player's seat (positive perp), matching B1…B4 in board-drawing
     basePos[arm] = [];
     for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
-      const row = Math.floor(mi / 2);
-      const col = mi % 2;
-      const dr  = (row - 0.5) * BASE_G;
-      const dp  = (col - 0.5) * BASE_G;
-      basePos[arm].push({
-        x: CX + dx * (BASE_R + dr) + px * dp,
-        y: CY + dy * (BASE_R + dr) + py * dp,
-      });
+      basePos[arm].push(pt(BASE_R, (1.5 - mi) * BASE_G));
     }
   }
 
@@ -202,10 +192,10 @@ function drawBackground() {
 // ---- Arm zones: solid opaque colored strips ----
 
 function drawAllArms(n) {
-  const { R_OUTER, R_COL_TOP, R_STAR, COL_OFF, R_HOME_OUT, R_HOME_IN } = GEO;
+  const { COL_OFF, COL_TOP, R_OUTER, ROW_STEP } = GEO;
 
-  const COL_HW  = COL_OFF * 0.94;
-  const HOME_HW = COL_OFF * 0.65;
+  const COL_HW  = W * 0.030;   // half-width of the U track strips
+  const HOME_HW = W * 0.026;   // half-width of the home corridor strip
 
   const activeSet = new Set(playerToArm.slice(0, n));
 
@@ -213,52 +203,47 @@ function drawAllArms(n) {
     const ang      = armAngle(ai);
     const dx       = Math.cos(ang), dy = Math.sin(ang);
     const px       = -Math.sin(ang), py = Math.cos(ang);
+    const pt       = (r, p) => ({ x: CX + dx * r + px * p, y: CY + dy * r + py * p });
     const color    = COLORS[ai];
     const dark     = DARK_C[ai];
     const isActive = activeSet.has(ai);
     const colAlpha  = isActive ? 'ff' : '38';
     const homeAlpha = isActive ? 'ee' : '28';
+    const colStroke = dark + (isActive ? '99' : '44');
 
-    // Left column strip at -COL_OFF
+    // Left column strip (+COL_OFF), from the star row down to the bottom row
     fillQuad([
-      { x: CX + dx * R_OUTER   + px * (-COL_OFF + COL_HW), y: CY + dy * R_OUTER   + py * (-COL_OFF + COL_HW) },
-      { x: CX + dx * R_OUTER   + px * (-COL_OFF - COL_HW), y: CY + dy * R_OUTER   + py * (-COL_OFF - COL_HW) },
-      { x: CX + dx * R_COL_TOP + px * (-COL_OFF - COL_HW), y: CY + dy * R_COL_TOP + py * (-COL_OFF - COL_HW) },
-      { x: CX + dx * R_COL_TOP + px * (-COL_OFF + COL_HW), y: CY + dy * R_COL_TOP + py * (-COL_OFF + COL_HW) },
-    ], color + colAlpha, dark + (isActive ? '99' : '44'), 1.5);
+      pt(COL_TOP,          COL_OFF - COL_HW),
+      pt(COL_TOP,          COL_OFF + COL_HW),
+      pt(R_OUTER + COL_HW, COL_OFF + COL_HW),
+      pt(R_OUTER + COL_HW, COL_OFF - COL_HW),
+    ], color + colAlpha, colStroke, 1.5);
 
-    // Right column strip at +COL_OFF
+    // Right column strip (-COL_OFF), from the previous arm's star down
     fillQuad([
-      { x: CX + dx * R_OUTER   + px * ( COL_OFF - COL_HW), y: CY + dy * R_OUTER   + py * ( COL_OFF - COL_HW) },
-      { x: CX + dx * R_OUTER   + px * ( COL_OFF + COL_HW), y: CY + dy * R_OUTER   + py * ( COL_OFF + COL_HW) },
-      { x: CX + dx * R_COL_TOP + px * ( COL_OFF + COL_HW), y: CY + dy * R_COL_TOP + py * ( COL_OFF + COL_HW) },
-      { x: CX + dx * R_COL_TOP + px * ( COL_OFF - COL_HW), y: CY + dy * R_COL_TOP + py * ( COL_OFF - COL_HW) },
-    ], color + colAlpha, dark + (isActive ? '99' : '44'), 1.5);
+      pt(COL_TOP,          -COL_OFF + COL_HW),
+      pt(COL_TOP,          -COL_OFF - COL_HW),
+      pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
+      pt(R_OUTER + COL_HW, -COL_OFF + COL_HW),
+    ], color + colAlpha, colStroke, 1.5);
 
-    // Home corridor strip along arm axis
+    // Bottom row strip connecting the two columns
     fillQuad([
-      { x: CX + dx * R_HOME_OUT + px *  HOME_HW, y: CY + dy * R_HOME_OUT + py *  HOME_HW },
-      { x: CX + dx * R_HOME_OUT - px *  HOME_HW, y: CY + dy * R_HOME_OUT - py *  HOME_HW },
-      { x: CX + dx * R_HOME_IN  - px *  HOME_HW, y: CY + dy * R_HOME_IN  - py *  HOME_HW },
-      { x: CX + dx * R_HOME_IN  + px *  HOME_HW, y: CY + dy * R_HOME_IN  + py *  HOME_HW },
+      pt(R_OUTER - COL_HW, -COL_OFF - COL_HW),
+      pt(R_OUTER - COL_HW,  COL_OFF + COL_HW),
+      pt(R_OUTER + COL_HW,  COL_OFF + COL_HW),
+      pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
+    ], color + colAlpha, colStroke, 1.5);
+
+    // Home corridor strip on the arm axis, spanning rows 1 (H4) … 4 (H1)
+    const homeIn  = COL_TOP - HOME_HW;
+    const homeOut = COL_TOP + ROW_STEP * 3 + HOME_HW;
+    fillQuad([
+      pt(homeOut,  HOME_HW),
+      pt(homeOut, -HOME_HW),
+      pt(homeIn,  -HOME_HW),
+      pt(homeIn,   HOME_HW),
     ], color + homeAlpha, dark + (isActive ? '99' : '30'), 1);
-
-    // Apex triangle: top of left col → star → top of right col
-    const lTop = { x: CX + dx * R_COL_TOP - px * COL_OFF, y: CY + dy * R_COL_TOP - py * COL_OFF };
-    const rTop = { x: CX + dx * R_COL_TOP + px * COL_OFF, y: CY + dy * R_COL_TOP + py * COL_OFF };
-    const apex = { x: CX + dx * R_STAR,                   y: CY + dy * R_STAR };
-    ctx.beginPath();
-    ctx.moveTo(lTop.x, lTop.y);
-    ctx.lineTo(apex.x, apex.y);
-    ctx.lineTo(rTop.x, rTop.y);
-    ctx.closePath();
-    ctx.fillStyle = color + (isActive ? 'ee' : '28');
-    ctx.fill();
-    if (isActive) {
-      ctx.strokeStyle = dark + 'aa';
-      ctx.lineWidth   = 1;
-      ctx.stroke();
-    }
   }
 }
 
@@ -274,6 +259,16 @@ function fillQuad(pts, fillStyle, strokeStyle, lineWidth = 1.5) {
 // ---- Track rail: subtle path line ----
 
 function drawTrackRail() {
+  // Inner star-track ring through the 6 stars
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(CX, CY, GEO.STAR_RING, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(245,200,66,0.25)';
+  ctx.lineWidth   = W * 0.006;
+  ctx.setLineDash([W * 0.02, W * 0.014]);
+  ctx.stroke();
+  ctx.restore();
+
   ctx.beginPath();
   for (let i = 1; i <= TRACK_SIZE; i++) {
     const p = trackPos[i];
@@ -300,19 +295,19 @@ function drawTrack() {
       // Gold shortcut marker — bold circle with 6-pointed star
       // Outer glow ring
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 2.6, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, R * 2.0, 0, Math.PI * 2);
       ctx.fillStyle = '#c8920a30';
       ctx.fill();
       // Gold disc
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 2.0, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, R * 1.5, 0, Math.PI * 2);
       ctx.fillStyle = '#c8920a';
       ctx.fill();
       ctx.strokeStyle = STAR_GOLD;
       ctx.lineWidth   = 2;
       ctx.stroke();
       // 6-pointed star inset
-      drawStar6(p.x, p.y, R * 1.35, STAR_GOLD, '#8a5e00');
+      drawStar6(p.x, p.y, R * 1.1, STAR_GOLD, '#8a5e00');
     } else {
       // Drilled hole: near-black fill with inner highlight arc for depth
       ctx.beginPath();
@@ -373,7 +368,7 @@ function drawHomeAndBase(n) {
       if (!p) continue;
       // Filled slot with player color
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.45, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, R * 1.15, 0, Math.PI * 2);
       ctx.fillStyle   = color + (isActive ? '88' : '18');
       ctx.fill();
       ctx.strokeStyle = dark + (isActive ? 'cc' : '30');
@@ -389,10 +384,10 @@ function drawHomeAndBase(n) {
       }
     }
 
-    // -- Base panel: solid colored background behind the 2×2 marble grid --
-    const panW  = BASE_G * 1.65;  // half-width of panel
-    const panH1 = BASE_G * 1.30;  // inward overhang from BASE_R
-    const panH2 = BASE_G * 1.55;  // outward overhang from BASE_R
+    // -- Base panel: solid colored background behind the 1×4 marble row --
+    const panW  = BASE_G * 2.10;  // half-width of panel (covers 4 slots at ±1.5·BASE_G)
+    const panH1 = BASE_G * 0.80;  // inward overhang from BASE_R
+    const panH2 = BASE_G * 0.80;  // outward overhang from BASE_R
     const panAlpha = isActive ? 'ff' : '30';
     const panBorder = isActive ? dark + 'ff' : dark + '40';
 
@@ -403,22 +398,13 @@ function drawHomeAndBase(n) {
       { x: CX + dx * (BASE_R + panH2) + px * ( panW), y: CY + dy * (BASE_R + panH2) + py * ( panW) },
     ], color + panAlpha, panBorder, 2.5);
 
-    // Darker inner band across top of panel (label area on classic board)
-    const bandH = BASE_G * 0.42;
-    fillQuad([
-      { x: CX + dx * (BASE_R - panH1)        + px * ( panW), y: CY + dy * (BASE_R - panH1)        + py * ( panW) },
-      { x: CX + dx * (BASE_R - panH1)        + px * (-panW), y: CY + dy * (BASE_R - panH1)        + py * (-panW) },
-      { x: CX + dx * (BASE_R - panH1 + bandH) + px * (-panW), y: CY + dy * (BASE_R - panH1 + bandH) + py * (-panW) },
-      { x: CX + dx * (BASE_R - panH1 + bandH) + px * ( panW), y: CY + dy * (BASE_R - panH1 + bandH) + py * ( panW) },
-    ], dark + (isActive ? 'cc' : '20'), null);
-
     // -- Marble holes on base panel --
     for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
       const p = basePos[ai]?.[mi];
       if (!p) continue;
-      // Drilled hole (same style as track spaces but larger)
+      // Drilled hole (same style as track spaces but slightly larger)
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.55, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, R * 1.08, 0, Math.PI * 2);
       ctx.fillStyle = '#06080f';
       ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,0.7)';

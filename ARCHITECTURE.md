@@ -381,10 +381,16 @@ Within each arm (offsets from `base = a*14`):
 
 | Offset | Description |
 |--------|-------------|
-| +1 | Start space (exit from base) |
-| +2 … +7 | Left column, 6 spaces (outer → inner) |
-| +8 | STAR (apex, innermost on arm axis) |
-| +9 … +14 | Right column, 6 spaces (inner → outer) |
+| +1 | Start space (exit from base), center of the arm's bottom row |
+| +2, +3 | Rest of the bottom row; +3 is the corner at the foot of the left column |
+| +4 … +7 | Left column, rising toward the center |
+| +8 | STAR, top of the left column — shared with the NEXT arm (it is also the top of that arm's right column) |
+| +9 … +13 | The next arm's right column, descending (+13 is its bottom corner) |
+| +14 | On the next arm's bottom row, immediately beside its start — this is the next arm's home entry |
+
+Each star sits on the boundary between two arms; the 6 stars form the inner
+star-track ring. See `board-drawing` (repo root) for the trusted picture of
+one arm's U.
 
 Track wraps: 84 → 1.
 

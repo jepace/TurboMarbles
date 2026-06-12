@@ -40,7 +40,7 @@ Be the first player to move all of your marbles from your **Base** into your **H
 - Everywhere else on the track is fair game.
 
 ### Star Spaces and the Center Hub
-- Each arm has a **star space** at its apex.
+- Each arm has its own **star space** at the top of its U's left column; each star is shared with the neighboring arm, where it tops that arm's right column.
 - Landing on your **own star** lets you use the **star track** (an inner ring connecting all 6 stars), which can teleport your marble across the board in a single die move.
 - Moving exactly one step past any star puts your marble in the **center hub**. From there, a die=1 lets you exit onto any unblocked star.
 

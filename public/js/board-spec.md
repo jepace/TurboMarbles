@@ -2,22 +2,50 @@
 
 **Read this instead of board.js when starting a new session.**
 This is the authoritative reference for space numbering and geometry.
+It matches `board-drawing` in the repo root, which is the trusted picture
+of one arm:
+
+```
+          [CS]
+
+[08*]     [H4]      [78*]
+[07]      [H3]      [79]
+[06]      [H2]      [80]
+[05]      [H1]      [81]
+[04]                [82]
+[03] [02] [01] [84] [83]
+
+   [B1] [B2] [B3] [B4]
+```
 
 ---
 
-## Space Numbering
+## Topology
 
 84 total track spaces. 6 arms × 14 spaces each.
-Arm `a` occupies spaces `a*14+1` through `a*14+14`.
+Arm `a` owns spaces `a*14+1` through `a*14+14`, but its **visual U** is made of
+its own spaces +1…+8 **plus the previous arm's spaces +9…+14**.
 
-Within each arm (arm 0 as example, base = a*14):
+Each arm is a **wide U**, viewed from that player's seat (outside the board):
 
-| space offset | track space (arm 0) | description |
-|---|---|---|
-| +1 | 1 | **start** — outermost, bottom of U, where marbles exit base |
-| +2 … +7 | 2–7 | left column — 6 spaces, outer→inner (bottom→top of U), at -COL_OFF from arm axis |
-| +8 | 8 | **STAR** — apex, innermost, on arm axis at R_STAR |
-| +9 … +14 | 9–14 | right column — 6 spaces, inner→outer (top→bottom of U), at +COL_OFF from arm axis |
+- **Bottom row** (5 spaces, at R_OUTER): `[+3][+2][+1][prev+14][prev+13]`,
+  left to right. `+1` is the **start** (center, on the arm axis); `prev+14`
+  (immediately right of start) is this player's **home entry**.
+- **Left column** (6 spaces): `+3` (bottom corner) rising through `+4…+7` to
+  this arm's own **star** `+8` at the top.
+- **Right column** (6 spaces): the **previous arm's star** `prev+8` at the top,
+  descending through `prev+9…+12` to the bottom corner `prev+13`.
+- **Home corridor**: H1…H4 on the arm axis, between the columns, aligned with
+  column rows 4…1 (H4 innermost, level with the stars).
+- **Base**: 1×4 row outside the bottom edge; B1 leftmost from the player's seat.
+
+**Stars are shared between adjacent arms.** Star `a*14+8` is simultaneously the
+top of arm `a`'s left column and the top of arm `a+1`'s right column. It sits on
+the boundary ray between the two arms, at radius STAR_RING. The 6 stars form the
+inner **star-track ring**.
+
+So the main track zigzags: out along a bottom row, up a column to a star on the
+inner ring, down the next arm's column to its bottom row, and so on.
 
 **STAR_SPACES** = `{8, 22, 36, 50, 64, 78}` = `arm*14+8` for each arm.
 
@@ -31,8 +59,8 @@ arm 4: start=57, star=64, homeEntry=56
 arm 5: start=71, star=78, homeEntry=70
 ```
 
-`homeEntry` for arm `a` = space `a*14` = last space of the PREVIOUS arm.
-Marbles entering home approach from the previous arm's final space.
+`homeEntry` for arm `a` = space `a*14` = last space of the PREVIOUS arm's block,
+which sits on this arm's bottom row immediately next to the start.
 
 Track wraps: 84 → 1.
 
@@ -43,62 +71,71 @@ Track wraps: 84 → 1.
 Canvas is square, side = W. Center = (CX, CY) = (W/2, W/2).
 
 ```
-R_OUTER    = W * 0.40   // spaces +1 and +14 (outermost ring)
-R_COL_TOP  = W * 0.22   // spaces +7 and +9 (top of columns, flanking star)
-R_STAR     = W * 0.16   // space +8 (star apex)
-COL_OFF    = W * 0.052  // perpendicular offset from arm axis to column center
-R_HOME_OUT = W * 0.36   // home slot 1 (outermost)
-R_HOME_IN  = W * 0.24   // home slot 4 (innermost)
-BASE_R     = W * 0.455  // center radius of 2×2 base grid
-BASE_G     = W * 0.038  // spacing between base slots
+STAR_RING = W * 0.18              // radius of the inner star-track ring
+COL_OFF   = STAR_RING / 2         // perp offset of U columns from arm axis
+COL_TOP   = COL_OFF * sqrt(3)     // along-axis coordinate of the star row
+R_OUTER   = W * 0.40              // bottom row of each U
+ROW_STEP  = (R_OUTER - COL_TOP)/5 // along-axis spacing of column rows 1–6
+BASE_R    = W * 0.452             // base row radius
+BASE_G    = W * 0.044             // spacing between base slots
 ```
+
+`COL_OFF = STAR_RING/2` is not arbitrary: a star at radius STAR_RING on the
+boundary ray (30° off-axis) has perpendicular distance `STAR_RING * sin(30°)`
+from **both** adjacent arm axes. Setting COL_OFF to that value makes the star
+sit exactly on top of both arms' column lines, so the shared star is the natural
+continuation of each column. Its along-axis coordinate is then
+`STAR_RING * cos(30°) = COL_OFF * sqrt(3) = COL_TOP`.
 
 ---
 
 ## Per-Arm Coordinate System
 
-Arm `a` angle: `ang = a * (2π/6) + π/2`
+Arm `a` angle: `ang = a * (2π/6) + π/2`  (arm 0 at the bottom of the canvas,
+arms numbered clockwise on screen).
 
 Axis unit vector:        `dx = cos(ang), dy = sin(ang)`
 Perpendicular unit vec:  `px = -sin(ang), py = cos(ang)`
 
-Point at radius r, perpendicular offset p:
+Point at along-axis distance r, perpendicular offset p:
 ```
 x = CX + dx*r + px*p
 y = CY + dy*r + py*p
+```
+**Positive p is the left-column side** (toward the next arm clockwise).
+
+Column row k (1 = star row … 6 = bottom row) along-axis coordinate:
+```
+rowR(k) = COL_TOP + ROW_STEP * (k - 1)
 ```
 
 ---
 
 ## Position Formulas
 
-**Left column** (spaces base+1 … base+7, i = 0…6, perp = -COL_OFF):
+For arm `a`: `base = a*14`, `prev = ((a+5)%6)*14`.
+
+**Bottom row** (at r = R_OUTER):
 ```
-r = R_OUTER + (R_COL_TOP - R_OUTER) * i/6
+base+1 → p = 0          (start)
+base+2 → p = +COL_OFF/2
+base+3 → p = +COL_OFF   (corner)
+prev+14 → p = -COL_OFF/2 (home entry)
+prev+13 → p = -COL_OFF  (corner)
 ```
 
-**Star** (space base+8, perp = 0):
-```
-r = R_STAR
-```
+**Left column** (p = +COL_OFF): `base+4…+7` at `rowR(5)…rowR(2)`.
 
-**Right column** (spaces base+9 … base+14, i = 0…5, perp = +COL_OFF):
-```
-r = R_COL_TOP + (R_OUTER - R_COL_TOP) * i/5
-```
+**Star** `base+8`: `(rowR(1), +COL_OFF)` ≡ radius STAR_RING at angle `ang + 30°`.
 
-**Home slots** (slot s = 1…4, on arm axis, perp = 0):
-```
-r = R_HOME_OUT + (R_HOME_IN - R_HOME_OUT) * (s-1)/3
-```
+**Right column** (p = -COL_OFF): `prev+9…+12` at `rowR(2)…rowR(5)`.
 
-**Base slots** (4 slots in a 2×2 grid, index mi = 0…3):
-```
-row = floor(mi/2),  col = mi % 2
-dr = (row - 0.5) * BASE_G
-dp = (col - 0.5) * BASE_G
-r = BASE_R,  perp_offset = dp  (and add dr along axis)
-```
+**Home slots** (p = 0): slot s at `rowR(5 - s)`  (H1 at row 4 … H4 at row 1).
+
+**Base slots** (1×4 row at r = BASE_R): slot mi at `p = (1.5 - mi) * BASE_G`.
+
+Every track space is written exactly once: each arm's loop places its own
++1…+8 and the previous arm's +9…+14 (which lie inside this arm's U).
 
 ---
 
@@ -120,8 +157,14 @@ const DARK_C  = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
 const STAR_GOLD = '#f5c842'; // shortcut star markers
 ```
 
-Star spaces use a gold `#c8920a` background circle with a 6-pointed `STAR_GOLD` star drawn on top.
-The board background is a dark navy radial gradient (`#1e2f60` → `#07101e`) with a gold rim border.
+Each arm's whole U (both columns + bottom row + home corridor + base panel) is
+tinted in that arm's color, even though the right column's spaces belong
+numerically to the previous arm's block.
+
+Star spaces use a gold `#c8920a` background circle with a 6-pointed `STAR_GOLD`
+star drawn on top. A dashed gold circle at STAR_RING marks the star track.
+The board background is a dark navy radial gradient (`#1e2f60` → `#07101e`)
+with a gold rim border.
 
 ---
 
@@ -151,9 +194,12 @@ export function clearAnimatingMarble()
 
 ---
 
-## Known Bug (fixed in rewrite)
+## Known Bugs (fixed in rewrites)
 
-Old board.js had `STAR_SPACES = {7,21,35,49,63,77}` (star at arm*14+**7**).
-Correct value is `{8,22,36,50,64,78}` (star at arm*14+**8**).
-This caused stars to render at the wrong track positions.
-The left column also had only 6 spaces (should be 7, including start).
+1. An early board.js had `STAR_SPACES = {7,21,35,49,63,77}` (star at arm*14+**7**).
+   Correct value is `{8,22,36,50,64,78}`.
+2. A later rewrite drew each arm as a narrow V with a **single** star at the
+   arm's own apex on its axis, and no bottom row. Per `board-drawing` the arm is
+   a **wide U** with a 5-space bottom row, **two different stars** at its top
+   corners (shared with the adjacent arms), the home corridor between the
+   columns, and a 1×4 base row (not 2×2).
