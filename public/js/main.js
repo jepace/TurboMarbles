@@ -645,7 +645,7 @@ function runNextAnimation() {
 // Convert a zone-descriptor { zone, space?, slot? } to a notation string.
 function locNotation(loc) {
   if (!loc) return '?';
-  if (loc.zone === 'base')   return 'bar';
+  if (loc.zone === 'base')   return 'base';
   if (loc.zone === 'center') return 'hub';
   if (loc.zone === 'home')   return `h${loc.slot}`;
   if (loc.zone === 'track')  return String(loc.space);
