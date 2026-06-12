@@ -348,7 +348,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 
   // Update game state immediately so the board renders correctly after animation
   Object.assign(marble, to);
-  if (to.zone === 'home' && from.zone !== 'home') playHomeChime();
+  const chime = to.zone === 'home' && from.zone !== 'home';
   selectedMarble = null;
   selectedMarbleMoves = [];
 
@@ -373,9 +373,10 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   if (waypoints.length === 0 && toPos) waypoints.push(toPos);
 
   if (fromPos && waypoints.length > 0) {
-    animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bumped);
+    animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bumped, chime);
   } else {
     if (bumped) { playBonk(); pendingBump = null; }
+    if (chime) playHomeChime();
     drawBoard(gameState);
   }
 });
@@ -619,12 +620,12 @@ function submitMove(move) {
 const animationQueue = [];
 let   animationRunning = false;
 
-function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = false) {
+function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = false, chime = false) {
   if (!waypoints || waypoints.length === 0) {
     drawBoard(gameState);
     return;
   }
-  animationQueue.push({ playerIndex, marbleId, fromPos, waypoints, bonk });
+  animationQueue.push({ playerIndex, marbleId, fromPos, waypoints, bonk, chime });
   if (!animationRunning) runNextAnimation();
 }
 
@@ -634,7 +635,7 @@ function runNextAnimation() {
     return;
   }
   animationRunning = true;
-  const { playerIndex, marbleId, fromPos, waypoints, bonk } = animationQueue.shift();
+  const { playerIndex, marbleId, fromPos, waypoints, bonk, chime } = animationQueue.shift();
 
   const STEP_MS = 120;
   const MIN_MS  = 200;
@@ -664,6 +665,7 @@ function runNextAnimation() {
           clearMarbleOverride(ownerIndex, bumpedId);
         }
       }
+      if (chime) playHomeChime();
       drawBoard(gameState);
       runNextAnimation();
       return;
