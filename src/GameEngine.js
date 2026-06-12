@@ -135,6 +135,11 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     const dest = computeTrackMove(state, player, marble, dieVal);
     if (dest) {
       moves.push({ type: 'move', dieIndex, marbleId, ...dest });
+      // If the move enters home, also offer passing the home entry and continuing on track
+      if (dest.toZone === 'home') {
+        const passHome = computeTrackMove(state, player, marble, dieVal, true);
+        if (passHome && passHome.toSpace !== player.config.homeEntry) moves.push({ type: 'move', dieIndex, marbleId, ...passHome });
+      }
     }
 
     return moves;
