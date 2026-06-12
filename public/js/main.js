@@ -16,6 +16,7 @@ let gameState = null;
 let selectedMarble = null;      // { playerIndex, marbleId } currently selected
 let legalMovesCache = null;     // { 0: [...], 1: [...] } from server after roll
 let selectedMarbleMoves = [];   // filtered moves for selectedMarble (for highlighting)
+let selectedDie = null;         // 0 or 1 — player-locked die; null means auto
 let commitPending = false;      // true when readyToCommit received, waiting for Commit click
 
 // ---- Per-turn move log accumulation (for backgammon notation) ----
@@ -133,6 +134,20 @@ $('btn-copy-code').addEventListener('click', () => {
 
 // ---- Roll ----
 $('btn-roll').addEventListener('click', doRoll);
+
+for (let i = 0; i < 2; i++) {
+  $(`die-${i}`).addEventListener('click', () => {
+    if (!isMyTurn() || gameState?.phase !== 'AWAITING_MOVE') return;
+    if (gameState?.diceUsed?.[i]) return;
+    selectedDie = (selectedDie === i) ? null : i;
+    selectedMarbleMoves = selectedMarble ? computeLegalDestinations(selectedMarble) : [];
+    renderDice(gameState.dice);
+    if (selectedMarble) {
+      highlightSpaces(selectedMarbleMoves.map(moveToSpace).filter(Boolean));
+      drawBoard(gameState);
+    }
+  });
+}
 
 function doRoll() {
   if ($('btn-roll').disabled) return;
@@ -384,6 +399,7 @@ on('turnChanged', ({ playerIndex }) => {
   gameState.dice = null;
   gameState.diceUsed = [false, false];
   legalMovesCache = null;
+  selectedDie = null;
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
@@ -532,7 +548,8 @@ function onCanvasClick(e) {
 function computeLegalDestinations({ marbleId }) {
   if (!legalMovesCache) return [];
   const moves = [];
-  for (let i = 0; i < 2; i++) {
+  const dice = selectedDie !== null ? [selectedDie] : [0, 1];
+  for (const i of dice) {
     if (gameState?.diceUsed?.[i]) continue;
     for (const m of (legalMovesCache[i] ?? [])) {
       if (m.marbleId === marbleId) moves.push(m);
@@ -577,6 +594,7 @@ function submitMove(move) {
   selectedMarble = null;
   selectedMarbleMoves = [];
   legalMovesCache = null; // will be refreshed by server via 'legalMoves' event if turn continues
+  selectedDie = null;
 }
 
 // ---- Marble animation ----
@@ -725,6 +743,7 @@ function renderDice(dice, color) {
     const el = $(`die-${i}`);
     el.textContent = dice ? dice[i] : '–';
     el.classList.toggle('used', !!(gameState?.diceUsed?.[i]));
+    el.classList.toggle('selected-die', selectedDie === i);
     if (color !== undefined) el.style.setProperty('--die-color', color ? COLOR_MAP[color] ?? '' : '');
   }
 }

@@ -177,6 +177,7 @@ button.secondary { background: #fff2; }
   transition: background 0.3s;
 }
 .die.used { background: #555; color: #888; }
+.die.selected-die { outline: 3px solid #fff; outline-offset: 2px; }
 .die.rolling { animation: shake 0.4s ease; }
 
 @keyframes shake {
