@@ -125,8 +125,11 @@ export function addRobot(ws, roomId) {
   const slot = room.slots.find(s => !s.playerId && !s.isRobot);
   if (!slot) return { error: 'No empty slots' };
 
+  const usedNumbers = new Set(room.slots.filter(s => s.isRobot).map(s => parseInt(s.name?.replace('Robot ', ''))));
+  let robotNumber = 1;
+  while (usedNumbers.has(robotNumber)) robotNumber++;
+
   slot.isRobot = true;
-  const robotNumber = room.slots.filter(s => s.isRobot).length;
   slot.name = `Robot ${robotNumber}`;
   slot.playerId = 'robot-' + slot.index;
 
