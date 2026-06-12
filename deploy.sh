@@ -10,6 +10,8 @@ JAIL_ROOT="/usr/local/bastille/jails/marbles/root"
 DEST="${JAIL_ROOT}/var/www/marbles"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
+git -C "${SRC}" pull
+
 RSYNC_OPTS="-av --delete"
 if [ "${1}" = "--dry-run" ]; then
     RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
@@ -17,7 +19,7 @@ if [ "${1}" = "--dry-run" ]; then
 fi
 
 # Sync application files; exclude things that don't belong in production.
-rsync ${RSYNC_OPTS} \
+sudo rsync ${RSYNC_OPTS} \
     --exclude='.git/' \
     --exclude='.env' \
     --exclude='node_modules/' \
