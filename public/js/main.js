@@ -4,7 +4,8 @@ import { connect, on, send, setReconnectInfo } from './socket.js';
 import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
-         setAnimatingMarble, clearAnimatingMarble } from './board.js';
+         setAnimatingMarble, clearAnimatingMarble,
+         getBasePosition } from './board.js';
 import { ARM_MAP, ARM_COLORS } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -25,6 +26,7 @@ let turnLogMoves  = [];   // [{ marbleId, path: [str,...], bumped }] for current
 let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
 let lastBumpedAt  = null; // zone-descriptor set by marbleBumped, consumed by marbleMoved
+let pendingBump   = null; // { ownerIndex, marbleId, fromPos } — bumped marble awaiting return animation
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
 // a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
@@ -373,7 +375,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   if (fromPos && waypoints.length > 0) {
     animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bumped);
   } else {
-    if (bumped) playBonk();
+    if (bumped) { playBonk(); pendingBump = null; }
     drawBoard(gameState);
   }
 });
@@ -381,15 +383,29 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   const marble = gameState.players[ownerIndex].marbles[marbleId];
   lastBumpedAt = from;
+
+  // Capture visual position before state change so the marble stays visible
+  // on the track during the attacker's animation; return-to-base animation follows.
+  const fromPos = getSpacePosition(zoneToSpace(from, ownerIndex));
+
   marble.zone = 'base';
   marble.space = null;
   marble.slot = null;
   marble.starEligible = false;
-  // Cancel any queued animation for this marble so it doesn't re-appear mid-path
+
+  // Cancel any queued animation for this marble
   const idx = animationQueue.findIndex(a => a.playerIndex === ownerIndex && a.marbleId === marbleId);
   if (idx !== -1) animationQueue.splice(idx, 1);
-  clearMarbleOverride(ownerIndex, marbleId);
-  drawBoard(gameState);
+
+  // Hold the marble visually at its pre-bump position until the attacker arrives
+  if (fromPos) {
+    setMarbleOverride(ownerIndex, marbleId, fromPos);
+    pendingBump = { ownerIndex, marbleId, fromPos };
+  } else {
+    clearMarbleOverride(ownerIndex, marbleId);
+    pendingBump = null;
+  }
+  // Don't redraw yet — attacker animation will handle sequencing
 });
 
 on('turnChanged', ({ playerIndex }) => {
@@ -633,7 +649,21 @@ function runNextAnimation() {
     if (step >= waypoints.length) {
       clearMarbleOverride(playerIndex, marbleId);
       clearAnimatingMarble();
-      if (bonk) playBonk();
+      if (bonk) {
+        playBonk();
+        // Animate the bumped marble back to base now that the attacker has arrived
+        if (pendingBump) {
+          const { ownerIndex, marbleId: bumpedId, fromPos: bumpFromPos } = pendingBump;
+          pendingBump = null;
+          const toPos = getBasePosition(ownerIndex, bumpedId);
+          if (bumpFromPos && toPos) {
+            drawBoard(gameState);
+            animateMarblePath(ownerIndex, bumpedId, bumpFromPos, [toPos], false);
+            return;
+          }
+          clearMarbleOverride(ownerIndex, bumpedId);
+        }
+      }
       drawBoard(gameState);
       runNextAnimation();
       return;

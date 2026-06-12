@@ -72,6 +72,11 @@ export function clearMarbleOverride(playerIndex, marbleId) {
   if (marbleOverrides[playerIndex]) delete marbleOverrides[playerIndex][marbleId];
 }
 
+export function getBasePosition(playerIndex, marbleId) {
+  const ai = playerToArm[playerIndex] ?? playerIndex;
+  return basePos[ai]?.[marbleId] ?? null;
+}
+
 export function setAnimatingMarble(playerIndex, marbleId) {
   animatingMarble = { playerIndex, marbleId };
 }
