@@ -48,6 +48,8 @@ const $ = id => document.getElementById(id);
 $('btn-create').addEventListener('click', () => {
   if (!validateName()) return;
   show('screen-create');
+  const n = parseInt($('create-count').value, 10);
+  updateColorPicker(n >= 2 && n <= 6 ? n : 4);
 });
 $('btn-join').addEventListener('click', () => {
   if (!validateName()) return;
