@@ -8,6 +8,7 @@ import {
   handleUndo, handleCommit,
   _reset,
 } from '../src/GameManager.js';
+import { config as gmConfig } from '../src/GameManager.js';
 
 // ---- Harness ----------------------------------------------------------------
 
@@ -220,6 +221,10 @@ describe('auto-forfeit — all marbles in base, non-1/6 roll → turn advances a
   startGame(host, roomId);
   host.sent = [];
 
+  // Disable skip delay so turnChanged fires synchronously in tests
+  const origDelay = gmConfig.skipTurnDelayMs;
+  gmConfig.skipTurnDelayMs = 0;
+
   // Force dice to [3, 4]: no legal moves when all in base (need 1 or 6)
   const origRandom = Math.random;
   let rollCount = 0;
@@ -227,6 +232,7 @@ describe('auto-forfeit — all marbles in base, non-1/6 roll → turn advances a
   Math.random = () => (rollCount++ % 2 === 0 ? 0.4 : 0.55);
   handleRoll(host, roomId);
   Math.random = origRandom;
+  gmConfig.skipTurnDelayMs = origDelay;
 
   assert(host.find('rolled').length === 1, 'rolled event sent');
   assert(host.find('turnChanged').length === 1, 'turn advanced automatically (no legal moves)');
@@ -572,11 +578,14 @@ describe('handleCommit — advances turn after both dice forfeited', () => {
   // Instead we need a scenario where dice are manually forfeited and commit is called.
   // Force dice=[3,4] for the robot turn (robot goes first if it's player 1).
   // Actually host is player 0 (turnIndex=0). Force dice=[3,4] for host.
+  const origDelay = gmConfig.skipTurnDelayMs;
+  gmConfig.skipTurnDelayMs = 0;
   const origRandom = Math.random;
   let callCount = 0;
   Math.random = () => (callCount++ % 2 === 0 ? 0.4 : 0.55); // → [3,4]
   handleRoll(host, roomId);
   Math.random = origRandom;
+  gmConfig.skipTurnDelayMs = origDelay;
 
   // Both dice [3,4] have no legal moves → auto-forfeit already advanced turn
   // Let's confirm turn advanced

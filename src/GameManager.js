@@ -8,10 +8,11 @@ import {
 } from './GameEngine.js';
 import { robotTakeTurn } from './RobotPlayer.js';
 
-const DISCONNECT_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
-const ROBOT_TURN_DELAY_MS   = 800;            // brief pause so it feels natural
-const MAX_TOTAL_ROOMS       = 200;            // global cap — prevents memory exhaustion
-const MAX_ROOMS_PER_WS      = 3;             // per-connection cap
+const DISCONNECT_TIMEOUT_MS  = 2 * 60 * 1000; // 2 minutes
+const ROBOT_TURN_DELAY_MS    = 800;            // brief pause so it feels natural
+const MAX_TOTAL_ROOMS        = 200;            // global cap — prevents memory exhaustion
+const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
+export const config = { skipTurnDelayMs: 1500 }; // show dice before auto-advancing a skipped turn
 
 const rooms = new Map();    // roomId → Room
 const sessions = new Map(); // wsId → { roomId, playerIndex }
@@ -461,12 +462,18 @@ function advanceTurnIfDone(room) {
       // Human made at least one move — wait for explicit commit before advancing turn
       broadcast(room, { event: 'readyToCommit', playerIndex: game.turnIndex });
     } else {
-      // Robot, or human with no legal moves at all — auto-advance immediately
+      // Robot, or human with no legal moves at all — auto-advance
       if (!isRobot && !game._humanMadeMove) {
-        // Human turn with zero legal moves: log the skip
+        // Human turn with zero legal moves: show dice briefly before advancing
         broadcast(room, { event: 'turnSkipped', playerIndex: game.turnIndex });
+        if (config.skipTurnDelayMs > 0) {
+          setTimeout(() => commitTurn(room), config.skipTurnDelayMs);
+        } else {
+          commitTurn(room);
+        }
+      } else {
+        commitTurn(room);
       }
-      commitTurn(room);
     }
   }
 }
