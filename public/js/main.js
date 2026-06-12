@@ -560,18 +560,29 @@ function submitMove(move) {
 
 // ---- Marble animation ----
 
-// Animate a marble through a sequence of canvas-coordinate waypoints.
-// Each step uses smoothstep easing; total duration scales with step count
-// so short moves feel snappy and long moves stay readable.
+const animationQueue = [];
+let   animationRunning = false;
+
 function animateMarblePath(playerIndex, marbleId, fromPos, waypoints) {
   if (!waypoints || waypoints.length === 0) {
     drawBoard(gameState);
     return;
   }
+  animationQueue.push({ playerIndex, marbleId, fromPos, waypoints });
+  if (!animationRunning) runNextAnimation();
+}
 
-  const STEP_MS = 120;  // ms per intermediate space
-  const MIN_MS  = 200;  // minimum step duration (for single-step moves)
-  const stepDuration = Math.max(MIN_MS, STEP_MS * (waypoints.length <= 1 ? 1 : 1));
+function runNextAnimation() {
+  if (animationQueue.length === 0) {
+    animationRunning = false;
+    return;
+  }
+  animationRunning = true;
+  const { playerIndex, marbleId, fromPos, waypoints } = animationQueue.shift();
+
+  const STEP_MS = 120;
+  const MIN_MS  = 200;
+  const stepDuration = Math.max(MIN_MS, STEP_MS);
 
   let step = 0;
   let prevPos = fromPos;
@@ -583,6 +594,7 @@ function animateMarblePath(playerIndex, marbleId, fromPos, waypoints) {
       clearMarbleOverride(playerIndex, marbleId);
       clearAnimatingMarble();
       drawBoard(gameState);
+      runNextAnimation();
       return;
     }
     const targetPos = waypoints[step++];
