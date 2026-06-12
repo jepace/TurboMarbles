@@ -104,14 +104,13 @@ function hr() { print('─'.repeat(60)); }
 // ===== SECTION 4: BOARD STATE DISPLAY =====
 
 // Geometry constants (unitless, same as board.js with W=1)
-const R_OUTER    = 0.40;
-const R_COL_TOP  = 0.22;
-const R_STAR     = 0.16;
-const COL_OFF    = 0.052;
-const R_HOME_OUT = 0.36;
-const R_HOME_IN  = 0.24;
-const BASE_R     = 0.455;
-const BASE_G     = 0.038;
+const STAR_RING = 0.18;                  // radius of the inner star-track ring
+const COL_OFF   = STAR_RING / 2;         // perp offset of U columns from arm axis
+const COL_TOP   = COL_OFF * Math.sqrt(3); // along-axis coord of star row (row 1)
+const R_OUTER   = 0.40;                  // bottom row of each U (row 6)
+const ROW_STEP  = (R_OUTER - COL_TOP) / 5;
+const BASE_R    = 0.46;                  // base row radius (outside the U)
+const BASE_G    = 0.044;                 // spacing between base slots
 const ASTEP      = (2 * Math.PI) / 6;
 
 // Grid dimensions — each space cell is CELL wide chars.
@@ -133,7 +132,14 @@ function toGrid(x, y) {
 
 function armAngle(a) { return a * ASTEP + Math.PI / 2; }
 
-/** Build Map<key,{row,col}> for all spaces. Called once and cached. */
+/** Build Map<key,{row,col}> for all spaces. Called once and cached.
+ *
+ *  Each arm is a wide U (see board-drawing in the repo root): a 5-space bottom
+ *  row at R_OUTER, a left column rising to this arm's own star (base+8), and a
+ *  right column descending from the PREVIOUS arm's star (prev+8). Stars sit on
+ *  the boundary rays between arms at radius STAR_RING and are shared by both
+ *  adjacent arms; the home corridor runs up the arm axis between the columns.
+ */
 export function buildSpaceGrid() {
   const m = new Map();
 
@@ -142,42 +148,39 @@ export function buildSpaceGrid() {
     const dx  = Math.cos(ang), dy = Math.sin(ang);   // axis unit vec
     const px  = -Math.sin(ang), py = Math.cos(ang);  // perp unit vec
     const base = arm * 14;
+    const prev = ((arm + 5) % 6) * 14;
 
-    // Helper: place point at (radius r, perp offset p) for this arm
+    // Helper: place point at (along-axis r, perp offset p) for this arm.
+    // Positive p = left-column side (toward the next arm clockwise).
     function place(key, r, p) {
-      const x = dx * r + px * p;
-      const y = dy * r + py * p;
-      m.set(key, toGrid(x, y));
+      m.set(key, toGrid(dx * r + px * p, dy * r + py * p));
     }
+    // Along-axis coordinate of column row k (1 = star row … 6 = bottom row)
+    const rowR = (k) => COL_TOP + ROW_STEP * (k - 1);
 
-    // Left column: spaces base+1 … base+7 (i=0..6), perp = -COL_OFF
-    for (let i = 0; i <= 6; i++) {
-      const r = R_OUTER + (R_COL_TOP - R_OUTER) * i / 6;
-      place('t:' + (base + 1 + i), r, -COL_OFF);
-    }
-    // Star: space base+8, on axis
-    place('t:' + (base + 8), R_STAR, 0);
+    // Bottom row of this arm's U: [base+3][base+2][base+1][prev+14][prev+13]
+    place('t:' + (base + 1), R_OUTER, 0);            // start, on the arm axis
+    place('t:' + (base + 2), R_OUTER, COL_OFF / 2);
+    place('t:' + (base + 3), R_OUTER, COL_OFF);      // corner, bottom of left column
 
-    // Right column: spaces base+9 … base+14 (i=0..5), perp = +COL_OFF
-    for (let i = 0; i <= 5; i++) {
-      const r = R_COL_TOP + (R_OUTER - R_COL_TOP) * i / 5;
-      place('t:' + (base + 9 + i), r, COL_OFF);
-    }
+    // Left column rises to this arm's own star (rows 5 → 2)
+    for (let i = 0; i < 4; i++) place('t:' + (base + 4 + i), rowR(5 - i), COL_OFF);
 
-    // Home slots 1-4 on arm axis between R_HOME_OUT and R_HOME_IN
-    for (let s = 1; s <= 4; s++) {
-      const r = R_HOME_OUT + (R_HOME_IN - R_HOME_OUT) * (s - 1) / 3;
-      place('h:' + arm + ':' + s, r, 0);
-    }
+    // Star (row 1): on the boundary ray shared with the next arm's right column
+    place('t:' + (base + 8), COL_TOP, COL_OFF);
 
-    // Base slots 0-3 in a 2×2 grid at BASE_R
+    // Right column of this U descends from the PREVIOUS arm's star (rows 2 → 6)
+    for (let i = 0; i < 4; i++) place('t:' + (prev + 9 + i), rowR(2 + i), -COL_OFF);
+    place('t:' + (prev + 13), R_OUTER, -COL_OFF);    // corner, bottom of right column
+    place('t:' + (prev + 14), R_OUTER, -COL_OFF / 2); // home entry, next to start
+
+    // Home corridor: on the arm axis, aligned with column rows 4 (H1) … 1 (H4)
+    for (let s = 1; s <= 4; s++) place('h:' + arm + ':' + s, rowR(5 - s), 0);
+
+    // Base slots 0-3 in a 1×4 row outside the bottom edge; slot 0 on the
+    // left from the player's seat (positive perp), matching B1…B4
     for (let mi = 0; mi < 4; mi++) {
-      const row2 = Math.floor(mi / 2), col2 = mi % 2;
-      const dr   = (row2 - 0.5) * BASE_G;
-      const dp   = (col2 - 0.5) * BASE_G;
-      const x    = dx * (BASE_R + dr) + px * dp;
-      const y    = dy * (BASE_R + dr) + py * dp;
-      m.set('b:' + arm + ':' + mi, toGrid(x, y));
+      place('b:' + arm + ':' + mi, BASE_R, (1.5 - mi) * BASE_G);
     }
   }
 

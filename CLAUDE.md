@@ -68,14 +68,15 @@ B1 - B4 is the Base
 ```
 
 ### Anatomy of One U-arm
-- **Left edge**: 6 spaces, running bottom→top. The top-most space is the **star space** (apex).
+- **Left edge**: 6 spaces, running bottom→top. The top-most space is this player's own **star space** (08 in the diagram).
 - **Bottom edge**: 5 spaces connecting left and right columns. Corner spaces are shared with the left/right edges. The **center space of the 5 is the start space** (where marbles exit from base). The space immediately **to the right of start** is the **home entry**.
-- **Right edge**: 6 spaces, running top→bottom. Top-most is also the star (the two edges meet at the apex).
-- **Home corridor**: 4 slots inside the U, running bottom (slot 1, near bottom edge) → top (slot 4, near star). Separate lane from the main track, between the two columns.
+- **Right edge**: 6 spaces, running top→bottom. Its top-most space is the **previous arm's star** (78 in the diagram) — the two columns do NOT meet; each U has two *different* stars at its top corners.
+- **Stars are shared**: each star is simultaneously the top of one arm's left column and the top of the next arm's right column, sitting on the boundary between the two arms. The 6 stars form the inner star-track ring, and the main track zigzags: along a bottom row, up a column to a star, down the next arm's column, and so on.
+- **Home corridor**: 4 slots inside the U, running bottom (slot 1, near bottom edge) → top (slot 4, level with the stars). Separate lane from the main track, between the two columns.
 - **Base**: 1×4 row of slots outside the U opening (below the bottom edge), where marbles start the game.
 
 ### Special Zones
-- **Star space**: Top of each arm. Landing here grants access to the **star track** (inner ring connecting all 6 stars). Die=1 or 6 required to exit base; landing on own star enables star-track movement.
+- **Star space**: Top corner of each U, shared between adjacent arms. Landing here grants access to the **star track** (inner ring connecting all 6 stars). Die=1 or 6 required to exit base; landing on own star enables star-track movement.
 - **Center hub**: Single zone in the middle of the board. Reached by moving exactly 1 step past any star. Exit costs die=1, can emerge on any unblocked star.
 - **Home**: 4 slots per player inside their arm's U corridor. Marbles can only move forward, cannot overshoot slot 4. Cannot be bumped once in home.
 
