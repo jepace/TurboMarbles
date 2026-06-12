@@ -16,17 +16,17 @@ export function playBonk() {
   const osc = ac.createOscillator();
   const gain = ac.createGain();
 
-  osc.type = 'sine';
-  osc.frequency.setValueAtTime(180, t);
-  osc.frequency.exponentialRampToValueAtTime(60, t + 0.18);
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(520, t);
+  osc.frequency.exponentialRampToValueAtTime(180, t + 0.08);
 
-  gain.gain.setValueAtTime(0.55, t);
-  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  gain.gain.setValueAtTime(0.4, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
 
   osc.connect(gain);
   gain.connect(ac.destination);
   osc.start(t);
-  osc.stop(t + 0.25);
+  osc.stop(t + 0.15);
 }
 
 // Soft click — marble moves to a normal track space
