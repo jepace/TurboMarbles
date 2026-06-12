@@ -205,11 +205,12 @@ on('error', ({ message }) => {
   alert(message);
 });
 
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers }) => {
   roomId = rid;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
+  $('lobby-size').textContent = `${totalPlayers} players`;
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
   renderLobbySlots([{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
@@ -221,6 +222,7 @@ on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState, reconnectToken }) => {
   myPlayerIndex = playerIndex;
   setReconnectInfo({ roomId: rid, playerIndex, reconnectToken });
   $('lobby-code').textContent = lobbyState.code;
+  $('lobby-size').textContent = `${lobbyState.totalPlayers} players`;
   $('host-controls').style.display = 'none';
   $('lobby-wait-msg').style.display = 'block';
   renderLobbySlots(lobbyState.slots);

@@ -85,7 +85,7 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
   // The client must store this and send it back in any 'reconnect' action.
-  return { roomId, code, reconnectToken: hostId, color: slots[0].color };
+  return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers };
 }
 
 export function joinRoom(ws, code, playerName) {
@@ -124,7 +124,8 @@ export function addRobot(ws, roomId) {
   if (!slot) return { error: 'No empty slots' };
 
   slot.isRobot = true;
-  slot.name = slot.color.charAt(0).toUpperCase() + slot.color.slice(1);
+  const robotNumber = room.slots.filter(s => s.isRobot).length;
+  slot.name = `Robot ${robotNumber}`;
   slot.playerId = 'robot-' + slot.index;
 
   broadcast(room, {
