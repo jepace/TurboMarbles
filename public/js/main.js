@@ -371,14 +371,14 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   if (waypoints.length === 0 && toPos) waypoints.push(toPos);
 
   if (fromPos && waypoints.length > 0) {
-    animateMarblePath(playerIndex, marbleId, fromPos, waypoints);
+    animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bumped);
   } else {
+    if (bumped) playBonk();
     drawBoard(gameState);
   }
 });
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
-  playBonk();
   const marble = gameState.players[ownerIndex].marbles[marbleId];
   lastBumpedAt = from;
   marble.zone = 'base';
@@ -603,12 +603,12 @@ function submitMove(move) {
 const animationQueue = [];
 let   animationRunning = false;
 
-function animateMarblePath(playerIndex, marbleId, fromPos, waypoints) {
+function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = false) {
   if (!waypoints || waypoints.length === 0) {
     drawBoard(gameState);
     return;
   }
-  animationQueue.push({ playerIndex, marbleId, fromPos, waypoints });
+  animationQueue.push({ playerIndex, marbleId, fromPos, waypoints, bonk });
   if (!animationRunning) runNextAnimation();
 }
 
@@ -618,7 +618,7 @@ function runNextAnimation() {
     return;
   }
   animationRunning = true;
-  const { playerIndex, marbleId, fromPos, waypoints } = animationQueue.shift();
+  const { playerIndex, marbleId, fromPos, waypoints, bonk } = animationQueue.shift();
 
   const STEP_MS = 120;
   const MIN_MS  = 200;
@@ -633,6 +633,7 @@ function runNextAnimation() {
     if (step >= waypoints.length) {
       clearMarbleOverride(playerIndex, marbleId);
       clearAnimatingMarble();
+      if (bonk) playBonk();
       drawBoard(gameState);
       runNextAnimation();
       return;
