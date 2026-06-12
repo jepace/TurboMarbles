@@ -12,7 +12,7 @@ import {
 } from './GameManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT   = process.env.PORT   || 3000;
+const PORT   = process.env.PORT   || 8080;
 const HOST   = process.env.HOST   || '0.0.0.0';
 // Set ORIGIN to your public URL (e.g. https://example.com) to enable origin
 // checking.  Leave unset to allow all origins (dev / LAN use).
