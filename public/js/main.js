@@ -348,12 +348,15 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   const marble = gameState.players[ownerIndex].marbles[marbleId];
-  // Record where the bump happened so marbleMoved can annotate the move with '*'
   lastBumpedAt = from;
   marble.zone = 'base';
   marble.space = null;
   marble.slot = null;
   marble.starEligible = false;
+  // Cancel any queued animation for this marble so it doesn't re-appear mid-path
+  const idx = animationQueue.findIndex(a => a.playerIndex === ownerIndex && a.marbleId === marbleId);
+  if (idx !== -1) animationQueue.splice(idx, 1);
+  clearMarbleOverride(ownerIndex, marbleId);
   drawBoard(gameState);
 });
 
