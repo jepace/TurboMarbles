@@ -655,12 +655,14 @@ function locNotation(loc) {
 // Emit accumulated moves for the current turn as a single numbered log line.
 function flushTurnLog() {
   if (!turnLogDice) return;
-  const name     = playerName(turnLogPlayer ?? gameState?.turnIndex);
-  const diceStr  = `${turnLogDice[0]}-${turnLogDice[1]}`;
+  const pi      = turnLogPlayer ?? gameState?.turnIndex;
+  const name    = playerName(pi);
+  const color   = gameState?.players[pi]?.color ?? null;
+  const diceStr = `${turnLogDice[0]}-${turnLogDice[1]}`;
   const movesStr = turnLogMoves.length
     ? turnLogMoves.map(m => `${m.path.join('/')}${m.bumped ? '*' : ''}`).join(' ')
     : '--';
-  log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`);
+  log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
   turnLogMoves = [];
   turnLogDice  = null;
 }
@@ -744,11 +746,17 @@ function playerName(index) {
 }
 
 const LOG_MAX = 60;
-function log(msg) {
+function log(msg, color) {
   const el = $('game-log');
   const entry = document.createElement('div');
   entry.className = 'log-entry';
-  entry.textContent = msg;
+  if (color) {
+    const dot = document.createElement('span');
+    dot.className = 'log-dot';
+    dot.style.background = COLOR_MAP[color] ?? '#888';
+    entry.appendChild(dot);
+  }
+  entry.appendChild(document.createTextNode(msg));
   el.appendChild(entry);
   // Prevent unbounded growth on long games
   while (el.children.length > LOG_MAX) el.removeChild(el.firstChild);
