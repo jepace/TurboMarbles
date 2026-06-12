@@ -298,12 +298,12 @@ describe('exitBase', () => {
 
 describe('home entry', () => {
   const state = makeState(2);
-  // Yellow's homeEntry is 84. From space 83, die=1 → enter home slot 1
+  // Yellow's homeEntry is 84. From space 83, die=1 lands exactly on homeEntry → stays on track
   setMarble(state, 0, 0, 'track', 83, null, false);
   state.dice = [1, 2]; state.diceUsed = [false, false]; state.phase = 'AWAITING_MOVE';
   const moves = legalMovesForDie(state, 0, 0, 0);
-  assert(moves.some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
-    'die=1 from space 83 → enter home slot 1');
+  assert(moves.some(m => m.type === 'move' && m.toZone === 'track' && m.toSpace === 84),
+    'die=1 from space 83 → lands on homeEntry (track space 84), not home');
 });
 
 // ---- moveHome regression ----------------------------------------------------
@@ -338,12 +338,12 @@ describe('allLegalMoves — no duplicate types for same die', () => {
 
 describe('home entry — landing exactly on homeEntry space', () => {
   const state = makeState(2);
-  // Yellow homeEntry=84. Die=1 from space 83 lands on 84 → should enter home slot 1.
+  // Yellow homeEntry=84. Die=1 from space 83 lands exactly on 84 → stays on track.
   setMarble(state, 0, 0, 'track', 83, null, false);
   setDice(state, 1, 2);
   const m1 = legalMovesForDie(state, 0, 0, 0);
-  assert(m1.some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
-    'die=1 from 83 → enter home slot 1 (crossesHome fix)');
+  assert(m1.some(m => m.type === 'move' && m.toZone === 'track' && m.toSpace === 84),
+    'die=1 from 83 → lands on homeEntry (track 84), not home (crossesHome fix)');
 
   // Die=2 from space 83: stepsToEntry=1, stepsIntoHome=1 → slot 1
   setDice(state, 2, 1);
@@ -351,12 +351,12 @@ describe('home entry — landing exactly on homeEntry space', () => {
   assert(m2.some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
     'die=2 from 83 → enter home slot 1');
 
-  // Die=2 from space 82: stepsToEntry=2, stepsIntoHome=0 → slot 1 (lands on homeEntry itself)
+  // Die=2 from space 82: stepsToEntry=2, stepsIntoHome=0 → lands on homeEntry (track), not slot 1
   setMarble(state, 0, 0, 'track', 82, null, false);
   setDice(state, 2, 1);
   const m3 = legalMovesForDie(state, 0, 0, 0);
-  assert(m3.some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
-    'die=2 from 82 → land on homeEntry → slot 1');
+  assert(m3.some(m => m.type === 'move' && m.toZone === 'track' && m.toSpace === 84),
+    'die=2 from 82 → lands on homeEntry (track 84), not slot 1');
 
   // Die=3 from space 82: stepsToEntry=2, stepsIntoHome=1 → slot 1
   setDice(state, 3, 1);
@@ -469,12 +469,12 @@ describe('win condition — gameOver when last marble enters home zone', () => {
   setMarble(s, 0, 1, 'home', null, 3);
   setMarble(s, 0, 2, 'home', null, 4);
   setMarble(s, 0, 3, 'track', 83, null, false); // one step from homeEntry=84
-  setDice(s, 1, 2);
+  setDice(s, 2, 1);
 
-  // die=1 from space 83 → crosses homeEntry 84 → enters slot 1
+  // die=2 from space 83 → 1 step to homeEntry + 1 into home → enters slot 1
   const moves = legalMovesForDie(s, 0, 0, 3);
   const enterMove = moves.find(m => m.toZone === 'home' && m.toSlot === 1);
-  assert(!!enterMove, 'die=1 from 83 → can enter home slot 1');
+  assert(!!enterMove, 'die=2 from 83 → can enter home slot 1');
 
   const events = applyMove(s, 0, enterMove);
   assert(events.some(e => e.event === 'gameOver'), 'all 4 in home → gameOver');
@@ -490,7 +490,7 @@ describe('win condition — no gameOver when a marble remains outside home', () 
   setMarble(s, 0, 1, 'home', null, 3);
   setMarble(s, 0, 2, 'base');
   setMarble(s, 0, 3, 'track', 83, null, false);
-  setDice(s, 1, 2);
+  setDice(s, 2, 1);
 
   const moves = legalMovesForDie(s, 0, 0, 3);
   const enterMove = moves.find(m => m.toZone === 'home');
@@ -586,17 +586,17 @@ describe('home entry — player 1 orange config (homeEntry=14) via 6-player game
   const s = makeState(6);
   s.turnIndex = 1;
 
-  // From space 13, die=1 → crosses homeEntry=14 → enter slot 1
+  // From space 13, die=1 → lands exactly on homeEntry=14 → stays on track
   setMarble(s, 1, 0, 'track', 13, null, false);
   setDice(s, 1, 2);
-  assert(legalMovesForDie(s, 1, 0, 0).some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
-    'player 1 (orange): die=1 from space 13 → enter home slot 1');
+  assert(legalMovesForDie(s, 1, 0, 0).some(m => m.type === 'move' && m.toZone === 'track' && m.toSpace === 14),
+    'player 1 (orange): die=1 from space 13 → lands on homeEntry (track 14), not home');
 
-  // From space 12, die=2 → stepsToEntry=2, intoHome=0 → slot 1
+  // From space 12, die=2 → lands exactly on homeEntry=14 → stays on track
   setMarble(s, 1, 0, 'track', 12, null, false);
   setDice(s, 2, 1);
-  assert(legalMovesForDie(s, 1, 0, 0).some(m => m.type === 'move' && m.toZone === 'home' && m.toSlot === 1),
-    'player 1 (orange): die=2 from space 12 → enter home slot 1');
+  assert(legalMovesForDie(s, 1, 0, 0).some(m => m.type === 'move' && m.toZone === 'track' && m.toSpace === 14),
+    'player 1 (orange): die=2 from space 12 → lands on homeEntry (track 14), not home');
 });
 
 describe('home entry — marble starting at homeEntry space redirects to slot 1', () => {

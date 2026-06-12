@@ -268,11 +268,9 @@ function computeTrackMove(state, player, marble, dieVal, ignoreHome = false) {
       const stepsToEntry = (marble.space === homeEntry) ? 0 : trackDistance(marble.space, homeEntry);
       const stepsIntoHome = dieVal - stepsToEntry;
       if (stepsIntoHome === 0) {
-        // Lands exactly on homeEntry — enters slot 1
-        if (!homePathBlocked(player, 0, 1)) {
-          return { toZone: 'home', toSlot: 1 };
-        }
-        return null;
+        // Lands exactly on homeEntry — stays on the track at that space
+        if (ownMarbleAtSpace(player, homeEntry)) return null;
+        return { toZone: 'track', toSpace: homeEntry };
       }
       const targetSlot = stepsIntoHome;
       if (targetSlot <= HOME_SLOTS && !homePathBlocked(player, 0, targetSlot)) {
