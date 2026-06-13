@@ -117,7 +117,7 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     // Enter center: the center hub is 1 step past any star on a shortcut branch.
     // Any marble on the main track whose die count lands it exactly 1 step past
     // any star (dieVal = stepsToThatStar + 1) may divert into center instead.
-    const enterStarSpace = canEnterCenter(player, marble, dieVal);
+    const enterStarSpace = !ownMarbleAtCenter(player) ? canEnterCenter(player, marble, dieVal) : null;
     if (enterStarSpace !== null) {
       moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: enterStarSpace });
     }
@@ -228,7 +228,8 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
       moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar, starsPath });
     } else if (remaining === 1) {
       // Enter center from this star (center is exactly 1 step from any star)
-      moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: exitStar, starsPath: [...starsPath] });
+      if (!ownMarbleAtCenter(player))
+        moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: exitStar, starsPath: [...starsPath] });
       // OR continue 1 step on main track from this star
       const tempMarble = { zone: 'track', space: exitStar };
       const dest = computeTrackMove(state, player, tempMarble, 1);
@@ -486,7 +487,8 @@ export function applyMove(state, playerIndex, move) {
   } else if (move.type === 'enterCenter') {
     const from = { zone: 'track', space: marble.space };
     const bumped = findMarbleAtCenter(state, playerIndex);
-    if (bumped) { bumpMarble(state, bumped, events); }
+    // Defensive guard: never bump own marble (should be prevented by legalMoves)
+    if (bumped && bumped.ownerIndex !== playerIndex) { bumpMarble(state, bumped, events); }
     marble.zone = 'center';
     marble.space = null;
     marble.starEligible = false;
@@ -598,6 +600,10 @@ function findMarbleAtCenter(state, excludePlayer) {
     }
   }
   return null;
+}
+
+function ownMarbleAtCenter(player) {
+  return player.marbles.some(m => m.zone === 'center');
 }
 
 // --- Turn advancement ---
