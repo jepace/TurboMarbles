@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition } from './board.js';
+         getBasePosition, clearAllMarbleOverrides } from './board.js';
 import { ARM_MAP, ARM_COLORS } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -468,6 +468,14 @@ on('undone', ({ gameState: gs }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
+  lastBumpedAt = null;
+  pendingBump = null;
+  // Clear any in-flight animations and overrides — server state is authoritative
+  animationQueue.length = 0;
+  animationRunning = false;
+  clearAllMarbleOverrides();
+  // Roll back the turn log to only the moves that still stand
+  turnLogMoves = [];
   setCommitVisible(false); setUndoVisible(false);
   renderDice(gameState.dice);
   drawBoard(gameState);
