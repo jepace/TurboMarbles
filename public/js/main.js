@@ -375,7 +375,13 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   if (fromPos && waypoints.length > 0) {
     animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bumped, chime);
   } else {
-    if (bumped) { playBonk(); pendingBump = null; }
+    if (bumped) {
+      playBonk();
+      if (pendingBump) {
+        clearMarbleOverride(pendingBump.ownerIndex, pendingBump.marbleId);
+        pendingBump = null;
+      }
+    }
     if (chime) playHomeChime();
     drawBoard(gameState);
   }
@@ -640,6 +646,12 @@ function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = fal
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
+    // Safety: if a pendingBump override was never consumed, clear it now
+    if (pendingBump) {
+      clearMarbleOverride(pendingBump.ownerIndex, pendingBump.marbleId);
+      pendingBump = null;
+      drawBoard(gameState);
+    }
     return;
   }
   animationRunning = true;
