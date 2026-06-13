@@ -8,7 +8,7 @@ import {
 } from './GameEngine.js';
 import { robotTakeTurn, pickNextRobotMove } from './RobotPlayer.js';
 
-const DISCONNECT_TIMEOUT_MS  = 2 * 60 * 1000; // 2 minutes
+const DISCONNECT_TIMEOUT_MS  = 30 * 60 * 1000; // 30 minutes
 const ROBOT_TURN_DELAY_MS    = 800;            // pause before robot's turn starts
 const ROBOT_MOVE_DELAY_MS    = 600;            // pause between robot's individual moves
 const MAX_TOTAL_ROOMS        = 200;            // global cap — prevents memory exhaustion
