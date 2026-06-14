@@ -25,9 +25,12 @@ let turnNumber    = 0;    // increments each turnChanged; set to 1 on gameStarte
 let turnLogMoves  = [];   // [{ marbleId, path: [str,...], bumped }] for current turn
 let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
-let lastBumpedAt  = null; // zone-descriptor set by marbleBumped, consumed by marbleMoved
-let pendingBumps  = []; // [{ ownerIndex, marbleId, fromPos }] — bumped marbles awaiting return animation
-let lastAnimEnd   = null; // { playerIndex, marbleId } — last marble whose animation just finished
+// Bumps seen since the last marbleMoved. The server emits marbleBumped right
+// before the attacker's marbleMoved, so we stash them here and the very next
+// marbleMoved enqueues their fly-home tweens (after the attacker's). Purely an
+// event-correlation handoff — never held across animations.
+let bumpHandoff   = []; // [{ ownerIndex, marbleId, fromPos }]
+let lastAnimEnd   = null; // { playerIndex, marbleId } — last marble whose tween just finished
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
 // a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
@@ -344,18 +347,22 @@ on('legalMoves', ({ moves, diceUsed }) => {
 on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
 
-  // Capture from-position before updating state (for animation start point)
+  // Capture from-position before updating state (for the tween start point)
   const fromPos = getSpacePosition(zoneToSpace(from, playerIndex));
 
-  // Update game state immediately so the board renders correctly after animation
+  // Update game state immediately — render is always driven by authoritative state
   Object.assign(marble, to);
   const chime = to.zone === 'home' && from.zone !== 'home';
   selectedMarble = null;
   selectedMarbleMoves = [];
 
+  // Consume any bumps the server reported just before this move (this is the
+  // attacker that caused them). They fly home after the attacker arrives.
+  const victims = bumpHandoff;
+  bumpHandoff = [];
+  const bumped = victims.length > 0;
+
   // Accumulate move for backgammon notation; merge consecutive same-marble moves
-  const bumped  = lastBumpedAt !== null;
-  lastBumpedAt  = null;
   const fromStr = locNotation(from);
   const toStr   = locNotation(to);
   const last    = turnLogMoves[turnLogMoves.length - 1];
@@ -368,29 +375,40 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
 
   // Build canvas waypoints from server path
   const waypoints = (path ?? []).map(loc => getSpacePosition(zoneToSpace(loc, playerIndex))).filter(Boolean);
-
-  // Always ensure at least the final position is animated to
   const toPos = getSpacePosition(zoneToSpace(to, playerIndex));
   if (waypoints.length === 0 && toPos) waypoints.push(toPos);
 
+  // The attacker's sound plays when it ARRIVES (tween end): bonk if it bumped,
+  // else the home chime. (A move can't both bump and enter home.)
+  const sound = bumped ? 'bonk' : (chime ? 'chime' : null);
+
   if (fromPos && waypoints.length > 0) {
-    animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bumped, chime);
+    enqueueTween({ playerIndex, marbleId, fromPos, waypoints, sound });
   } else {
-    if (bumped) {
-      playBonk();
-      flushPendingBumps();
-    }
-    if (chime) playHomeChime();
+    // No animatable path (e.g. exiting base): just play the sound and render.
+    if (sound === 'bonk') playBonk();
+    else if (sound === 'chime') playHomeChime();
     drawBoard(gameState);
   }
+
+  // After the attacker, send each bumped marble flying home.
+  for (const v of victims) {
+    const basePos = getBasePosition(v.ownerIndex, v.marbleId);
+    if (v.fromPos && basePos) {
+      enqueueTween({ playerIndex: v.ownerIndex, marbleId: v.marbleId,
+                     fromPos: v.fromPos, waypoints: [basePos], sound: null });
+    } else {
+      clearMarbleOverride(v.ownerIndex, v.marbleId); // nowhere to fly from — just clear
+    }
+  }
+  if (!animationRunning) drawBoard(gameState);
 });
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   const marble = gameState.players[ownerIndex].marbles[marbleId];
-  lastBumpedAt = from;
 
-  // Capture visual position before state change so the marble stays visible
-  // on the track during the attacker's animation; return-to-base animation follows.
+  // Capture the pre-bump position so the marble lingers there (via override)
+  // until the attacker arrives and its fly-home tween takes over.
   const fromPos = getSpacePosition(zoneToSpace(from, ownerIndex));
 
   marble.zone = 'base';
@@ -398,20 +416,13 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   marble.slot = null;
   marble.starEligible = false;
 
-  // Cancel any queued animation for this marble
+  // Cancel any queued tween for this marble — it's going home now
   const idx = animationQueue.findIndex(a => a.playerIndex === ownerIndex && a.marbleId === marbleId);
   if (idx !== -1) animationQueue.splice(idx, 1);
 
-  // Hold the marble visually at its pre-bump position until the attacker arrives.
-  // Multiple marbles can be bumped during a single multi-leg move, so accumulate
-  // them — never overwrite — to ensure each override is later cleared.
-  if (fromPos) {
-    setMarbleOverride(ownerIndex, marbleId, fromPos);
-    pendingBumps.push({ ownerIndex, marbleId, fromPos });
-  } else {
-    clearMarbleOverride(ownerIndex, marbleId);
-  }
-  // Don't redraw yet — attacker animation will handle sequencing
+  if (fromPos) setMarbleOverride(ownerIndex, marbleId, fromPos);
+  else         clearMarbleOverride(ownerIndex, marbleId);
+  bumpHandoff.push({ ownerIndex, marbleId, fromPos });
 });
 
 on('turnChanged', ({ playerIndex }) => {
@@ -473,8 +484,8 @@ on('undone', ({ gameState: gs }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
-  lastBumpedAt = null;
-  pendingBumps = [];
+  bumpHandoff = [];
+  lastAnimEnd = null;
   // Clear any in-flight animations and overrides — server state is authoritative
   animationQueue.length = 0;
   animationRunning = false;
@@ -633,41 +644,32 @@ function submitMove(move) {
 const animationQueue = [];
 let   animationRunning = false;
 
-function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = false, chime = false) {
-  if (!waypoints || waypoints.length === 0) {
-    drawBoard(gameState);
-    return;
-  }
-  animationQueue.push({ playerIndex, marbleId, fromPos, waypoints, bonk, chime });
+// Stimulus-response animation: each tween is a self-contained
+//   { playerIndex, marbleId, fromPos, waypoints, sound }
+// processed serially. Invariant: a marble's override exists ONLY while its tween
+// is running and is ALWAYS cleared when the tween ends — so nothing is ever left
+// stranded on the board. `sound` ('bonk' | 'chime' | null) plays at the tween's
+// end, so it lands exactly when the marble arrives.
+function enqueueTween(tween) {
+  if (!tween.waypoints || tween.waypoints.length === 0) return;
+  animationQueue.push(tween);
   if (!animationRunning) runNextAnimation();
-}
-
-// Snap every still-pending bumped marble straight to base (clear its override).
-// Caller redraws. Prevents a bumped marble's override from being left stranded
-// on the track when its return animation can't run.
-function flushPendingBumps() {
-  for (const b of pendingBumps) clearMarbleOverride(b.ownerIndex, b.marbleId);
-  pendingBumps = [];
 }
 
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
     lastAnimEnd = null;
-    // Safety: snap any bumped marbles whose return animation never ran to base
-    if (pendingBumps.length) { flushPendingBumps(); drawBoard(gameState); }
     return;
   }
   animationRunning = true;
-  const { playerIndex, marbleId, fromPos, waypoints, bonk, chime } = animationQueue.shift();
+  const { playerIndex, marbleId, fromPos, waypoints, sound } = animationQueue.shift();
 
-  const STEP_MS = 120;
-  const MIN_MS  = 200;
-  const PAUSE_MS = 350; // beat between two dice-moves of the same marble
-  const stepDuration = Math.max(MIN_MS, STEP_MS);
+  const STEP_MS = 200;  // per-waypoint duration
+  const PAUSE_MS = 350; // beat between two consecutive moves of the same marble
 
-  // If this marble is moving again right after its previous move (both dice on
-  // one marble), pause a beat first so a bonk on the prior move is legible.
+  // Pause a beat when the same marble moves again (both dice on one marble) so a
+  // bonk/landing on the prior move is legible before it sets off again.
   const samePrev = lastAnimEnd
     && lastAnimEnd.playerIndex === playerIndex
     && lastAnimEnd.marbleId === marbleId;
@@ -676,45 +678,29 @@ function runNextAnimation() {
   let prevPos = fromPos;
 
   setAnimatingMarble(playerIndex, marbleId);
-  // Pin the marble at its start position so it doesn't flash at its destination
-  // (state is already updated) during the pause or the first frame.
+  // Pin at the start position so the marble doesn't flash at its (already-updated)
+  // destination during the pause or before the first frame.
   setMarbleOverride(playerIndex, marbleId, fromPos);
   if (samePrev) drawBoard(gameState);
 
+  function finish() {
+    clearMarbleOverride(playerIndex, marbleId);
+    clearAnimatingMarble();
+    lastAnimEnd = { playerIndex, marbleId };
+    if (sound === 'bonk') playBonk();
+    else if (sound === 'chime') playHomeChime();
+    drawBoard(gameState);
+    runNextAnimation();
+  }
+
   function animateToNext() {
-    if (step >= waypoints.length) {
-      clearMarbleOverride(playerIndex, marbleId);
-      clearAnimatingMarble();
-      lastAnimEnd = { playerIndex, marbleId };
-      if (bonk) {
-        playBonk();
-        // Animate the just-bumped marble back to base now that the attacker has
-        // arrived. Any other still-pending bumps are snapped to base first so no
-        // override is left stranded on the track.
-        if (pendingBumps.length) {
-          const { ownerIndex, marbleId: bumpedId, fromPos: bumpFromPos } = pendingBumps.pop();
-          flushPendingBumps();
-          const toPos = getBasePosition(ownerIndex, bumpedId);
-          if (bumpFromPos && toPos) {
-            drawBoard(gameState);
-            animationRunning = false;
-            animateMarblePath(ownerIndex, bumpedId, bumpFromPos, [toPos], false);
-            return;
-          }
-          clearMarbleOverride(ownerIndex, bumpedId);
-        }
-      }
-      if (chime) playHomeChime();
-      drawBoard(gameState);
-      runNextAnimation();
-      return;
-    }
+    if (step >= waypoints.length) { finish(); return; }
     const targetPos = waypoints[step++];
     const startPos  = prevPos;
     const start     = performance.now();
 
     function frame(now) {
-      const t    = Math.min((now - start) / stepDuration, 1);
+      const t    = Math.min((now - start) / STEP_MS, 1);
       const ease = t * t * (3 - 2 * t); // smoothstep
       setMarbleOverride(playerIndex, marbleId, {
         x: startPos.x + (targetPos.x - startPos.x) * ease,
