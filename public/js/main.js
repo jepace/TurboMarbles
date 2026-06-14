@@ -679,6 +679,7 @@ function runNextAnimation() {
           const toPos = getBasePosition(ownerIndex, bumpedId);
           if (bumpFromPos && toPos) {
             drawBoard(gameState);
+            animationRunning = false;
             animateMarblePath(ownerIndex, bumpedId, bumpFromPos, [toPos], false);
             return;
           }
