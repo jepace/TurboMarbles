@@ -27,6 +27,7 @@ let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
 let lastBumpedAt  = null; // zone-descriptor set by marbleBumped, consumed by marbleMoved
 let pendingBump   = null; // { ownerIndex, marbleId, fromPos } — bumped marble awaiting return animation
+let lastAnimEnd   = null; // { playerIndex, marbleId } — last marble whose animation just finished
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
 // a 2-player game uses 'white' not 'orange', so we can't index COLORS by player index.
@@ -646,6 +647,7 @@ function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = fal
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
+    lastAnimEnd = null;
     // Safety: if a pendingBump override was never consumed, clear it now
     if (pendingBump) {
       clearMarbleOverride(pendingBump.ownerIndex, pendingBump.marbleId);
@@ -659,17 +661,29 @@ function runNextAnimation() {
 
   const STEP_MS = 120;
   const MIN_MS  = 200;
+  const PAUSE_MS = 350; // beat between two dice-moves of the same marble
   const stepDuration = Math.max(MIN_MS, STEP_MS);
+
+  // If this marble is moving again right after its previous move (both dice on
+  // one marble), pause a beat first so a bonk on the prior move is legible.
+  const samePrev = lastAnimEnd
+    && lastAnimEnd.playerIndex === playerIndex
+    && lastAnimEnd.marbleId === marbleId;
 
   let step = 0;
   let prevPos = fromPos;
 
   setAnimatingMarble(playerIndex, marbleId);
+  // Pin the marble at its start position so it doesn't flash at its destination
+  // (state is already updated) during the pause or the first frame.
+  setMarbleOverride(playerIndex, marbleId, fromPos);
+  if (samePrev) drawBoard(gameState);
 
   function animateToNext() {
     if (step >= waypoints.length) {
       clearMarbleOverride(playerIndex, marbleId);
       clearAnimatingMarble();
+      lastAnimEnd = { playerIndex, marbleId };
       if (bonk) {
         playBonk();
         // Animate the bumped marble back to base now that the attacker has arrived
@@ -713,7 +727,8 @@ function runNextAnimation() {
     requestAnimationFrame(frame);
   }
 
-  animateToNext();
+  if (samePrev) setTimeout(animateToNext, PAUSE_MS);
+  else animateToNext();
 }
 
 // ---- Backgammon-style notation helpers ----
