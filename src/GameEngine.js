@@ -133,12 +133,16 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
 
     // Normal main-track movement (may redirect into home stretch)
     const dest = computeTrackMove(state, player, marble, dieVal);
-    if (dest) {
-      moves.push({ type: 'move', dieIndex, marbleId, ...dest });
-      // If the move enters home, also offer passing the home entry and continuing on track
-      if (dest.toZone === 'home') {
-        const passHome = computeTrackMove(state, player, marble, dieVal, true);
-        if (passHome && passHome.toSpace !== player.config.homeEntry) moves.push({ type: 'move', dieIndex, marbleId, ...passHome });
+    if (dest) moves.push({ type: 'move', dieIndex, marbleId, ...dest });
+
+    // If the path reaches/crosses the home entry, also offer passing it and
+    // continuing around the track. This applies even when entering home is
+    // blocked or would overshoot (dest === null) — the player can always choose
+    // to skip home and keep going, so they're never stuck with no move here.
+    if (!dest || dest.toZone === 'home') {
+      const passHome = computeTrackMove(state, player, marble, dieVal, true);
+      if (passHome && passHome.toSpace !== player.config.homeEntry) {
+        moves.push({ type: 'move', dieIndex, marbleId, ...passHome });
       }
     }
 
