@@ -26,7 +26,7 @@ let turnLogMoves  = [];   // [{ marbleId, path: [str,...], bumped }] for current
 let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
 let lastBumpedAt  = null; // zone-descriptor set by marbleBumped, consumed by marbleMoved
-let pendingBump   = null; // { ownerIndex, marbleId, fromPos } — bumped marble awaiting return animation
+let pendingBumps  = []; // [{ ownerIndex, marbleId, fromPos }] — bumped marbles awaiting return animation
 let lastAnimEnd   = null; // { playerIndex, marbleId } — last marble whose animation just finished
 
 // Maps color name (from gameState / lobbyState) to hex — ARM_MAP means player 1 in
@@ -378,10 +378,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   } else {
     if (bumped) {
       playBonk();
-      if (pendingBump) {
-        clearMarbleOverride(pendingBump.ownerIndex, pendingBump.marbleId);
-        pendingBump = null;
-      }
+      flushPendingBumps();
     }
     if (chime) playHomeChime();
     drawBoard(gameState);
@@ -405,13 +402,14 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   const idx = animationQueue.findIndex(a => a.playerIndex === ownerIndex && a.marbleId === marbleId);
   if (idx !== -1) animationQueue.splice(idx, 1);
 
-  // Hold the marble visually at its pre-bump position until the attacker arrives
+  // Hold the marble visually at its pre-bump position until the attacker arrives.
+  // Multiple marbles can be bumped during a single multi-leg move, so accumulate
+  // them — never overwrite — to ensure each override is later cleared.
   if (fromPos) {
     setMarbleOverride(ownerIndex, marbleId, fromPos);
-    pendingBump = { ownerIndex, marbleId, fromPos };
+    pendingBumps.push({ ownerIndex, marbleId, fromPos });
   } else {
     clearMarbleOverride(ownerIndex, marbleId);
-    pendingBump = null;
   }
   // Don't redraw yet — attacker animation will handle sequencing
 });
@@ -476,7 +474,7 @@ on('undone', ({ gameState: gs }) => {
   selectedMarbleMoves = [];
   commitPending = false;
   lastBumpedAt = null;
-  pendingBump = null;
+  pendingBumps = [];
   // Clear any in-flight animations and overrides — server state is authoritative
   animationQueue.length = 0;
   animationRunning = false;
@@ -644,16 +642,20 @@ function animateMarblePath(playerIndex, marbleId, fromPos, waypoints, bonk = fal
   if (!animationRunning) runNextAnimation();
 }
 
+// Snap every still-pending bumped marble straight to base (clear its override).
+// Caller redraws. Prevents a bumped marble's override from being left stranded
+// on the track when its return animation can't run.
+function flushPendingBumps() {
+  for (const b of pendingBumps) clearMarbleOverride(b.ownerIndex, b.marbleId);
+  pendingBumps = [];
+}
+
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
     lastAnimEnd = null;
-    // Safety: if a pendingBump override was never consumed, clear it now
-    if (pendingBump) {
-      clearMarbleOverride(pendingBump.ownerIndex, pendingBump.marbleId);
-      pendingBump = null;
-      drawBoard(gameState);
-    }
+    // Safety: snap any bumped marbles whose return animation never ran to base
+    if (pendingBumps.length) { flushPendingBumps(); drawBoard(gameState); }
     return;
   }
   animationRunning = true;
@@ -686,10 +688,12 @@ function runNextAnimation() {
       lastAnimEnd = { playerIndex, marbleId };
       if (bonk) {
         playBonk();
-        // Animate the bumped marble back to base now that the attacker has arrived
-        if (pendingBump) {
-          const { ownerIndex, marbleId: bumpedId, fromPos: bumpFromPos } = pendingBump;
-          pendingBump = null;
+        // Animate the just-bumped marble back to base now that the attacker has
+        // arrived. Any other still-pending bumps are snapped to base first so no
+        // override is left stranded on the track.
+        if (pendingBumps.length) {
+          const { ownerIndex, marbleId: bumpedId, fromPos: bumpFromPos } = pendingBumps.pop();
+          flushPendingBumps();
           const toPos = getBasePosition(ownerIndex, bumpedId);
           if (bumpFromPos && toPos) {
             drawBoard(gameState);
