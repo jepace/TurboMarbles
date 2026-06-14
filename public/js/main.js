@@ -362,15 +362,23 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   bumpHandoff = [];
   const bumped = victims.length > 0;
 
-  // Accumulate move for backgammon notation; merge consecutive same-marble moves
+  // Accumulate move for backgammon notation; merge consecutive same-marble moves.
+  // Bump spaces are marked with * inline (e.g. "28/29*/30") using the victim's
+  // zone location so the asterisk lands on the right space, not the final one.
+  const bumpLocs = new Set(victims.map(v => locNotation(v.loc)));
   const fromStr = locNotation(from);
-  const toStr   = locNotation(to);
+  const toStr   = locNotation(to) + (bumpLocs.has(locNotation(to)) ? '*' : '');
   const last    = turnLogMoves[turnLogMoves.length - 1];
-  if (last && last.marbleId === marbleId && last.path[last.path.length - 1] === fromStr) {
-    last.path.push(toStr);
-    last.bumped = last.bumped || bumped;
+  if (last && last.marbleId === marbleId) {
+    // Strip any trailing * from the previous segment's last entry to compare cleanly
+    const prevLast = last.path[last.path.length - 1].replace('*', '');
+    if (prevLast === fromStr) {
+      last.path.push(toStr);
+    } else {
+      turnLogMoves.push({ marbleId, path: [fromStr, toStr] });
+    }
   } else {
-    turnLogMoves.push({ marbleId, path: [fromStr, toStr], bumped });
+    turnLogMoves.push({ marbleId, path: [fromStr, toStr] });
   }
 
   // Build canvas waypoints from server path
@@ -422,7 +430,7 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
 
   if (fromPos) setMarbleOverride(ownerIndex, marbleId, fromPos);
   else         clearMarbleOverride(ownerIndex, marbleId);
-  bumpHandoff.push({ ownerIndex, marbleId, fromPos });
+  bumpHandoff.push({ ownerIndex, marbleId, fromPos, loc: from });
 });
 
 on('turnChanged', ({ playerIndex }) => {
@@ -741,7 +749,7 @@ function flushTurnLog() {
   const color   = gameState?.players[pi]?.color ?? null;
   const diceStr = `${turnLogDice[0]}-${turnLogDice[1]}`;
   const movesStr = turnLogMoves.length
-    ? turnLogMoves.map(m => `${m.path.join('/')}${m.bumped ? '*' : ''}`).join(' ')
+    ? turnLogMoves.map(m => m.path.join('/')).join(' ')
     : '--';
   log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
   turnLogMoves = [];
