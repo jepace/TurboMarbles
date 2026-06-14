@@ -160,9 +160,10 @@ export function drawBoard(gameState) {
   ctx.clearRect(0, 0, W, W);
   drawBackground();
   drawAllArms(n);
+  drawBase(n);       // below the track so the track overlaps the base, not vice-versa
   drawTrackRail();
   drawTrack();
-  drawHomeAndBase(n);
+  drawHome(n);
   drawCenter();
   if (gameState) drawMarbles(gameState);
 }
@@ -359,7 +360,9 @@ function drawStar6(cx, cy, R, fillColor, strokeColor) {
 
 // ---- Home slots + Base panels ----
 
-function drawHomeAndBase(n) {
+// Base panels are drawn early (below the track) so the track overlaps them
+// rather than the other way around. Home slots are drawn later (drawHome).
+function drawBase(n) {
   const R = W * 0.020;
   const { BASE_R, BASE_G } = GEO;
   const activeSet = new Set(playerToArm.slice(0, n));
@@ -371,28 +374,6 @@ function drawHomeAndBase(n) {
     const ang      = armAngle(ai);
     const dx       = Math.cos(ang), dy = Math.sin(ang);
     const px       = -Math.sin(ang), py = Math.cos(ang);
-
-    // -- Home slots --
-    for (let s = 1; s <= HOME_SLOTS; s++) {
-      const p = homePos[ai]?.[s];
-      if (!p) continue;
-      // Filled slot with player color
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.15, 0, Math.PI * 2);
-      ctx.fillStyle   = color + (isActive ? '88' : '18');
-      ctx.fill();
-      ctx.strokeStyle = dark + (isActive ? 'cc' : '30');
-      ctx.lineWidth   = 2;
-      ctx.stroke();
-      // Inner highlight arc
-      if (isActive) {
-        ctx.beginPath();
-        ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.9, Math.PI * 1.05, Math.PI * 1.75);
-        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        ctx.lineWidth   = R * 0.40;
-        ctx.stroke();
-      }
-    }
 
     // -- Base panel: solid colored background behind the 1×4 marble row --
     const panW  = BASE_G * 2.10;  // half-width of panel (covers 4 slots at ±1.5·BASE_G)
@@ -425,6 +406,39 @@ function drawHomeAndBase(n) {
         ctx.arc(p.x - R * 0.15, p.y - R * 0.15, R * 1.0, Math.PI * 1.05, Math.PI * 1.75);
         ctx.strokeStyle = 'rgba(255,255,255,0.25)';
         ctx.lineWidth   = R * 0.45;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function drawHome(n) {
+  const R = W * 0.020;
+  const activeSet = new Set(playerToArm.slice(0, n));
+
+  for (let ai = 0; ai < ALL_ARMS; ai++) {
+    const isActive = activeSet.has(ai);
+    const color    = COLORS[ai];
+    const dark     = DARK_C[ai];
+
+    // -- Home slots --
+    for (let s = 1; s <= HOME_SLOTS; s++) {
+      const p = homePos[ai]?.[s];
+      if (!p) continue;
+      // Filled slot with player color
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R * 1.15, 0, Math.PI * 2);
+      ctx.fillStyle   = color + (isActive ? '88' : '18');
+      ctx.fill();
+      ctx.strokeStyle = dark + (isActive ? 'cc' : '30');
+      ctx.lineWidth   = 2;
+      ctx.stroke();
+      // Inner highlight arc
+      if (isActive) {
+        ctx.beginPath();
+        ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.9, Math.PI * 1.05, Math.PI * 1.75);
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth   = R * 0.40;
         ctx.stroke();
       }
     }
