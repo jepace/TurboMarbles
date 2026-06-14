@@ -838,7 +838,9 @@ function playerName(index) {
   return gameState?.players?.[index]?.name ?? `Player ${index + 1}`;
 }
 
-const LOG_MAX = 60;
+// Keep the entire game history visible. The ceiling is just a safety guard
+// against pathological unbounded DOM growth, not a normal-game limit.
+const LOG_MAX = 5000;
 function log(msg, color) {
   const el = $('game-log');
   const entry = document.createElement('div');
