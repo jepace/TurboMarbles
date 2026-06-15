@@ -220,7 +220,9 @@ function drawAllArms(n) {
     const isActive = activeSet.has(ai);
     const colAlpha  = isActive ? 'ff' : '38';
     const homeAlpha = isActive ? 'ee' : '28';
-    const colStroke = dark + (isActive ? '99' : '44');
+
+    // No strokes on the strips — adjacent same-color strips would otherwise show
+    // internal seams that break the illusion of one continuous piece.
 
     // Left column strip (+COL_OFF), from the star row down to the bottom row
     fillQuad([
@@ -228,7 +230,7 @@ function drawAllArms(n) {
       pt(COL_TOP,          COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW, COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW, COL_OFF - COL_HW),
-    ], color + colAlpha, colStroke, 1.5);
+    ], color + colAlpha, null);
 
     // Right column strip (-COL_OFF), from the previous arm's star down
     fillQuad([
@@ -236,7 +238,7 @@ function drawAllArms(n) {
       pt(COL_TOP,          -COL_OFF - COL_HW),
       pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
       pt(R_OUTER + COL_HW, -COL_OFF + COL_HW),
-    ], color + colAlpha, colStroke, 1.5);
+    ], color + colAlpha, null);
 
     // Bottom row strip connecting the two columns
     fillQuad([
@@ -244,7 +246,7 @@ function drawAllArms(n) {
       pt(R_OUTER - COL_HW,  COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW,  COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
-    ], color + colAlpha, colStroke, 1.5);
+    ], color + colAlpha, null);
 
     // Home corridor strip on the arm axis, spanning rows 1 (H4) … 4 (H1)
     const homeIn  = COL_TOP - HOME_HW;
@@ -254,7 +256,7 @@ function drawAllArms(n) {
       pt(homeOut, -HOME_HW),
       pt(homeIn,  -HOME_HW),
       pt(homeIn,   HOME_HW),
-    ], color + homeAlpha, dark + (isActive ? '99' : '30'), 1);
+    ], color + homeAlpha, null);
   }
 }
 
@@ -380,14 +382,13 @@ function drawBase(n) {
     const panH1 = BASE_G * 0.80;  // inward overhang from BASE_R
     const panH2 = BASE_G * 0.80;  // outward overhang from BASE_R
     const panAlpha = isActive ? 'ff' : '30';
-    const panBorder = isActive ? dark + 'ff' : dark + '40';
 
     fillQuad([
       { x: CX + dx * (BASE_R - panH1) + px * ( panW), y: CY + dy * (BASE_R - panH1) + py * ( panW) },
       { x: CX + dx * (BASE_R - panH1) + px * (-panW), y: CY + dy * (BASE_R - panH1) + py * (-panW) },
       { x: CX + dx * (BASE_R + panH2) + px * (-panW), y: CY + dy * (BASE_R + panH2) + py * (-panW) },
       { x: CX + dx * (BASE_R + panH2) + px * ( panW), y: CY + dy * (BASE_R + panH2) + py * ( panW) },
-    ], color + panAlpha, panBorder, 2.5);
+    ], color + panAlpha, null);
 
     // -- Marble holes on base panel --
     for (let mi = 0; mi < MARBLES_PER_PLAYER; mi++) {
