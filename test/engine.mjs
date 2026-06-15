@@ -630,7 +630,7 @@ describe('home entry — overshoot from near homeEntry', () => {
     'from 81, die=6 → slot 3');
 });
 
-describe('home entry — blocked home still offers pass-home around the track', () => {
+describe('home entry — blocked home yields no move (die is forfeitable)', () => {
   const s = makeState(2);
   // Yellow homeEntry=84. Marble 0 sits on the home entry; marble 1 occupies home
   // slot 2, so entering home beyond slot 1 is blocked.
@@ -638,20 +638,19 @@ describe('home entry — blocked home still offers pass-home around the track', 
   setMarble(s, 0, 1, 'home', null, 2, false);
   setDice(s, 1, 4);
 
-  // die=1: can enter slot 1 (free) AND pass home to continue around the track
+  // die=1: can enter slot 1 (free) — no pass-home offered
   const m1 = legalMovesForDie(s, 0, 0, 0);
   assert(m1.some(m => m.toZone === 'home' && m.toSlot === 1),
     'die=1 at homeEntry → enter slot 1');
-  assert(m1.some(m => m.toZone === 'track'),
-    'die=1 at homeEntry → also offers passing home around the track');
+  assert(!m1.some(m => m.toZone === 'track'),
+    'die=1 at homeEntry → no around-the-track option (not forced)');
 
-  // die=4: home slot 4 is blocked by the slot-2 marble, but going around the
-  // track must still be offered (regression — previously yielded no move).
+  // die=4: home slot 4 is blocked — die yields no move and can be forfeited
   const m4 = legalMovesForDie(s, 0, 1, 0);
   assert(m4.filter(m => m.toZone === 'home').length === 0,
     'die=4 at homeEntry → home is blocked, no home move');
-  assert(m4.some(m => m.toZone === 'track'),
-    'die=4 at homeEntry with blocked home → still offers around-the-track move');
+  assert(!m4.some(m => m.toZone === 'track'),
+    'die=4 at homeEntry with blocked home → no move offered, die is forfeitable');
 });
 
 // ---- circleCenter -----------------------------------------------------------

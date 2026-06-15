@@ -697,6 +697,12 @@ function runNextAnimation() {
     lastAnimEnd = { playerIndex, marbleId };
     if (sound === 'bonk') playBonk();
     else if (sound === 'chime') playHomeChime();
+    // Pre-pin the next queued marble at its start position before drawing, so
+    // it doesn't flash at its already-updated destination during this frame.
+    if (animationQueue.length > 0) {
+      const next = animationQueue[0];
+      setMarbleOverride(next.playerIndex, next.marbleId, next.fromPos);
+    }
     drawBoard(gameState);
     runNextAnimation();
   }
