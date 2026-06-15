@@ -241,6 +241,32 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ---- Lobby [+]/[-] keys — host adds/removes a robot ----
+document.addEventListener('keydown', e => {
+  if (e.key !== '+' && e.key !== '-') return;
+  // Only in the waiting room, and only the host (host-controls visible)
+  if (!$('screen-lobby').classList.contains('active')) return;
+  if ($('host-controls').style.display === 'none') return;
+  // Don't fire while typing in an input/textarea
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+  if (e.key === '+') {
+    if (!$('btn-add-robot').disabled) send({ action: 'addRobot' });
+  } else {
+    // Remove the highest-index robot currently in a slot
+    const items = [...document.querySelectorAll('#lobby-slots li')];
+    for (let i = items.length - 1; i >= 0; i--) {
+      const nameEl = items[i].querySelector('.slot-name');
+      if (nameEl && nameEl.textContent.includes('🤖')) {
+        const playerIndex = Number(items[i].id.replace('slot-', ''));
+        send({ action: 'removeRobot', playerIndex });
+        break;
+      }
+    }
+  }
+  e.preventDefault();
+});
+
 // ---- Play again ----
 $('btn-play-again').addEventListener('click', () => {
   $('win-overlay').style.display = 'none';
