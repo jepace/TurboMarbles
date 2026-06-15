@@ -159,8 +159,8 @@ export function drawBoard(gameState) {
 
   ctx.clearRect(0, 0, W, W);
   drawBackground();
+  drawBase(n);       // drawn first so arm strips and track paint over its inner edge
   drawAllArms(n);
-  drawBase(n);       // below the track so the track overlaps the base, not vice-versa
   drawTrackRail();
   drawTrack();
   drawHome(n);
