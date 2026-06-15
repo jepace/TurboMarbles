@@ -6,7 +6,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit,
-  _reset,
+  _reset, _getRoom,
 } from '../src/GameManager.js';
 import { config as gmConfig } from '../src/GameManager.js';
 
@@ -391,6 +391,48 @@ describe('handleForfeitDie — ILLEGAL_FORFEIT when legal moves exist', () => {
   assert(host.find('error').some(e => e.code === 'ILLEGAL_FORFEIT'),
     'forfeit die with legal moves → ILLEGAL_FORFEIT error');
   assert(host.find('turnChanged').length === 0, 'turn did not advance after illegal forfeit');
+});
+
+// ---- handleForfeitDie — skipping both optional-only dice advances the turn --
+
+describe('handleForfeitDie — broadcasts dieForfeit and lets both optional dice be skipped', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+
+  // Park player 0 at its own home entry with home blocked, so a die of 4 can
+  // ONLY go around the board again (an optional move) — never enter home.
+  const { game } = _getRoom(roomId);
+  const cfg = game.players[0].config;
+  game.players[0].marbles[0] = { id: 0, zone: 'track', space: cfg.homeEntry, slot: null, starEligible: false };
+  game.players[0].marbles[1] = { id: 1, zone: 'home', space: null, slot: 2, starEligible: false };
+
+  const origDelay = gmConfig.skipTurnDelayMs;
+  gmConfig.skipTurnDelayMs = 0; // turnChanged fires synchronously
+
+  // Force dice to [4, 4]: Math.floor(0.5*6)+1 = 4
+  const origRandom = Math.random;
+  Math.random = () => 0.5;
+  handleRoll(host, roomId);
+  Math.random = origRandom;
+  host.sent = [];
+
+  // Skip die 0 — must broadcast dieForfeit and NOT yet advance the turn.
+  handleForfeitDie(host, roomId, 0);
+  assert(host.find('dieForfeit').some(e => e.dieIndex === 0),
+    'skipping die 0 broadcasts dieForfeit(0)');
+  assert(host.find('turnChanged').length === 0, 'turn does not advance after only one die skipped');
+  assert(game.diceUsed[0] === true && game.diceUsed[1] === false, 'only die 0 marked used');
+
+  // Skip die 1 — turn should now advance (both optional dice forfeited).
+  handleForfeitDie(host, roomId, 1);
+  assert(host.find('dieForfeit').some(e => e.dieIndex === 1),
+    'skipping die 1 broadcasts dieForfeit(1)');
+  assert(host.find('turnChanged').length === 1, 'turn advances after both optional dice skipped');
+
+  gmConfig.skipTurnDelayMs = origDelay;
 });
 
 // ---- handleMove — non-current-player rejected -------------------------------

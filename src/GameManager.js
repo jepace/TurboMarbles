@@ -271,6 +271,10 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   }
 
   game.diceUsed[idx] = true;
+  // Tell everyone the die was skipped so the client updates its dice state and
+  // re-evaluates the Skip button for the other die (otherwise the player can be
+  // stuck unable to skip a second optional-only die).
+  broadcast(room, { event: 'dieForfeit', dieIndex: idx });
   advanceTurnIfDone(room);
 }
 
@@ -686,4 +690,9 @@ export function handleCommit(ws, roomId) {
 export function _reset() {
   rooms.clear();
   sessions.clear();
+}
+
+// For unit testing only — exposes a room (and its live game) for state setup.
+export function _getRoom(roomId) {
+  return rooms.get(roomId);
 }
