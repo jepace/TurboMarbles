@@ -243,14 +243,15 @@ document.addEventListener('keydown', e => {
 
 // ---- Lobby [+]/[-] keys — host adds/removes a robot ----
 document.addEventListener('keydown', e => {
-  if (e.key !== '+' && e.key !== '-') return;
+  // "=" is an undocumented alias for "+" so adding robots doesn't require Shift.
+  if (e.key !== '+' && e.key !== '=' && e.key !== '-') return;
   // Only in the waiting room, and only the host (host-controls visible)
   if (!$('screen-lobby').classList.contains('active')) return;
   if ($('host-controls').style.display === 'none') return;
   // Don't fire while typing in an input/textarea
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-  if (e.key === '+') {
+  if (e.key === '+' || e.key === '=') {
     if (!$('btn-add-robot').disabled) send({ action: 'addRobot' });
   } else {
     // Remove the highest-index robot currently in a slot
