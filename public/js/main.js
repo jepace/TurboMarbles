@@ -166,12 +166,21 @@ function doRoll() {
 // ---- Commit / Undo ----
 $('btn-commit').addEventListener('click', doCommit);
 $('btn-undo').addEventListener('click', doUndo);
+$('btn-skip').addEventListener('click', doSkipDie);
+
+function doSkipDie() {
+  const i = skippableDieIndex();
+  if (i < 0) return;
+  send({ action: 'forfeitDie', dieIndex: i });
+  $('btn-skip').style.display = 'none';
+}
 
 function doCommit() {
   send({ action: 'commit' });
   commitPending = false;
   $('btn-commit').style.display = 'none';
   $('btn-undo').style.display   = 'none';
+  $('btn-skip').style.display   = 'none';
 }
 
 function doUndo() {
@@ -187,6 +196,26 @@ function doUndo() {
 // Undo available after any move; Commit only when both dice are used.
 function setUndoVisible(visible)   { $('btn-undo').style.display   = visible ? 'inline-flex' : 'none'; }
 function setCommitVisible(visible) { $('btn-commit').style.display  = visible ? 'inline-flex' : 'none'; }
+
+// The first unused die whose ONLY legal moves are optional (e.g. the pass-home
+// "go around the board again" choice). Such a die can be voluntarily skipped
+// rather than forcing the player to loop the track. Returns the die index or -1.
+function skippableDieIndex() {
+  if (!isMyTurn() || !legalMovesCache || commitPending) return -1;
+  const used = gameState?.diceUsed ?? [false, false];
+  for (let i = 0; i < 2; i++) {
+    if (used[i]) continue;
+    const moves = legalMovesCache[i] ?? [];
+    if (moves.length > 0 && moves.every(m => m.optional)) return i;
+  }
+  return -1;
+}
+
+// Show the Skip Die button only when the active player has a die whose sole
+// remaining option is to go around the board again.
+function updateSkipButton() {
+  $('btn-skip').style.display = skippableDieIndex() >= 0 ? 'inline-flex' : 'none';
+}
 
 // ---- [Enter] key — create/start/roll/commit shortcuts ----
 document.addEventListener('keydown', e => {
@@ -324,6 +353,7 @@ on('rolled', ({ playerIndex, dice, moves }) => {
   } else {
     setHint('');
   }
+  updateSkipButton();
 });
 
 // Server sends updated legal moves after the player uses one die (so remaining
@@ -342,6 +372,7 @@ on('legalMoves', ({ moves, diceUsed }) => {
   selectedMarbleMoves = [];
   drawBoard(gameState);
   if (isMyTurn()) setHint('Click a marble to choose your next move.');
+  updateSkipButton();
 });
 
 on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
@@ -447,6 +478,7 @@ on('turnChanged', ({ playerIndex }) => {
   commitPending = false;
   turnLogPlayer = null;
   setCommitVisible(false); setUndoVisible(false);
+  updateSkipButton();
   setHint('');
   renderSidebar();
   renderDice(null, gameState.players[playerIndex]?.color);
@@ -472,6 +504,7 @@ on('extraRoll', ({ playerIndex }) => {
 on('dieForfeit', ({ dieIndex }) => {
   if (gameState?.diceUsed) gameState.diceUsed[dieIndex] = true;
   renderDice(gameState?.dice);
+  updateSkipButton();
 });
 
 on('turnSkipped', ({ playerIndex }) => {
@@ -485,6 +518,7 @@ on('readyToCommit', ({ playerIndex }) => {
   setCommitVisible(true);
   setUndoVisible(true);
   setHint('Both dice used. Commit your turn or Undo to try again.');
+  updateSkipButton();
 });
 
 on('undone', ({ gameState: gs }) => {
@@ -504,6 +538,7 @@ on('undone', ({ gameState: gs }) => {
   renderDice(gameState.dice);
   drawBoard(gameState);
   if (isMyTurn()) setHint('Undone. Click a marble to make your moves.');
+  updateSkipButton();
 });
 
 on('gameOver', ({ winnerIndex }) => {

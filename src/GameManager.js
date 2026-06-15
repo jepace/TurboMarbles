@@ -261,11 +261,12 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   const idx = Number(dieIndex);
   if (idx !== 0 && idx !== 1) return;
 
-  // A player may only forfeit a die when there are genuinely no legal moves for it.
-  // This prevents using forfeit as a way to skip a die that has valid plays.
+  // A player may forfeit a die only when its remaining legal moves are all
+  // OPTIONAL (e.g. the pass-home "go around the board again" choice). Mandatory
+  // moves cannot be skipped — this prevents forfeit from dodging a real play.
   const legal = allLegalMoves(game, game.turnIndex);
-  if (legal[idx] && legal[idx].length > 0) {
-    sendTo(ws, { event: 'error', code: 'ILLEGAL_FORFEIT', message: 'Legal moves exist' });
+  if (legal[idx] && legal[idx].some(m => !m.optional)) {
+    sendTo(ws, { event: 'error', code: 'ILLEGAL_FORFEIT', message: 'Mandatory moves exist' });
     return;
   }
 

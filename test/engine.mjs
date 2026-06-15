@@ -630,7 +630,7 @@ describe('home entry — overshoot from near homeEntry', () => {
     'from 81, die=6 → slot 3');
 });
 
-describe('home entry — blocked home yields no move (die is forfeitable)', () => {
+describe('home entry — pass-home offered as an optional (skippable) move', () => {
   const s = makeState(2);
   // Yellow homeEntry=84. Marble 0 sits on the home entry; marble 1 occupies home
   // slot 2, so entering home beyond slot 1 is blocked.
@@ -638,19 +638,22 @@ describe('home entry — blocked home yields no move (die is forfeitable)', () =
   setMarble(s, 0, 1, 'home', null, 2, false);
   setDice(s, 1, 4);
 
-  // die=1: can enter slot 1 (free) — no pass-home offered
+  // die=1: can enter slot 1 (free) AND optionally pass home to loop the track
   const m1 = legalMovesForDie(s, 0, 0, 0);
   assert(m1.some(m => m.toZone === 'home' && m.toSlot === 1),
     'die=1 at homeEntry → enter slot 1');
-  assert(!m1.some(m => m.toZone === 'track'),
-    'die=1 at homeEntry → no around-the-track option (not forced)');
+  const around1 = m1.find(m => m.toZone === 'track');
+  assert(around1 && around1.optional === true,
+    'die=1 at homeEntry → around-the-track is offered as optional');
 
-  // die=4: home slot 4 is blocked — die yields no move and can be forfeited
+  // die=4: home slot 4 is blocked, but going around is still offered (optional),
+  // so the player may either loop the board or skip the die.
   const m4 = legalMovesForDie(s, 0, 1, 0);
   assert(m4.filter(m => m.toZone === 'home').length === 0,
     'die=4 at homeEntry → home is blocked, no home move');
-  assert(!m4.some(m => m.toZone === 'track'),
-    'die=4 at homeEntry with blocked home → no move offered, die is forfeitable');
+  const around4 = m4.find(m => m.toZone === 'track');
+  assert(around4 && around4.optional === true,
+    'die=4 at homeEntry with blocked home → optional around-the-track move');
 });
 
 // ---- circleCenter -----------------------------------------------------------

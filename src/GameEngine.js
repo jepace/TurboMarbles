@@ -135,6 +135,16 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
     const dest = computeTrackMove(state, player, marble, dieVal);
     if (dest) moves.push({ type: 'move', dieIndex, marbleId, ...dest });
 
+    // If the marble is at/reaching the home entry, also offer passing home and
+    // continuing around the track. This is an OPTIONAL move: the player may take
+    // it to loop the board again, but is never forced to — they can skip the die
+    // instead. (Tagged optional:true so the server allows a voluntary forfeit.)
+    if (!dest || dest.toZone === 'home') {
+      const passHome = computeTrackMove(state, player, marble, dieVal, true);
+      if (passHome && passHome.toSpace !== player.config.homeEntry) {
+        moves.push({ type: 'move', dieIndex, marbleId, optional: true, ...passHome });
+      }
+    }
 
     return moves;
   }
