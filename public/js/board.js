@@ -322,14 +322,9 @@ function drawTrack(n = ALL_ARMS) {
       const ai    = START_SPACES.get(i);
       const color = COLORS[ai];
       const dark  = DARK_C[ai];
-      // Subtle outer glow in arm color
+      // Colored disc — same radius as a regular hole so it never overlaps neighbours
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.9, 0, Math.PI * 2);
-      ctx.fillStyle = color + '30';
-      ctx.fill();
-      // Colored disc (darker than full color so marble contrast is maintained)
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.3, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, R * 1.05, 0, Math.PI * 2);
       ctx.fillStyle = dark;
       ctx.fill();
       ctx.strokeStyle = color;
@@ -353,7 +348,7 @@ function drawTrack(n = ALL_ARMS) {
       const dark  = DARK_C[ai];
       // Dark hole base
       ctx.beginPath();
-      ctx.arc(p.x, p.y, R * 1.3, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, R * 1.05, 0, Math.PI * 2);
       ctx.fillStyle = dark;
       ctx.fill();
       ctx.strokeStyle = color;
