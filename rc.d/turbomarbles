@@ -12,12 +12,17 @@
 #   turbomarbles_origin=""            # optional, e.g. https://example.com
 #   turbomarbles_user="marbles"       # optional, default marbles
 #
-# The service user is provisioned by deploy.sh (pw useradd), with a real
-# home directory at turbomarbles_dir — daemon(8)'s -u uses setusercontext(3),
-# which chdir(2)s to the user's home; FreeBSD's stock "www" account has
-# pw_dir=/nonexistent, which makes setusercontext fail. A dedicated service
-# account with a real home avoids that and is the more correct separation
-# of duties (www is for the web server, not arbitrary app daemons).
+# The service user is provisioned by deploy.sh (pw useradd), as a
+# dedicated account rather than reusing the system "www" user — cleaner
+# separation between the web server and arbitrary app daemons.
+#
+# Confirmed by direct testing in this jail (not assumed): with daemon(8)'s
+# -u flag, the pidfile is created AFTER privileges are dropped, so the
+# *target* user needs write access to the pidfile's directory. /var/run
+# is root:wheel 755, so a non-wheel service user cannot create a pidfile
+# there directly. Fix: give the service its own pidfile directory that it
+# owns (turbomarbles_piddir), created idempotently in prestart — the
+# standard pattern for FreeBSD rc.d scripts that drop to a non-root user.
 
 . /etc/rc.subr
 
@@ -33,7 +38,8 @@ load_rc_config "${name}"
 : ${turbomarbles_user:="marbles"}
 : ${turbomarbles_dir:="/var/www/marbles"}
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
-: ${turbomarbles_pidfile:="/var/run/turbomarbles.pid"}
+: ${turbomarbles_piddir:="/var/run/turbomarbles"}
+: ${turbomarbles_pidfile:="${turbomarbles_piddir}/turbomarbles.pid"}
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
@@ -48,6 +54,9 @@ start_precmd="turbomarbles_prestart"
 
 turbomarbles_prestart()
 {
+    # Pidfile directory must be owned by turbomarbles_user — daemon -u
+    # creates the pidfile as that user, after the privilege drop.
+    install -d -o "${turbomarbles_user}" -m 755 "${turbomarbles_piddir}"
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
 }
