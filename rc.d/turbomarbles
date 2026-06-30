@@ -16,13 +16,22 @@
 # dedicated account rather than reusing the system "www" user — cleaner
 # separation between the web server and arbitrary app daemons.
 #
-# Confirmed by direct testing in this jail (not assumed): with daemon(8)'s
-# -u flag, the pidfile is created AFTER privileges are dropped, so the
-# *target* user needs write access to the pidfile's directory. /var/run
-# is root:wheel 755, so a non-wheel service user cannot create a pidfile
-# there directly. Fix: give the service its own pidfile directory that it
-# owns (turbomarbles_piddir), created idempotently in prestart — the
-# standard pattern for FreeBSD rc.d scripts that drop to a non-root user.
+# Privilege drop: rc.subr has a BUILT-IN convention — if ${name}_user is
+# set (here, turbomarbles_user), run_rc_command automatically wraps the
+# whole command in `su -m ${turbomarbles_user} -c '...'` before executing
+# it. We rely on that native mechanism and do NOT also pass daemon(8)'s
+# own -u flag — doing both caused a double privilege-drop: rc.subr's su
+# wrap already puts the process under the unprivileged user, so a second
+# `daemon -u` then tried to setusercontext(3) from a non-root process,
+# which fails with "failed to set user environment" (confirmed by testing
+# the same daemon -u invocation manually, as root, where it worked fine —
+# the difference was specifically the rc.subr su-wrap layering on top).
+#
+# Confirmed by direct testing in this jail: the pidfile directory must be
+# owned by the service user, since daemon ends up running as that user
+# (via the su wrap) by the time it creates the pidfile. /var/run is
+# root:wheel 755, so a non-wheel user can't create a pidfile there
+# directly — hence the dedicated, owned turbomarbles_piddir below.
 
 . /etc/rc.subr
 
@@ -43,10 +52,11 @@ load_rc_config "${name}"
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
-# -u drops privileges via setusercontext(3) (no shell, no su, no quoting).
-# /usr/bin/env sets the child's environment without needing a shell to
-# interpret VAR=val assignments.
-command_args="-f -u ${turbomarbles_user} -p ${turbomarbles_pidfile} -o ${turbomarbles_log} \
+# No -u here: rc.subr's native ${name}_user (turbomarbles_user) support
+# already drops privileges via su -m before this command ever runs.
+# /usr/bin/env sets the child's environment without needing extra shell
+# quoting to interpret VAR=val assignments.
+command_args="-f -p ${turbomarbles_pidfile} -o ${turbomarbles_log} \
     /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} ORIGIN=${turbomarbles_origin} \
     /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
