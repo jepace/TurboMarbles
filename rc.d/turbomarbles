@@ -27,13 +27,16 @@ load_rc_config "${name}"
 : ${turbomarbles_user:="www"}
 : ${turbomarbles_dir:="/var/www/marbles"}
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
-: ${turbomarbles_pidfile:="/var/run/turbomarbles/turbomarbles.pid"}
+: ${turbomarbles_pidfile:="/var/run/turbomarbles.pid"}
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
-# -u drops privileges to turbomarbles_user before exec'ing node
-command_args="-f -u ${turbomarbles_user} -p ${pidfile} -o ${turbomarbles_log} \
-    /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
+# daemon runs as root (needs /var/run write access for pidfile).
+# su -m drops to turbomarbles_user without requiring a login shell, so
+# it works fine with www whose shell is /usr/sbin/nologin.
+command_args="-f -p ${pidfile} -o ${turbomarbles_log} \
+    /usr/bin/su -m ${turbomarbles_user} -c \
+    'exec /usr/local/bin/node ${turbomarbles_dir}/src/server.js'"
 
 start_precmd="turbomarbles_prestart"
 stop_postcmd="turbomarbles_poststop"
@@ -45,15 +48,14 @@ turbomarbles_prestart()
     if [ -n "${turbomarbles_origin}" ]; then
         export ORIGIN="${turbomarbles_origin}"
     fi
-    # Create pid directory and log file owned by the service user
-    install -d -o "${turbomarbles_user}" /var/run/turbomarbles
+    # Ensure log file exists and is writable by the service user
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
 }
 
 turbomarbles_poststop()
 {
-    rm -f "${pidfile}"
+    rm -f "${turbomarbles_pidfile}"
 }
 
 run_rc_command "$1"
