@@ -43,7 +43,9 @@ bastille cmd marbles sh -c "cd /var/www/marbles && npm install --omit=dev --pref
 bastille cmd marbles chown -R www:www /var/www/marbles
 
 # Install the RC script and make it executable.
-sudo install -m 755 "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
+sudo mkdir -p "${JAIL_ROOT}/usr/local/etc/rc.d"
+sudo cp "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
+sudo chmod 755 "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
 
 # Restart the service if it is enabled in the jail's rc.conf; otherwise
 # remind the operator to enable it.
