@@ -339,7 +339,7 @@ function drawTrack(n = ALL_ARMS) {
       const ang = armAngle(ai);
       const tdx = Math.cos(ang),    tdy = Math.sin(ang);    // radial (arm axis)
       const tpx = -Math.sin(ang),   tpy = Math.cos(ang);    // clockwise tangent
-      const tr  = R * 0.65;
+      const tr  = R * 0.40;
       ctx.beginPath();
       ctx.moveTo(p.x + tpx * tr,                         p.y + tpy * tr);
       ctx.lineTo(p.x - tpx * tr * 0.55 - tdx * tr * 0.9, p.y - tpy * tr * 0.55 - tdy * tr * 0.9);
@@ -363,7 +363,7 @@ function drawTrack(n = ALL_ARMS) {
       const ang = armAngle(ai);
       const idx = -Math.cos(ang),  idy = -Math.sin(ang); // inward radial
       const ipx = -Math.sin(ang),  ipy =  Math.cos(ang); // perpendicular (for base width)
-      const tr  = R * 0.65;
+      const tr  = R * 0.40;
       ctx.beginPath();
       ctx.moveTo(p.x + idx * tr,                         p.y + idy * tr);
       ctx.lineTo(p.x - idx * tr * 0.55 - ipx * tr * 0.9, p.y - idy * tr * 0.55 - ipy * tr * 0.9);
