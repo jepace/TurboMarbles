@@ -211,18 +211,17 @@ function drawAllArms(n) {
   const COL_HW  = W * 0.030;   // half-width of the U track strips
   const HOME_HW = W * 0.026;   // half-width of the home corridor strip
 
+  const activeSet = new Set(playerToArm.slice(0, n));
+
   for (let ai = 0; ai < ALL_ARMS; ai++) {
-    const ang   = armAngle(ai);
-    const dx    = Math.cos(ang), dy = Math.sin(ang);
-    const px    = -Math.sin(ang), py = Math.cos(ang);
-    const pt    = (r, p) => ({ x: CX + dx * r + px * p, y: CY + dy * r + py * p });
-    const color = COLORS[ai];
-    const dark  = DARK_C[ai];
+    const ang      = armAngle(ai);
+    const dx       = Math.cos(ang), dy = Math.sin(ang);
+    const px       = -Math.sin(ang), py = Math.cos(ang);
+    const pt       = (r, p) => ({ x: CX + dx * r + px * p, y: CY + dy * r + py * p });
+    const color    = COLORS[ai];
+    const isActive = activeSet.has(ai);
 
-    // No strokes on the strips — adjacent same-color strips would otherwise show
-    // internal seams that break the illusion of one continuous piece.
-
-    // Left column strip (+COL_OFF), from the star row down to the bottom row
+    // Track strips: always full color (no overlap blending issues since they're opaque)
     fillQuad([
       pt(COL_TOP,          COL_OFF - COL_HW),
       pt(COL_TOP,          COL_OFF + COL_HW),
@@ -230,7 +229,6 @@ function drawAllArms(n) {
       pt(R_OUTER + COL_HW, COL_OFF - COL_HW),
     ], color + 'ff', null);
 
-    // Right column strip (-COL_OFF), from the previous arm's star down
     fillQuad([
       pt(COL_TOP,          -COL_OFF + COL_HW),
       pt(COL_TOP,          -COL_OFF - COL_HW),
@@ -238,7 +236,6 @@ function drawAllArms(n) {
       pt(R_OUTER + COL_HW, -COL_OFF + COL_HW),
     ], color + 'ff', null);
 
-    // Bottom row strip connecting the two columns
     fillQuad([
       pt(R_OUTER - COL_HW, -COL_OFF - COL_HW),
       pt(R_OUTER - COL_HW,  COL_OFF + COL_HW),
@@ -246,7 +243,7 @@ function drawAllArms(n) {
       pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
     ], color + 'ff', null);
 
-    // Home corridor strip on the arm axis, spanning rows 1 (H4) … 4 (H1)
+    // Home corridor strip: dimmed for non-playing arms
     const homeIn  = COL_TOP - HOME_HW;
     const homeOut = COL_TOP + ROW_STEP * 3 + HOME_HW;
     fillQuad([
@@ -254,7 +251,7 @@ function drawAllArms(n) {
       pt(homeOut, -HOME_HW),
       pt(homeIn,  -HOME_HW),
       pt(homeIn,   HOME_HW),
-    ], color + 'ee', null);
+    ], color + (isActive ? 'ee' : '30'), null);
   }
 }
 
