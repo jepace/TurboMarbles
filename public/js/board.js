@@ -479,13 +479,24 @@ function drawCenter() {
     ctx.stroke();
   }
 
-  // Inner dark circle at the center (no star — gold star clashed with yellow marbles)
+  // Inner landing zone — slightly lighter than board so it reads as a hole,
+  // with a prominent brass ring so it's clearly distinct from the wedges.
   ctx.beginPath();
   ctx.arc(CX, CY, innerR * 1.6, 0, Math.PI * 2);
-  ctx.fillStyle = '#06101e';
+  ctx.fillStyle = '#06080f';
   ctx.fill();
+  // Inner highlight arc for drilled-hole depth (matches track space style)
+  ctx.beginPath();
+  ctx.arc(CX - innerR * 0.18, CY - innerR * 0.18, innerR * 1.25,
+          Math.PI * 1.05, Math.PI * 1.75);
+  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+  ctx.lineWidth   = innerR * 0.55;
+  ctx.stroke();
+  // Brass border ring
+  ctx.beginPath();
+  ctx.arc(CX, CY, innerR * 1.6, 0, Math.PI * 2);
   ctx.strokeStyle = '#c8920a';
-  ctx.lineWidth   = 1.5;
+  ctx.lineWidth   = 3;
   ctx.stroke();
 }
 
