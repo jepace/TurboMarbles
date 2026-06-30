@@ -534,15 +534,14 @@ function drawCenter() {
     ctx.stroke();
   }
 
-  // Center landing space — white circle the size of a marble hole so it
-  // reads clearly as a space, with a brass border ring.
-  const holeR = W * 0.022; // matches marble hole sizing
+  // Center landing space — dark hole with white ring, matching other marble holes.
+  const holeR = W * 0.022;
   ctx.beginPath();
   ctx.arc(CX, CY, holeR, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(255,255,255,0.90)';
+  ctx.fillStyle = '#06080f';
   ctx.fill();
-  ctx.strokeStyle = '#c8920a';
-  ctx.lineWidth   = 2.5;
+  ctx.strokeStyle = 'rgba(255,255,255,0.90)';
+  ctx.lineWidth   = 3;
   ctx.stroke();
 }
 
