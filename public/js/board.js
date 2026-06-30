@@ -23,8 +23,9 @@ import {
   ARM_MAP, ALL_STARS as STAR_SPACES, PLAYER_CONFIG,
 } from './constants.js';
 
-// spaceNumber → arm index, for the 6 start spaces
-const START_SPACES = new Map(PLAYER_CONFIG.map((p, i) => [p.start, i]));
+// spaceNumber → arm index, for the 6 start spaces and 6 home entry spaces
+const START_SPACES      = new Map(PLAYER_CONFIG.map((p, i) => [p.start,      i]));
+const HOME_ENTRY_SPACES = new Map(PLAYER_CONFIG.map((p, i) => [p.homeEntry,  i]));
 
 // arms 0-5: blue, pink, orange, yellow, green, white (clockwise from bottom)
 const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
@@ -343,6 +344,30 @@ function drawTrack(n = ALL_ARMS) {
       ctx.moveTo(p.x + tpx * tr,                         p.y + tpy * tr);
       ctx.lineTo(p.x - tpx * tr * 0.55 - tdx * tr * 0.9, p.y - tpy * tr * 0.55 - tdy * tr * 0.9);
       ctx.lineTo(p.x - tpx * tr * 0.55 + tdx * tr * 0.9, p.y - tpy * tr * 0.55 + tdy * tr * 0.9);
+      ctx.closePath();
+      ctx.fillStyle = color + 'dd';
+      ctx.fill();
+    } else if (HOME_ENTRY_SPACES.has(i) && activeSet.has(HOME_ENTRY_SPACES.get(i))) {
+      const ai    = HOME_ENTRY_SPACES.get(i);
+      const color = COLORS[ai];
+      const dark  = DARK_C[ai];
+      // Dark hole base
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R * 1.3, 0, Math.PI * 2);
+      ctx.fillStyle = dark;
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 2;
+      ctx.stroke();
+      // Arrow pointing inward along the arm axis (toward the home corridor)
+      const ang = armAngle(ai);
+      const idx = -Math.cos(ang),  idy = -Math.sin(ang); // inward radial
+      const ipx = -Math.sin(ang),  ipy =  Math.cos(ang); // perpendicular (for base width)
+      const tr  = R * 0.65;
+      ctx.beginPath();
+      ctx.moveTo(p.x + idx * tr,                         p.y + idy * tr);
+      ctx.lineTo(p.x - idx * tr * 0.55 - ipx * tr * 0.9, p.y - idy * tr * 0.55 - ipy * tr * 0.9);
+      ctx.lineTo(p.x - idx * tr * 0.55 + ipx * tr * 0.9, p.y - idy * tr * 0.55 + ipy * tr * 0.9);
       ctx.closePath();
       ctx.fillStyle = color + 'dd';
       ctx.fill();
