@@ -165,7 +165,7 @@ export function drawBoard(gameState) {
   drawBase(n);       // drawn first so arm strips and track paint over its inner edge
   drawAllArms(n);
   drawTrackRail();
-  drawTrack();
+  drawTrack(n);
   drawHome(n);
   drawCenter();
   if (gameState) drawMarbles(gameState);
@@ -292,8 +292,9 @@ function drawTrackRail() {
 
 // ---- Track spaces: drilled-hole look ----
 
-function drawTrack() {
+function drawTrack(n = ALL_ARMS) {
   const R = W * 0.020;
+  const activeSet = new Set(playerToArm.slice(0, n));
 
   for (let i = 1; i <= TRACK_SIZE; i++) {
     const p = trackPos[i];
@@ -316,7 +317,7 @@ function drawTrack() {
       ctx.stroke();
       // 6-pointed star inset
       drawStar6(p.x, p.y, R * 1.1, STAR_GOLD, '#8a5e00');
-    } else if (START_SPACES.has(i)) {
+    } else if (START_SPACES.has(i) && activeSet.has(START_SPACES.get(i))) {
       const ai    = START_SPACES.get(i);
       const color = COLORS[ai];
       const dark  = DARK_C[ai];
