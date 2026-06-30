@@ -27,7 +27,7 @@ load_rc_config "${name}"
 : ${turbomarbles_user:="www"}
 : ${turbomarbles_dir:="/var/www/marbles"}
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
-: ${turbomarbles_pidfile:="/var/run/turbomarbles.pid"}
+: ${turbomarbles_pidfile:="/var/run/turbomarbles/turbomarbles.pid"}
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
@@ -45,7 +45,8 @@ turbomarbles_prestart()
     if [ -n "${turbomarbles_origin}" ]; then
         export ORIGIN="${turbomarbles_origin}"
     fi
-    # Ensure log file is owned by the service user so daemon can write to it
+    # Create pid directory and log file owned by the service user
+    install -d -o "${turbomarbles_user}" /var/run/turbomarbles
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
 }
