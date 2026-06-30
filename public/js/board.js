@@ -334,12 +334,15 @@ function drawTrack(n = ALL_ARMS) {
       ctx.strokeStyle = color;
       ctx.lineWidth   = 2;
       ctx.stroke();
-      // Downward-pointing triangle (▼) — "entry" arrow into the track
-      const tr = R * 0.65;
+      // Arrow pointing clockwise along the track (in the arm's perpendicular direction)
+      const ang = armAngle(ai);
+      const tdx = Math.cos(ang),    tdy = Math.sin(ang);    // radial (arm axis)
+      const tpx = -Math.sin(ang),   tpy = Math.cos(ang);    // clockwise tangent
+      const tr  = R * 0.65;
       ctx.beginPath();
-      ctx.moveTo(p.x,           p.y + tr);
-      ctx.lineTo(p.x - tr * 0.9, p.y - tr * 0.55);
-      ctx.lineTo(p.x + tr * 0.9, p.y - tr * 0.55);
+      ctx.moveTo(p.x + tpx * tr,                         p.y + tpy * tr);
+      ctx.lineTo(p.x - tpx * tr * 0.55 - tdx * tr * 0.9, p.y - tpy * tr * 0.55 - tdy * tr * 0.9);
+      ctx.lineTo(p.x - tpx * tr * 0.55 + tdx * tr * 0.9, p.y - tpy * tr * 0.55 + tdy * tr * 0.9);
       ctx.closePath();
       ctx.fillStyle = color + 'dd';
       ctx.fill();
