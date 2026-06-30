@@ -447,24 +447,24 @@ function drawHome(n) {
     const dark     = DARK_C[ai];
 
     // -- Home slots: dark drilled holes with colored border ring --
+    const ringAlpha = isActive ? 'cc' : '30';
     for (let s = 1; s <= HOME_SLOTS; s++) {
       const p = homePos[ai]?.[s];
       if (!p) continue;
-      // Dark hole — same style as track spaces so marbles pop against it
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.15, 0, Math.PI * 2);
       ctx.fillStyle = '#06080f';
       ctx.fill();
-      // Colored border ring identifies which arm this slot belongs to
-      ctx.strokeStyle = color + 'cc';
+      ctx.strokeStyle = color + ringAlpha;
       ctx.lineWidth   = 2.5;
       ctx.stroke();
-      // Inner highlight arc for depth
-      ctx.beginPath();
-      ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.9, Math.PI * 1.05, Math.PI * 1.75);
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-      ctx.lineWidth   = R * 0.40;
-      ctx.stroke();
+      if (isActive) {
+        ctx.beginPath();
+        ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.9, Math.PI * 1.05, Math.PI * 1.75);
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth   = R * 0.40;
+        ctx.stroke();
+      }
     }
   }
 }
