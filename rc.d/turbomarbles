@@ -1,0 +1,55 @@
+#!/bin/sh
+#
+# PROVIDE: turbomarbles
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+#
+# Add the following to /etc/rc.conf to enable TurboMarbles at jail start:
+#
+#   turbomarbles_enable="YES"
+#   turbomarbles_port="3000"          # optional, default 3000
+#   turbomarbles_host="127.0.0.1"     # optional, default 127.0.0.1
+#   turbomarbles_origin=""            # optional, e.g. https://example.com
+#   turbomarbles_user="www"           # optional, default www
+#
+
+. /etc/rc.subr
+
+name="turbomarbles"
+rcvar="${name}_enable"
+
+load_rc_config "${name}"
+
+: ${turbomarbles_enable:="NO"}
+: ${turbomarbles_port:="3000"}
+: ${turbomarbles_host:="127.0.0.1"}
+: ${turbomarbles_origin:=""}
+: ${turbomarbles_user:="www"}
+: ${turbomarbles_dir:="/var/www/marbles"}
+: ${turbomarbles_log:="/var/log/turbomarbles.log"}
+: ${turbomarbles_pidfile:="/var/run/turbomarbles.pid"}
+
+pidfile="${turbomarbles_pidfile}"
+command="/usr/sbin/daemon"
+command_args="-f -p ${pidfile} -o ${turbomarbles_log} \
+    /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
+
+start_precmd="turbomarbles_prestart"
+stop_postcmd="turbomarbles_poststop"
+
+turbomarbles_prestart()
+{
+    export PORT="${turbomarbles_port}"
+    export HOST="${turbomarbles_host}"
+    if [ -n "${turbomarbles_origin}" ]; then
+        export ORIGIN="${turbomarbles_origin}"
+    fi
+    cd "${turbomarbles_dir}"
+}
+
+turbomarbles_poststop()
+{
+    rm -f "${pidfile}"
+}
+
+run_rc_command "$1"

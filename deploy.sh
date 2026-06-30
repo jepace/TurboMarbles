@@ -29,6 +29,7 @@ sudo rsync ${RSYNC_OPTS} \
     --exclude='*.sqlite' \
     --exclude='*.sqlite3' \
     --exclude='deploy.sh' \
+    --exclude='rc.d/' \
     --exclude='*.md' \
     "${SRC}/" "${DEST}/"
 
@@ -39,5 +40,21 @@ fi
 
 # Install / update production dependencies inside the jail.
 bastille cmd marbles sh -c "cd /var/www/marbles && npm install --omit=dev --prefer-offline"
+
+# Install the RC script and make it executable.
+sudo install -m 755 "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
+
+# Restart the service if it is enabled in the jail's rc.conf; otherwise
+# remind the operator to enable it.
+if bastille cmd marbles sysrc -n turbomarbles_enable 2>/dev/null | grep -qi "^YES$"; then
+    bastille cmd marbles service turbomarbles restart
+    echo "turbomarbles service restarted."
+else
+    echo ""
+    echo "NOTE: TurboMarbles is not yet enabled as a service."
+    echo "To enable it, run inside the jail:"
+    echo "  sysrc turbomarbles_enable=YES"
+    echo "  service turbomarbles start"
+fi
 
 echo "Deploy complete."
