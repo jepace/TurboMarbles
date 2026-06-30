@@ -485,23 +485,14 @@ function drawCenter() {
     ctx.stroke();
   }
 
-  // Inner dark ring to frame the center star
+  // Inner dark circle at the center (no star — gold star clashed with yellow marbles)
   ctx.beginPath();
   ctx.arc(CX, CY, innerR * 1.6, 0, Math.PI * 2);
   ctx.fillStyle = '#06101e';
   ctx.fill();
-  ctx.strokeStyle = '#c8920a88';
+  ctx.strokeStyle = '#c8920a';
   ctx.lineWidth   = 1.5;
   ctx.stroke();
-
-  // Gold 6-pointed star in the center
-  drawStar6(CX, CY, innerR * 1.25, STAR_GOLD, '#8a6000');
-
-  // Bright gold dot at absolute center
-  ctx.beginPath();
-  ctx.arc(CX, CY, innerR * 0.35, 0, Math.PI * 2);
-  ctx.fillStyle = '#fff8d0';
-  ctx.fill();
 }
 
 // ---- Marbles: glass sphere with specular highlight ----
