@@ -170,6 +170,32 @@ export function drawBoard(gameState) {
   drawHome(n);
   drawCenter();
   if (gameState) drawMarbles(gameState);
+  drawRimOverlay();  // repaint rim on top so base panel corners don't poke through
+}
+
+// ---- Rim overlay: repainted on top so base/arm corners don't poke through ----
+
+function drawRimOverlay() {
+  const rimR = W * 0.493;
+  // Mask everything outside the rim with the background colour
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, 0, W, W);
+  ctx.arc(CX, CY, rimR, 0, Math.PI * 2, true); // clockwise hole
+  ctx.fillStyle = '#050b1e';
+  ctx.fill();
+  ctx.restore();
+  // Repaint the brass ring on top
+  ctx.beginPath();
+  ctx.arc(CX, CY, rimR, 0, Math.PI * 2);
+  ctx.strokeStyle = '#c8920a';
+  ctx.lineWidth   = W * 0.009;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(CX, CY, rimR - W * 0.006, 0, Math.PI * 2);
+  ctx.strokeStyle = '#f5c84280';
+  ctx.lineWidth   = W * 0.002;
+  ctx.stroke();
 }
 
 // ---- Background: dark navy board with brass rim ----
