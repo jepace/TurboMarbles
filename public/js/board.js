@@ -20,8 +20,11 @@
 
 import {
   TRACK_SIZE, ALL_ARMS, MARBLES_PER_PLAYER, HOME_SLOTS,
-  ARM_MAP, ALL_STARS as STAR_SPACES,
+  ARM_MAP, ALL_STARS as STAR_SPACES, PLAYER_CONFIG,
 } from './constants.js';
+
+// spaceNumber → arm index, for the 6 start spaces
+const START_SPACES = new Map(PLAYER_CONFIG.map((p, i) => [p.start, i]));
 
 // arms 0-5: blue, pink, orange, yellow, green, white (clockwise from bottom)
 const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
@@ -316,6 +319,32 @@ function drawTrack() {
       ctx.stroke();
       // 6-pointed star inset
       drawStar6(p.x, p.y, R * 1.1, STAR_GOLD, '#8a5e00');
+    } else if (START_SPACES.has(i)) {
+      const ai    = START_SPACES.get(i);
+      const color = COLORS[ai];
+      const dark  = DARK_C[ai];
+      // Subtle outer glow in arm color
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R * 1.9, 0, Math.PI * 2);
+      ctx.fillStyle = color + '30';
+      ctx.fill();
+      // Colored disc (darker than full color so marble contrast is maintained)
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, R * 1.3, 0, Math.PI * 2);
+      ctx.fillStyle = dark;
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth   = 2;
+      ctx.stroke();
+      // Downward-pointing triangle (▼) — "entry" arrow into the track
+      const tr = R * 0.65;
+      ctx.beginPath();
+      ctx.moveTo(p.x,           p.y + tr);
+      ctx.lineTo(p.x - tr * 0.9, p.y - tr * 0.55);
+      ctx.lineTo(p.x + tr * 0.9, p.y - tr * 0.55);
+      ctx.closePath();
+      ctx.fillStyle = color + 'dd';
+      ctx.fill();
     } else {
       // Drilled hole: near-black fill with inner highlight arc for depth
       ctx.beginPath();
