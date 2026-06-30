@@ -10,8 +10,6 @@ JAIL_ROOT="/usr/local/bastille/jails/marbles/root"
 DEST="${JAIL_ROOT}/var/www/marbles"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
-git -C "${SRC}" pull
-
 RSYNC_OPTS="-av --delete"
 if [ "${1}" = "--dry-run" ]; then
     RSYNC_OPTS="${RSYNC_OPTS} --dry-run"
