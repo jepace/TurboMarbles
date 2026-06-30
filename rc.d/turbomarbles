@@ -52,6 +52,16 @@ load_rc_config "${name}"
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
+# rc.subr's status/stop logic verifies the pid in the pidfile actually
+# belongs to a process named $procname (defaults to $command, i.e.
+# "daemon"). But daemon execs through env into node, replacing its own
+# image — the live process at that pid is actually "node", not "daemon".
+# Without this, `service status`/`stop` falsely report "not running"
+# even while the process (and daemon's own internal pidfile lock) say
+# otherwise — confirmed directly in this jail: daemon refused a second
+# start ("already running") while `service status` simultaneously said
+# "not running" for the exact same live pid.
+procname="/usr/local/bin/node"
 # No -u here: rc.subr's native ${name}_user (turbomarbles_user) support
 # already drops privileges via su -m before this command ever runs.
 # /usr/bin/env sets the child's environment without needing extra shell
