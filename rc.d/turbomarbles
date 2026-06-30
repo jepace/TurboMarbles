@@ -31,7 +31,8 @@ load_rc_config "${name}"
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
-command_args="-f -p ${pidfile} -o ${turbomarbles_log} \
+# -u drops privileges to turbomarbles_user before exec'ing node
+command_args="-f -u ${turbomarbles_user} -p ${pidfile} -o ${turbomarbles_log} \
     /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
 start_precmd="turbomarbles_prestart"
@@ -44,7 +45,9 @@ turbomarbles_prestart()
     if [ -n "${turbomarbles_origin}" ]; then
         export ORIGIN="${turbomarbles_origin}"
     fi
-    cd "${turbomarbles_dir}"
+    # Ensure log file is owned by the service user so daemon can write to it
+    touch "${turbomarbles_log}"
+    chown "${turbomarbles_user}" "${turbomarbles_log}"
 }
 
 turbomarbles_poststop()

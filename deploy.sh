@@ -41,6 +41,9 @@ fi
 # Install / update production dependencies inside the jail.
 bastille cmd marbles sh -c "cd /var/www/marbles && npm install --omit=dev --prefer-offline"
 
+# Fix ownership so the service user can read the app files.
+bastille cmd marbles chown -R www:www /var/www/marbles
+
 # Install the RC script and make it executable.
 sudo install -m 755 "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
 

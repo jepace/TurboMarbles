@@ -22,11 +22,7 @@ const app = express();
 app.disable('x-powered-by');
 app.use(helmet());
 
-// Request logging
-app.use((req, _res, next) => {
-  console.log(`[http] ${req.method} ${req.url} from ${req.socket.remoteAddress}`);
-  next();
-});
+
 
 app.use(express.static(join(__dirname, '..', 'public')));
 
@@ -71,7 +67,7 @@ wss.on('connection', (ws, req) => {
   ws._msgCount       = 0;
   ws._msgWindowStart = Date.now();
 
-  console.log(`[ws] connect  id=${ws._id} from ${req.socket.remoteAddress}`);
+  // connect is not logged individually — noise at scale; errors/disconnects are.
 
   ws.on('pong', () => { ws._alive = true; });
 
@@ -90,13 +86,10 @@ wss.on('connection', (ws, req) => {
 
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
-    const room = ws._room ? ` room=${ws._room}` : '';
-    console.log(`[ws] message  id=${ws._id}${room} action=${msg.action}`);
     dispatch(ws, msg);
   });
 
-  ws.on('close', (code) => {
-    console.log(`[ws] close    id=${ws._id} code=${code}`);
+  ws.on('close', (_code) => {
     handleDisconnect(ws);
   });
   ws.on('error', (err) => {
