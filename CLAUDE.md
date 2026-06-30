@@ -13,7 +13,7 @@ For internet-facing deployment, set these environment variables:
 ```
 HOST=127.0.0.1          # bind to loopback only; put nginx/caddy in front for TLS
 ORIGIN=https://example.com  # enables WebSocket origin checking (reject other origins)
-PORT=3000               # default
+PORT=8080               # default (server.js's own fallback when PORT is unset)
 ```
 
 ## Running Tests

@@ -5,7 +5,7 @@ This guide takes you from a fresh FreeBSD 15 VPS to a fully running, TLS-protect
 ## Overview
 
 ```
-Internet → pf firewall → nginx (TLS) → Node.js on 127.0.0.1:3000
+Internet → pf firewall → nginx (TLS) → Node.js on 127.0.0.1:8080
 ```
 
 nginx terminates TLS and proxies both HTTP and WebSocket traffic to Node. Node binds to loopback only and is never directly reachable from outside.
@@ -98,7 +98,7 @@ turbomarbles_enable="YES"
 turbomarbles_user="turbomarbles"
 turbomarbles_dir="/usr/local/share/turbomarbles"
 turbomarbles_host="127.0.0.1"
-turbomarbles_port="3000"
+turbomarbles_port="8080"
 turbomarbles_origin="https://yourhost.example.com"   # ← your actual domain
 ```
 
@@ -157,7 +157,7 @@ pfctl -si    # show status
 
 > **Note:** Replace `vtnet0` with your actual interface name. Check with `ifconfig` — it is often `vtnet0` on VirtIO-based VPSes (Vultr, DigitalOcean, Hetzner) or `em0` on older/bare-metal hosts.
 
-Port 3000 is **not** open in this ruleset — Node is only reachable via nginx on loopback.
+Port 8080 is **not** open in this ruleset — Node is only reachable via nginx on loopback.
 
 ---
 
@@ -236,7 +236,7 @@ http {
 
         # Proxy everything to Node
         location / {
-            proxy_pass         http://127.0.0.1:3000;
+            proxy_pass         http://127.0.0.1:8080;
             proxy_http_version 1.1;
 
             # Required for WebSocket upgrade
@@ -286,7 +286,7 @@ tail -f /var/log/turbomarbles.log
 You should see:
 
 ```
-TurboMarbles listening on http://127.0.0.1:3000
+TurboMarbles listening on http://127.0.0.1:8080
 ```
 
 Then open `https://yourhost.example.com` in a browser.
@@ -334,7 +334,7 @@ curl -I http://yourhost.example.com         # should redirect 301 → https
 curl -I https://yourhost.example.com        # should return 200, check headers
 
 # Node is not directly reachable
-curl http://yourhost.example.com:3000       # should time out or refuse
+curl http://yourhost.example.com:8080       # should time out or refuse
 
 # HTTP security headers (helmet)
 curl -s -I https://yourhost.example.com | grep -i "x-frame\|x-content\|referrer"

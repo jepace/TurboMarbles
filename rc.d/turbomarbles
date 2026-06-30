@@ -7,7 +7,8 @@
 # Add the following to /etc/rc.conf to enable TurboMarbles at jail start:
 #
 #   turbomarbles_enable="YES"
-#   turbomarbles_port="3000"          # optional, default 3000
+#   turbomarbles_port="8080"          # optional, default 8080 (matches the
+#                                      # existing nginx proxy_pass target)
 #   turbomarbles_host="127.0.0.1"     # optional, default 127.0.0.1
 #   turbomarbles_origin=""            # optional, e.g. https://example.com
 #   turbomarbles_user="marbles"       # optional, default marbles
@@ -41,7 +42,7 @@ rcvar="${name}_enable"
 load_rc_config "${name}"
 
 : ${turbomarbles_enable:="NO"}
-: ${turbomarbles_port:="3000"}
+: ${turbomarbles_port:="8080"}
 : ${turbomarbles_host:="127.0.0.1"}
 : ${turbomarbles_origin:=""}
 : ${turbomarbles_user:="marbles"}
