@@ -534,24 +534,15 @@ function drawCenter() {
     ctx.stroke();
   }
 
-  // Inner landing zone — slightly lighter than board so it reads as a hole,
-  // with a prominent brass ring so it's clearly distinct from the wedges.
+  // Center landing space — white circle the size of a marble hole so it
+  // reads clearly as a space, with a brass border ring.
+  const holeR = W * 0.022; // matches marble hole sizing
   ctx.beginPath();
-  ctx.arc(CX, CY, innerR * 1.6, 0, Math.PI * 2);
-  ctx.fillStyle = '#06080f';
+  ctx.arc(CX, CY, holeR, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.90)';
   ctx.fill();
-  // Inner highlight arc for drilled-hole depth (matches track space style)
-  ctx.beginPath();
-  ctx.arc(CX - innerR * 0.18, CY - innerR * 0.18, innerR * 1.25,
-          Math.PI * 1.05, Math.PI * 1.75);
-  ctx.strokeStyle = 'rgba(255,255,255,0.20)';
-  ctx.lineWidth   = innerR * 0.55;
-  ctx.stroke();
-  // Brass border ring
-  ctx.beginPath();
-  ctx.arc(CX, CY, innerR * 1.6, 0, Math.PI * 2);
   ctx.strokeStyle = '#c8920a';
-  ctx.lineWidth   = 3;
+  ctx.lineWidth   = 2.5;
   ctx.stroke();
 }
 
