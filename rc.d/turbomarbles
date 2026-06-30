@@ -10,8 +10,14 @@
 #   turbomarbles_port="3000"          # optional, default 3000
 #   turbomarbles_host="127.0.0.1"     # optional, default 127.0.0.1
 #   turbomarbles_origin=""            # optional, e.g. https://example.com
-#   turbomarbles_user="www"           # optional, default www
+#   turbomarbles_user="marbles"       # optional, default marbles
 #
+# The service user is provisioned by deploy.sh (pw useradd), with a real
+# home directory at turbomarbles_dir — daemon(8)'s -u uses setusercontext(3),
+# which chdir(2)s to the user's home; FreeBSD's stock "www" account has
+# pw_dir=/nonexistent, which makes setusercontext fail. A dedicated service
+# account with a real home avoids that and is the more correct separation
+# of duties (www is for the web server, not arbitrary app daemons).
 
 . /etc/rc.subr
 
@@ -24,39 +30,26 @@ load_rc_config "${name}"
 : ${turbomarbles_port:="3000"}
 : ${turbomarbles_host:="127.0.0.1"}
 : ${turbomarbles_origin:=""}
-: ${turbomarbles_user:="www"}
+: ${turbomarbles_user:="marbles"}
 : ${turbomarbles_dir:="/var/www/marbles"}
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
 : ${turbomarbles_pidfile:="/var/run/turbomarbles.pid"}
-: ${turbomarbles_runscript:="/var/run/turbomarbles.sh"}
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
-command_args="-f -p ${turbomarbles_pidfile} -o ${turbomarbles_log} \
-    /usr/bin/su -m ${turbomarbles_user} -c ${turbomarbles_runscript}"
+# -u drops privileges via setusercontext(3) (no shell, no su, no quoting).
+# /usr/bin/env sets the child's environment without needing a shell to
+# interpret VAR=val assignments.
+command_args="-f -u ${turbomarbles_user} -p ${turbomarbles_pidfile} -o ${turbomarbles_log} \
+    /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} ORIGIN=${turbomarbles_origin} \
+    /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
 start_precmd="turbomarbles_prestart"
-stop_postcmd="turbomarbles_poststop"
 
 turbomarbles_prestart()
 {
-    # Write a small launcher so su -c gets a single unquoted argument
-    cat > "${turbomarbles_runscript}" << SCRIPT
-#!/bin/sh
-export PORT="${turbomarbles_port}"
-export HOST="${turbomarbles_host}"
-export ORIGIN="${turbomarbles_origin}"
-exec /usr/local/bin/node ${turbomarbles_dir}/src/server.js
-SCRIPT
-    chmod 500 "${turbomarbles_runscript}"
-    chown "${turbomarbles_user}" "${turbomarbles_runscript}"
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
-}
-
-turbomarbles_poststop()
-{
-    rm -f "${turbomarbles_pidfile}" "${turbomarbles_runscript}"
 }
 
 run_rc_command "$1"

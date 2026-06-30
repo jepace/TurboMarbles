@@ -39,8 +39,19 @@ fi
 # Install / update production dependencies inside the jail.
 bastille cmd marbles sh -c "cd /var/www/marbles && npm install --omit=dev --prefer-offline"
 
-# Fix ownership so the service user can read the app files.
-bastille cmd marbles chown -R www:www /var/www/marbles
+# Provision the dedicated service account, idempotently. A real home
+# directory is required: daemon(8) -u uses setusercontext(3), which
+# chdir(2)s to the user's home — FreeBSD's stock "www" account has
+# pw_dir=/nonexistent and breaks that. Reusing www would also blur the
+# line between the web server account and an application service account.
+bastille cmd marbles sh -c '
+    pw usershow marbles >/dev/null 2>&1 || \
+        pw useradd marbles -c "TurboMarbles service" \
+            -d /var/www/marbles -s /usr/sbin/nologin -w no
+'
+
+# Fix ownership so the service user can read/write the app files.
+bastille cmd marbles chown -R marbles:marbles /var/www/marbles
 
 # Install the RC script and make it executable.
 sudo mkdir -p "${JAIL_ROOT}/usr/local/etc/rc.d"
