@@ -429,7 +429,7 @@ function drawHome(n) {
       // Filled slot with player color
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.15, 0, Math.PI * 2);
-      ctx.fillStyle   = color + (isActive ? '88' : '18');
+      ctx.fillStyle   = color + (isActive ? '55' : '18');
       ctx.fill();
       ctx.strokeStyle = dark + (isActive ? 'cc' : '30');
       ctx.lineWidth   = 2;
@@ -546,8 +546,20 @@ function drawMarbles(gameState) {
       ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
       ctx.fillStyle   = grad;
       ctx.fill();
-      ctx.strokeStyle = isAnimating ? '#ffffcc' : 'rgba(255,255,255,0.35)';
-      ctx.lineWidth   = isAnimating ? 2 : 1;
+
+      // Contrast ring: thicker and brighter in home/center where the background
+      // is the same player color, making marbles hard to see.
+      const inLowContrast = marble.zone === 'home' || marble.zone === 'center';
+      if (isAnimating) {
+        ctx.strokeStyle = '#ffffcc';
+        ctx.lineWidth   = 2;
+      } else if (inLowContrast) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth   = 2;
+      } else {
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth   = 1;
+      }
       ctx.stroke();
 
       // Specular highlight — small bright spot (glass sphere reflection)
