@@ -7,6 +7,7 @@ import {
   marbleOnTrack, marbleAtCenter, marbleInHome, marbleInBase,
   earnsExtraRoll, MARBLES_PER_PLAYER,
 } from '../src/GameEngine.js';
+import { pickNextRobotMove } from '../src/RobotPlayer.js';
 
 let passed = 0, failed = 0;
 
@@ -823,6 +824,39 @@ describe('initial roll [1,6] — exitBase with die=6, then move 1 past start', (
     '[1,6] die=1 → can move marble to space 2 (1 past start)');
   applyMove(s, 0, moveMoves.find(m => m.toSpace === 2));
   assert(s.players[0].marbles[0].space === 2, 'marble now at space 2');
+});
+
+// ---- Robot: never takes the optional go-around --------------------------------
+
+describe('robot — burns dice instead of passing home to go around again', () => {
+  // Regression from a real game: a robot one space short of its home entry,
+  // with home mostly full, rolled 6-4 and looped past home to the hub instead
+  // of waiting and burning both dice.
+  const s = makeState(2);
+  const homeEntry = s.players[0].config.homeEntry; // 84 for arm 0
+  setMarble(s, 0, 0, 'track', homeEntry - 1);       // one short of home entry
+  setMarble(s, 0, 1, 'home', null, 2);
+  setMarble(s, 0, 2, 'home', null, 3);
+  setMarble(s, 0, 3, 'home', null, 4);
+  setDice(s, 6, 4);
+
+  const legal = allLegalMoves(s, 0);
+  const all = [...(legal[0] ?? []), ...(legal[1] ?? [])];
+  assert(all.length > 0 && all.every(m => m.optional),
+    'only optional pass-home moves are legal (sanity)');
+  assert(pickNextRobotMove(s, 0) === null,
+    'robot picks no move, so the die is forfeited');
+});
+
+describe('robot — still takes a real move when one exists alongside an optional one', () => {
+  const s = makeState(2);
+  const homeEntry = s.players[0].config.homeEntry;
+  setMarble(s, 0, 0, 'track', homeEntry);           // on home entry, home empty
+  setDice(s, 2, 5);                                  // 2 → home slot 2; 5 overshoots
+
+  const chosen = pickNextRobotMove(s, 0);
+  assert(chosen && !chosen.optional && chosen.toZone === 'home',
+    'robot enters home rather than going around');
 });
 
 // ---- Summary ----------------------------------------------------------------

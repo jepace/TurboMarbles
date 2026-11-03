@@ -21,6 +21,9 @@ export function pickNextRobotMove(game, playerIndex) {
   for (const dieIdx of [0, 1]) {
     if (game.diceUsed[dieIdx]) continue;
     for (const move of (legal[dieIdx] || [])) {
+      // Optional moves (pass home and go around again) are never worth it:
+      // better to wait next to home and burn the die.
+      if (move.optional) continue;
       const s = scoreMove(game, playerIndex, move);
       if (s > bestScore) { bestScore = s; chosen = move; }
     }
@@ -39,6 +42,7 @@ export function robotTakeTurn(game, playerIndex, applyCallback) {
     for (const dieIdx of [0, 1]) {
       if (game.diceUsed[dieIdx]) continue;
       for (const move of (legal[dieIdx] || [])) {
+        if (move.optional) continue; // see pickNextRobotMove
         const s = scoreMove(game, playerIndex, move);
         if (s > bestScore) { bestScore = s; chosen = move; }
       }
