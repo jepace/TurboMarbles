@@ -65,6 +65,17 @@
   <div id="game-layout">
     <div id="board-area">
       <canvas id="board-canvas"></canvas>
+      <!-- Win overlay: covers only the board, so the sidebar log stays usable -->
+      <div id="win-overlay" style="display:none">
+        <div class="card">
+          <h2>Game Over</h2>
+          <p id="winner-msg"></p>
+          <div class="btn-row">
+            <button id="btn-copy-log" class="secondary">Copy Log</button>
+            <button id="btn-play-again">Play Again</button>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="sidebar">
       <div id="dice-area">
@@ -81,14 +92,6 @@
       <div id="move-hint" style="display:none"></div>
       <div id="player-list"></div>
       <div id="game-log"></div>
-    </div>
-  </div>
-  <!-- Win overlay: shown over the game board so the final state remains visible -->
-  <div id="win-overlay" style="display:none">
-    <div class="card">
-      <h2>Game Over</h2>
-      <p id="winner-msg"></p>
-      <button id="btn-play-again">Play Again</button>
     </div>
   </div>
 </div>

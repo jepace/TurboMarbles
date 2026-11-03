@@ -274,6 +274,42 @@ $('btn-play-again').addEventListener('click', () => {
   show('screen-landing');
 });
 
+// ---- Copy log ----
+// Plain-text move log, with a header naming each player's color, so a finished
+// game can be pasted somewhere for review.
+function moveLogText() {
+  const players = (gameState?.players ?? [])
+    .map(p => `  ${p.name} (${p.color})`)
+    .join('\n');
+  const lines = [...$('game-log').children].map(el => el.textContent);
+  return [
+    `TurboMarbles game log — ${new Date().toISOString()}`,
+    'Players:',
+    players,
+    '',
+    ...lines,
+    '',
+  ].join('\n');
+}
+
+$('btn-copy-log').addEventListener('click', async () => {
+  const btn  = $('btn-copy-log');
+  const text = moveLogText();
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Copied ✓';
+  } catch {
+    // Clipboard unavailable (e.g. non-HTTPS origin) — fall back to a download.
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = `turbomarbles-log-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    btn.textContent = 'Downloaded ✓';
+  }
+  setTimeout(() => { btn.textContent = 'Copy Log'; }, 2000);
+});
+
 // ---- Canvas click (marble selection & move) ----
 $('board-canvas').addEventListener('click', onCanvasClick);
 

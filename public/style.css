@@ -131,6 +131,7 @@ button.secondary { background: #fff2; }
   justify-content: center;
   overflow: hidden;
   background: #0d1b2a;
+  position: relative;  /* anchors the win overlay to the board only */
 }
 
 /* Canvas size is controlled by JS; no CSS override so click coords stay accurate */
