@@ -409,7 +409,16 @@ function computeMovePath(state, playerIndex, move) {
   }
 
   if (move.type === 'circleCenter') {
-    return path; // strategic no-op — no visual waypoints
+    // Full lap of the star ring and back: out to the player's own star, around
+    // all six stars clockwise, then into the hub. Position doesn't change;
+    // the path exists so the lap is visible on the board.
+    const stars = [...ALL_STARS].sort((a, b) => a - b);
+    const first = stars.indexOf(player.config.star);
+    for (let i = 0; i < stars.length; i++) {
+      path.push({ zone: 'track', space: stars[(first + i) % stars.length] });
+    }
+    path.push({ zone: 'center' });
+    return path;
   }
 
   if (move.type === 'moveStar') {
@@ -555,11 +564,13 @@ export function applyMove(state, playerIndex, move) {
 
 // --- Dice ---
 
+// Dice are always reported highest first (6-1, never 1-6), so every display
+// and log reads the same way. Order carries no meaning: each die is used
+// independently via its dieIndex.
 export function rollDice() {
-  return [
-    Math.floor(Math.random() * 6) + 1,
-    Math.floor(Math.random() * 6) + 1,
-  ];
+  const a = Math.floor(Math.random() * 6) + 1;
+  const b = Math.floor(Math.random() * 6) + 1;
+  return a >= b ? [a, b] : [b, a];
 }
 
 // After both dice used: does this roll earn an extra roll?

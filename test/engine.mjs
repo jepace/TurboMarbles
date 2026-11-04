@@ -5,7 +5,7 @@ import {
   createGame, legalMovesForDie, allLegalMoves, applyMove,
   PLAYER_CONFIG, ALL_STARS, advanceTrack, trackDistance,
   marbleOnTrack, marbleAtCenter, marbleInHome, marbleInBase,
-  earnsExtraRoll, MARBLES_PER_PLAYER,
+  earnsExtraRoll, MARBLES_PER_PLAYER, rollDice,
 } from '../src/GameEngine.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 
@@ -670,6 +670,31 @@ describe('circleCenter — die=6 from center stays in center', () => {
   const move = movesOfType(s, 'circleCenter')[0];
   applyMove(s, 0, move);
   assert(s.players[0].marbles[0].zone === 'center', 'after circleCenter marble stays in center zone');
+});
+
+describe('circleCenter — path laps all six stars, then back to center', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'center');
+  setDice(s, 6, 2);
+  const move = movesOfType(s, 'circleCenter')[0];
+  const ev = applyMove(s, 0, move).find(e => e.event === 'marbleMoved');
+  const stars = ev.path.filter(p => p.zone === 'track').map(p => p.space);
+  // Player 0 is blue (own star 8): lap starts there and goes clockwise.
+  assert(JSON.stringify(stars) === JSON.stringify([8, 22, 36, 50, 64, 78]),
+    `lap visits stars 8→22→36→50→64→78 (got ${stars.join('→')})`);
+  assert(ev.path[ev.path.length - 1].zone === 'center', 'lap ends back in the hub');
+});
+
+// ---- rollDice ---------------------------------------------------------------
+
+describe('rollDice — always highest die first', () => {
+  let ok = true, sawUnequal = false;
+  for (let i = 0; i < 2000; i++) {
+    const [a, b] = rollDice();
+    if (a < b || a < 1 || b < 1 || a > 6 || b > 6) ok = false;
+    if (a !== b) sawUnequal = true;
+  }
+  assert(ok && sawUnequal, '2000 rolls: every pair is in 1–6 and sorted highest first');
 });
 
 describe('circleCenter — die=2 from center → no moves', () => {

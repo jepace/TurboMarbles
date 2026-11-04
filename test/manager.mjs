@@ -237,7 +237,7 @@ describe('auto-forfeit — all marbles in base, non-1/6 roll → turn advances a
   assert(host.find('rolled').length === 1, 'rolled event sent');
   assert(host.find('turnChanged').length === 1, 'turn advanced automatically (no legal moves)');
   const rolled = host.find('rolled')[0];
-  assert(rolled.dice[0] === 3 && rolled.dice[1] === 4, 'correct dice values broadcast');
+  assert(rolled.dice[0] === 4 && rolled.dice[1] === 3, 'dice broadcast highest first (rolled 3 and 4 → 4-3)');
 });
 
 // ---- handleReconnect --------------------------------------------------------
