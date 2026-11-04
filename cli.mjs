@@ -378,9 +378,6 @@ export function describeMove(move, dice) {
       dest = `Exit hub → space ${move.toSpace}${starMark}`;
       break;
     }
-    case 'circleCenter':
-      dest = `Circle hub (full circuit, stay in hub)`;
-      break;
     case 'moveStar': {
       const path = (move.starsPath ?? []).join('→');
       const pathStr = path ? ` (${path})` : '';

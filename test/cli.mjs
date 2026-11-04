@@ -155,11 +155,6 @@ describe('describeMove — exitCenter', () => {
   assert(m.includes('(star)'), 'exitCenter to star has "(star)" marker');
 });
 
-describe('describeMove — circleCenter', () => {
-  const m = describeMove({ type: 'circleCenter', marbleId: 0, dieIndex: 0 }, [6, 2]);
-  assert(m.includes('Circle hub'), 'circleCenter shows "Circle hub"');
-});
-
 describe('describeMove — moveStar to track', () => {
   const m = describeMove(
     { type: 'moveStar', marbleId: 0, dieIndex: 0, starsPath: [8, 22], toZone: 'track', toSpace: 25 },

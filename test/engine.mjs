@@ -657,32 +657,60 @@ describe('home entry — pass-home offered as an optional (skippable) move', () 
     'die=4 at homeEntry with blocked home → optional around-the-track move');
 });
 
-// ---- circleCenter -----------------------------------------------------------
+// ---- Hub: only a 1 leaves it -----------------------------------------------
 
-describe('circleCenter — die=6 from center stays in center', () => {
-  const s = makeState(6);
-  setMarble(s, 0, 0, 'center');
-
-  setDice(s, 6, 1);
-  assert(movesOfType(s, 'circleCenter').length === 1, 'die=6 from center → circleCenter available');
-
-  // Apply it — marble should remain in center
-  const move = movesOfType(s, 'circleCenter')[0];
-  applyMove(s, 0, move);
-  assert(s.players[0].marbles[0].zone === 'center', 'after circleCenter marble stays in center zone');
-});
-
-describe('circleCenter — path laps all six stars, then back to center', () => {
+describe('hub — a 6 does nothing (only a 1 leaves the hub)', () => {
   const s = makeState(2);
   setMarble(s, 0, 0, 'center');
   setDice(s, 6, 2);
-  const move = movesOfType(s, 'circleCenter')[0];
-  const ev = applyMove(s, 0, move).find(e => e.event === 'marbleMoved');
-  const stars = ev.path.filter(p => p.zone === 'track').map(p => p.space);
-  // Player 0 is blue (own star 8): lap starts there and goes clockwise.
-  assert(JSON.stringify(stars) === JSON.stringify([8, 22, 36, 50, 64, 78]),
-    `lap visits stars 8→22→36→50→64→78 (got ${stars.join('→')})`);
-  assert(ev.path[ev.path.length - 1].zone === 'center', 'lap ends back in the hub');
+  assert(legalMovesForDie(s, 0, 0, 0).length === 0, 'die=6 from hub → no moves');
+});
+
+// ---- Star track: full lap with a 6 -----------------------------------------
+
+describe('star lap — a 6 from a star can go all the way around and back', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 22, null, true);
+  setDice(s, 6, 2);
+  const lap = legalMovesForDie(s, 0, 0, 0)
+    .find(m => m.type === 'moveStar' && m.toZone === 'track' && m.toSpace === 22);
+  assert(lap, 'die=6 on star 22 → lap back to 22 is legal');
+  const ev = applyMove(s, 0, lap).find(e => e.event === 'marbleMoved');
+  const stars = ev.path.map(p => p.space);
+  assert(JSON.stringify(stars) === JSON.stringify([36, 50, 64, 78, 8, 22]),
+    `lap path visits all six stars clockwise (got ${stars.join('→')})`);
+  const m = s.players[0].marbles[0];
+  assert(m.zone === 'track' && m.space === 22 && m.starEligible, 'marble ends on star 22, still on the star track');
+});
+
+describe('star lap — blocked by own marble on a star along the way', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 22, null, true);
+  setMarble(s, 0, 1, 'track', 64, null, true);   // own marble 3 stars ahead
+  setDice(s, 6, 2);
+  const lap = legalMovesForDie(s, 0, 0, 0)
+    .find(m => m.type === 'moveStar' && m.toSpace === 22);
+  assert(!lap, 'own marble on star 64 blocks the lap');
+});
+
+describe('star lap — opponent on a star along the way is passed, not bumped', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 22, null, true);
+  setMarble(s, 1, 0, 'track', 64, null, true);   // opponent 3 stars ahead
+  setDice(s, 6, 2);
+  const lap = legalMovesForDie(s, 0, 0, 0)
+    .find(m => m.type === 'moveStar' && m.toSpace === 22);
+  assert(lap, 'opponent on star 64 does not block the lap');
+  applyMove(s, 0, lap);
+  assert(s.players[1].marbles[0].space === 64, 'opponent stays on star 64');
+});
+
+describe('star lap — only a 6 makes a full lap', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 22, null, true);
+  setDice(s, 5, 2);
+  const back = legalMovesForDie(s, 0, 0, 0).find(m => m.toSpace === 22);
+  assert(!back, 'die=5 on star 22 → no move back to 22');
 });
 
 // ---- rollDice ---------------------------------------------------------------
@@ -697,12 +725,11 @@ describe('rollDice — always highest die first', () => {
   assert(ok && sawUnequal, '2000 rolls: every pair is in 1–6 and sorted highest first');
 });
 
-describe('circleCenter — die=2 from center → no moves', () => {
+describe('hub — die=2 from center → no moves', () => {
   const s = makeState(6);
   setMarble(s, 0, 0, 'center');
   setDice(s, 2, 1);
-  assert(movesOfType(s, 'circleCenter').length === 0, 'die=2 from center → no circleCenter');
-  assert(movesOfType(s, 'exitCenter').length === 0,   'die=2 from center → no exitCenter either');
+  assert(legalMovesForDie(s, 0, 0, 0).length === 0, 'die=2 from hub → no moves');
 });
 
 // ---- exitCenter — bump opponent at destination --------------------------------

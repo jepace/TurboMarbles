@@ -235,7 +235,7 @@ Create or Join.
 **Move object format:**
 ```js
 {
-  type: 'exitBase'|'move'|'moveHome'|'moveStar'|'enterCenter'|'exitCenter'|'circleCenter',
+  type: 'exitBase'|'move'|'moveHome'|'moveStar'|'enterCenter'|'exitCenter',
   dieIndex: 0|1,
   marbleId: 0|1|2|3,
   toZone: 'track'|'home'|'center',  // required
@@ -304,9 +304,8 @@ Create or Join.
 | `move` | track | any | Normal clockwise movement on main track; may redirect into home |
 | `moveHome` | home | any | Advance within home corridor; no overshoot past slot 4 |
 | `enterCenter` | track | stepsToStar + 1 | Divert into center hub via a star |
-| `exitCenter` | center | 1 | Exit to any unblocked star; marble becomes starEligible |
-| `circleCenter` | center | 6 | Full circuit of all 6 stars; marble stays in center (strategic pass) |
-| `moveStar` | track (starEligible) | any | Travel K steps on inner star ring, then optionally continue on main track |
+| `exitCenter` | center | 1 | Exit to any unblocked star; marble becomes starEligible. No other die moves a marble out of the hub. |
+| `moveStar` | track (starEligible) | any | Travel K stars on the inner star ring (K ≤ die; blocked by own marbles), then optionally continue on main track. K = 6 with a 6 is a full lap back to the starting star. |
 
 ---
 

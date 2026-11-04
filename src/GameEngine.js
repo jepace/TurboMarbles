@@ -106,10 +106,7 @@ export function legalMovesForDie(state, playerIndex, dieIndex, marbleId) {
         }
       }
     }
-    // die=6: full circuit of all 6 stars, returning to center (strategic no-op)
-    if (dieVal === 6) {
-      moves.push({ type: 'circleCenter', dieIndex, marbleId, toZone: 'center' });
-    }
+    // Any other die does nothing from the hub.
     return moves;
   }
 
@@ -215,11 +212,13 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
   const startIdx = STAR_TRACK.indexOf(marble.space);
   if (startIdx === -1) return moves; // safety: marble not on a star
 
-  for (let k = 1; k <= Math.min(dieVal, 5); k++) {
+  // k = 6 (die of 6 only) is a full lap back to the starting star.
+  for (let k = 1; k <= Math.min(dieVal, 6); k++) {
     const exitStar = STAR_TRACK[(startIdx + k) % 6];
 
-    // Own marble on this star blocks further traversal around the ring
-    if (ownMarbleAtSpace(player, exitStar)) break;
+    // Own marble on this star blocks further traversal around the ring.
+    // (At k = 6 that star is the moving marble's own; it doesn't block itself.)
+    if (k < 6 && ownMarbleAtSpace(player, exitStar)) break;
 
     const remaining = dieVal - k;
 
@@ -408,19 +407,6 @@ function computeMovePath(state, playerIndex, move) {
     return path;
   }
 
-  if (move.type === 'circleCenter') {
-    // Full lap of the star ring and back: out to the player's own star, around
-    // all six stars clockwise, then into the hub. Position doesn't change;
-    // the path exists so the lap is visible on the board.
-    const stars = [...ALL_STARS].sort((a, b) => a - b);
-    const first = stars.indexOf(player.config.star);
-    for (let i = 0; i < stars.length; i++) {
-      path.push({ zone: 'track', space: stars[(first + i) % stars.length] });
-    }
-    path.push({ zone: 'center' });
-    return path;
-  }
-
   if (move.type === 'moveStar') {
     const starsPath = move.starsPath ?? [];
     for (const s of starsPath) path.push({ zone: 'track', space: s });
@@ -517,11 +503,6 @@ export function applyMove(state, playerIndex, move) {
     marble.starEligible = true;
     events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
       from, to: { zone: 'track', space: move.toStar }, path });
-
-  } else if (move.type === 'circleCenter') {
-    // Marble does a full circuit of all 6 stars and returns to center — strategic no-op.
-    events.push({ event: 'marbleMoved', playerIndex, marbleId: move.marbleId,
-      from: { zone: 'center' }, to: { zone: 'center' }, path });
 
   } else if (move.type === 'moveStar') {
     // Marble traveled along the star track (K steps to a star, then optionally
