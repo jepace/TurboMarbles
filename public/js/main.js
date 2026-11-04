@@ -383,7 +383,17 @@ on('gameStarted', ({ gameState: gs }) => {
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
-  turnNumber = 1;
+  // Fresh game: drop everything left over from a previous game in this tab.
+  $('game-log').replaceChildren();
+  turnNumber    = 1;
+  turnLogMoves  = [];
+  turnLogDice   = null;
+  turnLogPlayer = null;
+  bumpHandoff   = [];
+  lastAnimEnd   = null;
+  animationQueue.length = 0;
+  animationRunning = false;
+  clearAllMarbleOverrides();
   renderSidebar();
   renderDice(null, gameState.players[gameState.turnIndex]?.color);
   drawBoard(gameState);
