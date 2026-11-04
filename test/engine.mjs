@@ -859,6 +859,49 @@ describe('robot — still takes a real move when one exists alongside an optiona
     'robot enters home rather than going around');
 });
 
+// Positions below are from a logged game; player 1 is yellow (start 43,
+// home entry 42, pre-home star 36).
+
+describe('robot — on the star track, prefers hopping toward home over entering the hub', () => {
+  // Turn 13: yellow on its own star 50 with a 3 left. Old scoring took the hub
+  // (250 vs 249); star 8 is better — any 2–6 next reaches 36–40, while the
+  // hub needs exactly a 1.
+  const s = makeState(2);
+  setMarble(s, 1, 0, 'track', 50, null, true);
+  setDice(s, 3, 3);
+  s.diceUsed[1] = true;
+  const pick = pickNextRobotMove(s, 1);
+  assert(pick && pick.toZone === 'track' && pick.toSpace === 8,
+    `star 50 + die 3 → star 8 (got ${pick?.toZone} ${pick?.toSpace ?? ''})`);
+});
+
+describe('robot — still uses the hub from far back off the star track', () => {
+  // Turn 35: yellow at 45 (13 steps from the next star ahead), home 2–4 full,
+  // rolled 6-3. 45→hub with the 6 is the right shortcut.
+  const s = makeState(2);
+  setMarble(s, 1, 0, 'track', 45);
+  setMarble(s, 1, 1, 'home', null, 2);
+  setMarble(s, 1, 2, 'home', null, 3);
+  setMarble(s, 1, 3, 'home', null, 4);
+  setDice(s, 6, 3);
+  const pick = pickNextRobotMove(s, 1);
+  assert(pick && pick.type === 'enterCenter' && s.dice[pick.dieIndex] === 6,
+    `45 with 6-3 → enters hub with the 6 (got ${pick?.type})`);
+});
+
+describe('robot — spends a 1 leaving the hub, not shuffling inside home', () => {
+  // Turn 21: yellow has a marble in the hub and one in home slot 3, rolled
+  // 1-6. Old scoring spent the 1 on h3→h4 and left the marble stuck in the hub.
+  const s = makeState(2);
+  setMarble(s, 1, 0, 'home', null, 3);
+  setMarble(s, 1, 1, 'center');
+  setMarble(s, 1, 2, 'track', 43);
+  setDice(s, 1, 6);
+  const pick = pickNextRobotMove(s, 1);
+  assert(pick && pick.type === 'exitCenter' && pick.toSpace === 36,
+    `hub + die 1 → exits to pre-home star 36 (got ${pick?.type} ${pick?.toSpace ?? ''})`);
+});
+
 // ---- Summary ----------------------------------------------------------------
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
