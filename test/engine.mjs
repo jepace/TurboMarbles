@@ -974,6 +974,21 @@ describe('robot — still uses the hub from far back off the star track', () => 
     `45 with 6-3 → enters hub with the 6 (got ${pick?.type})`);
 });
 
+describe('robot — between equal moves, avoids landing just in front of an opponent', () => {
+  // Yellow marbles on 30 and 70, one die of 3 left: 30→33 and 70→73 gain the
+  // same. Blue has a marble on 31, two spaces behind 33 — any 2 it rolls next
+  // turn bumps a marble there. Without the danger model the robot takes the
+  // first equal option (30→33).
+  const s = makeState(2);
+  setMarble(s, 1, 0, 'track', 30);
+  setMarble(s, 1, 1, 'track', 70);
+  setMarble(s, 0, 0, 'track', 31);
+  setDice(s, 3, 3);
+  s.diceUsed[1] = true;
+  const pick = pickNextRobotMove(s, 1);
+  assert(pick && pick.toSpace === 73, `robot moves 70→73, not into danger at 33 (got ${pick?.toSpace})`);
+});
+
 describe('robot — spends a 1 leaving the hub, not shuffling inside home', () => {
   // Turn 21: yellow has a marble in the hub and one in home slot 3, rolled
   // 1-6. Old scoring spent the 1 on h3→h4 and left the marble stuck in the hub.

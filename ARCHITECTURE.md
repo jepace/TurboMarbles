@@ -371,8 +371,15 @@ Move scores (higher = preferred):
 The distance estimate counts the star-track shortcut and adds penalties for
 positions that need a specific roll (exact star landing, a 1 to leave the hub,
 a 1 or 6 to leave base). Optional moves (passing home to go around) are never
-taken. If a die has no move, it's forfeited. Constants were tuned by self-play
-against the previous robot in 2-, 3-, 4- and 6-player games.
+taken. If a die has no move, it's forfeited.
+
+Danger: before deciding, the robot asks the rules engine where each opponent
+could land next turn with each single die value (track, star track, hub entry,
+leaving base or the hub). Each candidate's score is reduced by, for each of the
+robot's marbles left on a reachable square, P(hit before the robot's next turn)
+× the progress that marble would lose × 5 × 0.375. Two-dice combined hits are
+not modelled. Constants were tuned by self-play against the previous robot in
+2-, 3-, 4- and 6-player games.
 
 ---
 

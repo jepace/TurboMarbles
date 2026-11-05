@@ -27,9 +27,16 @@ const NO_MOVE_SCORE = 200;
 // the greedy pick below is exactly the plan's second move. This finds
 // combinations the one-die-at-a-time robot missed, e.g. a move that only
 // becomes possible after another, or a first move that strands the second die.
+//
+// Danger: every candidate's score has the expected cost of being bumped
+// before the robot's next turn subtracted (see threatMap / risk).
 export function pickNextRobotMove(game, playerIndex) {
   if (game.diceUsed[0] && game.diceUsed[1]) return null;
-  if (game.diceUsed[0] || game.diceUsed[1]) return bestSingleMove(game, playerIndex).move;
+  const threats = RISK_WEIGHT > 0 ? threatMap(game, playerIndex) : null;
+  const locs = marbleLocs(game, playerIndex);
+  if (game.diceUsed[0] || game.diceUsed[1]) {
+    return bestSingleMove(game, playerIndex, locs, new Set(), threats).move;
+  }
 
   let best = null, bestScore = -Infinity;
   for (const first of candidateMoves(game, playerIndex)) {
@@ -40,22 +47,119 @@ export function pickNextRobotMove(game, playerIndex) {
     } else {
       const after = structuredClone(game);
       applyMove(after, playerIndex, first);
-      total = s1 + bestSingleMove(after, playerIndex).score;
+      const locs1    = withMove(locs, first);
+      const removed1 = bumpedBy(game, playerIndex, first, new Set());
+      total = s1 + bestSingleMove(after, playerIndex, locs1, removed1, threats).score;
     }
     if (total > bestScore) { bestScore = total; best = first; }
   }
   return best;
 }
 
-// Best move for the unused die(s) in this position, and its score
-// (NO_MOVE_SCORE if no move is available).
-function bestSingleMove(game, playerIndex) {
+// Best move for the unused die(s) in this position, and its score net of the
+// danger it leaves the robot's marbles in. With no move available, the score
+// is NO_MOVE_SCORE net of the danger of staying put.
+//   locs:    the robot's marble locations in this position (location keys)
+//   removed: opponent marbles already bumped this roll (no longer a threat)
+function bestSingleMove(game, playerIndex, locs, removed, threats) {
   let move = null, score = -Infinity;
   for (const m of candidateMoves(game, playerIndex)) {
-    const s = scoreMove(game, playerIndex, m);
+    let s = scoreMove(game, playerIndex, m);
+    if (s < WIN_SCORE && threats) {
+      s -= risk(game, playerIndex, withMove(locs, m), bumpedBy(game, playerIndex, m, removed), threats);
+    }
     if (s > score) { score = s; move = m; }
   }
-  return move ? { move, score } : { move: null, score: NO_MOVE_SCORE };
+  if (move) return { move, score };
+  const stay = threats ? risk(game, playerIndex, locs, removed, threats) : 0;
+  return { move: null, score: NO_MOVE_SCORE - stay };
+}
+
+// ---- Danger model -----------------------------------------------------------
+//
+// For each opponent and each die value 1–6, ask the rules engine where that
+// opponent's marbles could land with that single die (track, star track, hub
+// entry, leaving base or the hub). A robot marble on such a square can be
+// bumped before the robot moves again. Hits needing both dice on one marble
+// are ignored (an approximation that keeps this fast). Opponents' reach
+// doesn't depend on the robot's marbles (only a player's own marbles block),
+// so it is computed once per decision; an opponent marble the robot bumps
+// this roll is no longer a threat.
+//
+// Cost of a robot marble = P(hit) × (progress lost if sent back to base),
+// in the same units as move scores (5 per pip), × RISK_WEIGHT.
+
+// Tuned by self-play vs the planning robot without it: 0.375 won in 2-, 3-,
+// 4- and 6-player games (+1–2 points); 1 or more made the robot too timid.
+const RISK_WEIGHT = 0.375;
+
+const locKey = loc =>
+  loc.zone === 'track' ? `t${loc.space}` : loc.zone === 'center' ? 'c' : loc.zone;
+
+function marbleLocs(game, playerIndex) {
+  return game.players[playerIndex].marbles.map(m => locKey(marbleLoc(m)));
+}
+
+function withMove(locs, move) {
+  const next = locs.slice();
+  next[move.marbleId] = locKey(moveDest(move));
+  return next;
+}
+
+// Opponent marbles sitting where this move lands (they get bumped).
+function bumpedBy(game, playerIndex, move, removed) {
+  const out = new Set(removed);
+  const target = locKey(moveDest(move));
+  if (target[0] !== 't' && target !== 'c') return out; // only track and hub landings bump
+  game.players.forEach((p, o) => {
+    if (o === playerIndex) return;
+    p.marbles.forEach((m, id) => { if (locKey(marbleLoc(m)) === target) out.add(`${o}:${id}`); });
+  });
+  return out;
+}
+
+// Map: location key → [{ opp, src: "opp:marbleId", die }]
+function threatMap(game, playerIndex) {
+  const map = new Map();
+  game.players.forEach((_, opp) => {
+    if (opp === playerIndex) return;
+    for (let die = 1; die <= 6; die++) {
+      const probe = { ...game, dice: [die, die], diceUsed: [false, false] };
+      for (const mv of allLegalMoves(probe, opp)[0] ?? []) {
+        if (mv.toZone === 'home') continue;
+        const key = locKey(moveDest(mv));
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push({ opp, src: `${opp}:${mv.marbleId}`, die });
+      }
+    }
+  });
+  return map;
+}
+
+function risk(game, playerIndex, locs, removed, threats) {
+  const cfg = game.players[playerIndex].config;
+  const baseDist = distToHome(cfg, { zone: 'base' });
+  let total = 0;
+  for (const key of locs) {
+    if (key !== 'c' && key[0] !== 't') continue; // base and home are safe
+    const hits = threats.get(key);
+    if (!hits) continue;
+    // Die values that hit this square, per opponent still able to.
+    const byOpp = new Map();
+    for (const h of hits) {
+      if (removed.has(h.src)) continue;
+      if (!byOpp.has(h.opp)) byOpp.set(h.opp, new Set());
+      byOpp.get(h.opp).add(h.die);
+    }
+    let safe = 1;
+    for (const dice of byOpp.values()) safe *= ((6 - dice.size) / 6) ** 2; // neither die hits
+    const pHit = 1 - safe;
+    if (pHit === 0) continue;
+    const loc = key === 'c' ? { zone: 'center' } : { zone: 'track', space: Number(key.slice(1)) };
+    const lost = Math.max(0, baseDist - distToHome(cfg, loc));
+    total += pHit * lost * 5 * RISK_WEIGHT;
+  }
+  return total;
 }
 
 // Legal moves for every unused die. Optional moves (pass home and go around
