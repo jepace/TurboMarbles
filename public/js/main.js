@@ -450,8 +450,12 @@ on('legalMoves', ({ moves, diceUsed }) => {
 on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
 
-  // Capture from-position before updating state (for the tween start point)
-  const fromPos = getSpacePosition(zoneToSpace(from, playerIndex));
+  // Capture from-position before updating state (for the tween start point).
+  // A base has one slot per marble, so leaving base starts from this marble's
+  // own slot (zoneToSpace has no single position for "base").
+  const fromPos = from.zone === 'base'
+    ? getBasePosition(playerIndex, marbleId)
+    : getSpacePosition(zoneToSpace(from, playerIndex));
 
   // Update game state immediately — render is always driven by authoritative state
   Object.assign(marble, to);
