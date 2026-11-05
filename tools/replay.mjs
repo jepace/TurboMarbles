@@ -3,10 +3,15 @@
 // through the real rules engine and audit it.
 //
 // Usage:
-//   node tools/replay.mjs <logfile> [--brief] [--robot <module>] [--dump <turn>:<dice> <out.json>]
+//   node tools/replay.mjs <logfile> [--brief] [--analyze] [--robot <module>] [--dump <turn>:<dice> <out.json>]
 //
 //   --brief    print only rule issues, bumps, and robot moves that differ from
 //              what the robot code would pick (omit the full decision list)
+//   --analyze  endgame analysis: for every roll where the player's marbles are
+//              all home or near home (within the endgame table), compare the
+//              play with the best play by exact race values (expected turns to
+//              finish, and race-win probability when every opponent is in the
+//              table too). Race values ignore bumps.
 //   --robot    robot module to compare against (default: src/RobotPlayer.js)
 //   --dump     write the game state just before the given roll, e.g.
 //              --dump 21:3-1 t21.json (useful for "what if" analysis)
@@ -18,6 +23,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { createGame, allLegalMoves, applyMove, earnsExtraRoll } from '../src/GameEngine.js';
+import { lookup, expectedTurns, finishedBy, raceWinProbability } from '../src/EndgameTable.js';
 
 const args = process.argv.slice(2);
 const opt = name => { const i = args.indexOf(name); return i === -1 ? null : args.slice(i + 1); };
@@ -30,10 +36,11 @@ function isOptionValue(a) {
   return false;
 }
 if (!logFile) {
-  console.error('usage: node tools/replay.mjs <logfile> [--brief] [--robot <module>] [--dump <turn>:<dice> <out.json>]');
+  console.error('usage: node tools/replay.mjs <logfile> [--brief] [--analyze] [--robot <module>] [--dump <turn>:<dice> <out.json>]');
   process.exit(2);
 }
 const brief = args.includes('--brief');
+const analyze = args.includes('--analyze');
 const robotPath = opt('--robot')?.[0];
 const robotUrl = robotPath ? pathToFileURL(resolve(robotPath)).href : new URL('../src/RobotPlayer.js', import.meta.url).href;
 const { pickNextRobotMove } = await import(robotUrl);
@@ -105,6 +112,48 @@ function findSequence(g, who, segs, i = 0) {
   return null;
 }
 
+// ---- Endgame analysis (--analyze) --------------------------------------------
+const marblesKey = (g, pi) => g.players[pi].marbles.map(marbleStr).sort().join(' ');
+// Every legal way to play the current roll (both dice, either order, a die
+// used whenever it can be). Returns resulting games keyed by the player's
+// marble positions.
+function allPlays(g, pi) {
+  const real = (gg, d) => (allLegalMoves(gg, pi)[d] ?? []).filter(m => !m.optional);
+  const out = new Map();
+  for (const d of [0, 1]) for (const m1 of real(g, d)) {
+    const g1 = structuredClone(g); applyMove(g1, pi, m1);
+    const second = g1.winner != null ? [] : real(g1, 1 - d);
+    if (!second.length) { out.set(marblesKey(g1, pi), g1); continue; }
+    for (const m2 of second) { const g2 = structuredClone(g1); applyMove(g2, pi, m2); out.set(marblesKey(g2, pi), g2); }
+  }
+  if (!out.size) out.set(marblesKey(g, pi), g);
+  return out;
+}
+// Race value of a position right after a roll: expected turns still to play
+// (a 6 continues the current turn), and — if every opponent is in the table —
+// the probability of winning the race.
+function raceValue(after, pi, six) {
+  const me = lookup(after.players[pi]);
+  if (!me) return null;
+  const turns = expectedTurns(me) === 0 ? 0 : six ? expectedTurns(me) - 1 : expectedTurns(me);
+  const opps = after.players.filter((_, o) => o !== pi).map(p => lookup(p));
+  let win = null;
+  if (opps.every(Boolean)) {
+    if (expectedTurns(me) === 0) win = 1;
+    // A 6: this player keeps rolling now. Otherwise everyone else plays first.
+    else if (six) win = raceWinProbability(me, opps);
+    else {
+      win = 0;
+      for (let n = 1; n <= 60; n++) {
+        const pn = finishedBy(me, n) - finishedBy(me, n - 1);
+        if (pn > 0) win += pn * opps.reduce((acc, o) => acc * (1 - finishedBy(o, n)), 1);
+      }
+    }
+  }
+  return { turns, win };
+}
+const analysis = [];               // { tag, who, played, best, cost, winPlayed, winBest, choices }
+
 let prev = null;
 let differ = 0;
 for (const t of turns) {
@@ -128,6 +177,8 @@ for (const t of turns) {
     writeFileSync(dumpFile, JSON.stringify(game));
     console.log(`(state before roll ${dumpAt} written to ${dumpFile})`);
   }
+  let plays = null;
+  if (analyze && lookup(game.players[t.who])) plays = allPlays(game, t.who);
   const plan = findSequence(game, t.who, segs);
   for (const [si, s] of segs.entries()) {
     const cands = matching(game, t.who, s);
@@ -159,6 +210,17 @@ for (const t of turns) {
     const real = (allLegalMoves(game, t.who)[d] ?? []).filter(m => !m.optional);
     if (real.length) issues.push(`${tag}: die ${t.dice[d]} unused but had moves: ${real.map(m => describe(m, t.who)).join('; ')}`);
   }
+  if (plays && plays.size > 1) {
+    const six = t.dice.includes(6);
+    const scored = [...plays].map(([k, g]) => ({ k, v: raceValue(g, t.who, six) })).filter(x => x.v);
+    const played = marblesKey(game, t.who);
+    const mine = scored.find(x => x.k === played);
+    if (mine && scored.length > 1) {
+      const best = scored.reduce((a, b) => (b.v.turns < a.v.turns ? b : a));
+      analysis.push({ tag, who: t.who, played, best: best.k, cost: mine.v.turns - best.v.turns,
+        winPlayed: mine.v.win, winBest: best.v.win, choices: scored.length });
+    }
+  }
   prev = t;
 }
 
@@ -170,3 +232,23 @@ issues.forEach(i => console.log('  ' + i));
 console.log(`\n=== Robot moves that differ from the robot code: ${differ} ===`);
 console.log(`\n=== ${brief ? 'Bumps and differing robot moves' : 'Robot decisions and bumps'} ===`);
 notes.forEach(n => console.log('  ' + n));
+
+if (analyze) {
+  const pct = x => x == null ? '' : `${(100 * x).toFixed(1)}%`;
+  console.log('\n=== Endgame analysis (exact race values; bumps not counted) ===');
+  console.log('Every roll where the player was in the endgame table and had a real choice.');
+  console.log('cost = extra expected turns to finish versus the best play.\n');
+  for (const a of analysis) {
+    const win = a.winPlayed == null ? '' : `   race win ${pct(a.winPlayed)}${a.cost > 0.005 ? ` (best ${pct(a.winBest)})` : ''}`;
+    const verdict = a.cost > 0.005 ? `→ ${a.played.padEnd(14)} cost +${a.cost.toFixed(2)} turns; best ${a.best}` : `→ ${a.played.padEnd(14)} best play`;
+    console.log(`  ${a.tag.padEnd(22)} ${verdict}${win}`);
+  }
+  console.log('\nSummary:');
+  names.forEach((n, i) => {
+    const mine = analysis.filter(a => a.who === i);
+    if (!mine.length) return;
+    const errs = mine.filter(a => a.cost > 0.005);
+    const lost = mine.reduce((s, a) => s + a.cost, 0);
+    console.log(`  ${n.padEnd(10)} ${mine.length} endgame decisions, ${errs.length} not best, ${lost.toFixed(2)} turns lost in total`);
+  });
+}

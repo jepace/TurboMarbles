@@ -23,7 +23,15 @@ It replays every move and reports:
   exactly what the current `src/RobotPlayer.js` would. Older logs differ
   because the robot has changed since.
 
-Options: `--robot <module>` compares against another robot version;
+**`--analyze`** adds an endgame report, gnubg-style: for every roll where the
+player's marbles were all home or within 12 squares of home, it compares the
+play with the best play using the exact endgame table — the extra expected
+turns it cost ("cost +0.53 turns"), and the race-win probability when every
+opponent is in the table too — then sums each player's losses. These are pure
+race values: bumps aren't counted, so a "costly" move that bumped someone may
+still have been right.
+
+Other options: `--robot <module>` compares against another robot version;
 `--dump <turn>:<dice> <out.json>` saves the game state just before a roll
 (e.g. `--dump 21:3-1 t21.json`) for "what if" experiments.
 
@@ -64,3 +72,22 @@ The summary shows how long a lone last marble takes from each square, the
 robot's average shortfall versus perfect play, and its worst positions.
 `--position` with `--roll` lists every way to play that roll, the expected
 rolls left after each, and which one the robot picks.
+
+## build-endgame-table.mjs — the endgame table
+
+```sh
+node tools/build-endgame-table.mjs      # ~40 s; writes src/endgame-table.json
+```
+
+Precomputes, for every arrangement of a player's four marbles within the last
+12 squares before home, the hub and home (2,380 positions): the expected turns
+to finish with best play, and the probability of finishing within 1, 2, … 40
+turns. Like gnubg's bear-off databases, two of these distributions give an
+exact race-win probability. The robot plays from the table near home, and
+`replay.mjs --analyze` grades endgame decisions with it. Squares are relative
+to the home entry, so one table serves every colour.
+
+Moves come from the real rules engine, so **rebuild the table after any rules
+change that affects movement near home** (and commit the new JSON). The one
+approximation — a star-track hop forced off the region when every other move
+is blocked, 66 of ~85,000 position-rolls — is described in the script.

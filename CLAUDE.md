@@ -22,6 +22,7 @@ Always run tests after code changes:
 node test/engine.mjs      # GameEngine unit tests (no server needed)
 node test/manager.mjs     # GameManager unit tests (no server needed)
 node test/cli.mjs         # CLI helper unit tests (no server needed)
+node test/endgame.mjs     # endgame table + robot endgame play (no server needed)
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -30,7 +31,8 @@ node test/integration.mjs # integration tests (requires server running)
 
 - `src/GameEngine.js` — pure rule engine (no I/O, no WebSockets). All move validation, legal move computation, and state mutation lives here. Re-exports constants from `public/js/constants.js`.
 - `src/GameManager.js` — WebSocket session/room management. Calls GameEngine. Handles connect/disconnect/reconnect.
-- `src/RobotPlayer.js` — AI heuristics. Calls GameEngine's `allLegalMoves`, picks best move by score.
+- `src/RobotPlayer.js` — AI heuristics. Calls GameEngine's `allLegalMoves`, picks best move by score. Near home it switches to exact values from the endgame table.
+- `src/EndgameTable.js` + `src/endgame-table.json` — precomputed endgame table (exact expected turns and finish-time distributions for every position within 12 squares of home). Rebuild with `node tools/build-endgame-table.mjs` after any rules change that affects movement near home.
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.
