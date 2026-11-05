@@ -373,6 +373,12 @@ slots 4, 3, 2, 1 from the deepest down; debt is the total number of slots they
 still have to climb, each needing an exact roll later. Entering home low under
 an empty slot 4 adds debt; moving up inside home pays it off.
 
+Endgame: when every robot marble is home or within 12 squares of home (or in
+the hub), the robot instead scores each way of playing the roll by the exact
+expected turns to finish from the endgame table (src/EndgameTable.js), at 42
+points per turn, minus the danger cost and plus the bump bonus. This makes its
+race play exactly optimal (tools/endgame.mjs: 0.00 extra rolls vs perfect play).
+
 The distance estimate counts the star-track shortcut and adds penalties for
 positions that need a specific roll (exact star landing, a 1 to leave the hub,
 a 1 or 6 to leave base). Optional moves (passing home to go around) are never

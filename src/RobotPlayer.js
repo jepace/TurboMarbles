@@ -14,6 +14,7 @@ const WIN_SCORE = 10000;
 // A whole roll is planned: both dice, both orders (pickNextRobotMove).
 
 import { allLegalMoves, applyMove, TRACK_SIZE, ALL_STARS } from './GameEngine.js';
+import { lookup } from './EndgameTable.js';
 
 // Score of a die that has no move left to make: same as a move that neither
 // helps nor hurts (positional moves score 200 + 5 × gain).
@@ -33,6 +34,7 @@ const NO_MOVE_SCORE = 200;
 export function pickNextRobotMove(game, playerIndex) {
   if (game.diceUsed[0] && game.diceUsed[1]) return null;
   const threats = RISK_WEIGHT > 0 ? threatMap(game, playerIndex) : null;
+  if (lookup(game.players[playerIndex])) return pickWithTable(game, playerIndex, threats);
   const locs = marbleLocs(game, playerIndex);
   if (game.diceUsed[0] || game.diceUsed[1]) {
     return bestSingleMove(game, playerIndex, locs, new Set(), threats).move;
@@ -55,6 +57,53 @@ export function pickNextRobotMove(game, playerIndex) {
   }
   return best;
 }
+
+// ---- Endgame: exact race values from the precomputed table -----------------
+//
+// When every robot marble is home or within the table's region (the last
+// squares before home, plus the hub), each way of playing the roll is scored
+// by the table's exact expected turns to finish from the resulting position,
+// converted to move-score points, minus the danger cost (opponents can still
+// pass through those squares) plus the bump bonus. See src/EndgameTable.js.
+function pickWithTable(game, playerIndex, threats) {
+  const six = game.dice.includes(6); // a 6 means this turn continues
+  const evaluate = after => {
+    const entry = lookup(after.players[playerIndex]);
+    if (!entry) return -1e6;           // left the region (only when forced)
+    const turns = entry[0] === 0 ? 0 : (six ? entry[0] - 1 : entry[0]);
+    let score = -TURN_POINTS * turns;
+    // Opponent marbles sent back to base by this roll stop being threats.
+    const removed = new Set();
+    game.players.forEach((p, o) => {
+      if (o === playerIndex) return;
+      p.marbles.forEach((m, id) => {
+        if (m.zone !== 'base' && after.players[o].marbles[id].zone === 'base') {
+          removed.add(`${o}:${id}`);
+          score += BUMP_BONUS;
+        }
+      });
+    });
+    if (threats) score -= risk(after, playerIndex, marbleLocs(after, playerIndex), removed, threats);
+    return score;
+  };
+  const apply = (g, mv) => { const g2 = structuredClone(g); applyMove(g2, playerIndex, mv); return g2; };
+
+  let best = null, bestScore = -Infinity;
+  for (const first of candidateMoves(game, playerIndex)) {
+    const g1 = apply(game, first);
+    let score;
+    const second = g1.winner != null ? [] : candidateMoves(g1, playerIndex);
+    if (second.length === 0) score = evaluate(g1);
+    else score = Math.max(...second.map(m2 => evaluate(apply(g1, m2))));
+    if (score > bestScore) { bestScore = score; best = first; }
+  }
+  return best;
+}
+
+// Points per turn when converting table values (expected turns) into move
+// scores. A turn covers ~8.4 pips on average (about 1.2 rolls of 7) and a pip
+// is worth 5 points elsewhere in the scoring, hence ~42.
+const TURN_POINTS = 42;
 
 // Best move for the unused die(s) in this position, and its score net of the
 // danger it leaves the robot's marbles in. With no move available, the score
