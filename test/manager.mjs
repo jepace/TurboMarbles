@@ -5,7 +5,7 @@ import {
   createRoom, joinRoom, addRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
-  handleUndo, handleCommit,
+  handleUndo, handleCommit, handleAnalyzeGame,
   _reset, _getRoom,
 } from '../src/GameManager.js';
 import { config as gmConfig } from '../src/GameManager.js';
@@ -951,6 +951,56 @@ describe('lobby — stale lobbies expire', () => {
   createRoom(mockWs(), 'New', 2);        // any createRoom sweeps
   assert(!_getRoom(roomId), 'three-hour-old lobby removed');
   assert(old.find('error').some(e => e.code === 'ROOM_EXPIRED'), 'its players were told');
+});
+
+// ---- Move feedback ----------------------------------------------------------
+
+describe('move feedback — sent to the roller on commit, decision recorded', () => {
+  const { host, guest, roomId } = twoHumanGame();
+  // Dice 6-1 with everything in base: several ways to play it (6 or 1 to exit).
+  const r = Math.random; let k = 0;
+  Math.random = () => (k++ % 2 === 0 ? 0.9 : 0);
+  handleRoll(host, roomId); Math.random = r;
+  const room = _getRoom(roomId);
+  const legal = host.find('rolled')[0].moves;
+  handleMove(host, roomId, legal['0'][0]);              // exit base with the 6
+  const after1 = host.find('legalMoves').pop().moves;
+  handleMove(host, roomId, (after1['1'] ?? [])[0]);     // then use the 1
+  host.sent = []; guest.sent = [];
+  handleCommit(host, roomId);
+  const fb = host.find('moveFeedback');
+  assert(fb.length === 1, 'roller gets one moveFeedback');
+  assert(typeof fb[0]?.robotAgrees === 'boolean' && typeof fb[0]?.robotMoves === 'string',
+    `feedback has robotAgrees and robotMoves (${fb[0]?.robotMoves})`);
+  assert(guest.find('moveFeedback').length === 0, 'other players do not get it');
+  assert(room.history.length === 1 && room.history[0].pi === 0, 'decision recorded for post-game analysis');
+});
+
+describe('move feedback — no feedback or record for a forced roll', () => {
+  const { host, roomId } = twoHumanGame();
+  rollWith(host, roomId, 0);                            // 1-1, all in base: exit one, move it 1 — or…
+  const room = _getRoom(roomId);
+  // Force a single-option situation instead: one marble out, the rest home.
+  room.game.players[0].marbles.forEach((m, i) => Object.assign(m, i === 0
+    ? { zone: 'track', space: 10 } : { zone: 'home', slot: i + 1 }));
+  room.game.diceUsed = [false, false];
+  room.game._afterRoll = structuredClone({ players: room.game.players, turnIndex: 0, phase: 'AWAITING_MOVE',
+    dice: room.game.dice, diceUsed: [false, false], winner: null });
+  // Only marble on 10 can move: 1 then 1 → 12, one distinct play.
+  handleMove(host, roomId, { type: 'move', dieIndex: 0, marbleId: 0, toZone: 'track', toSpace: 11 });
+  handleMove(host, roomId, { type: 'move', dieIndex: 1, marbleId: 0, toZone: 'track', toSpace: 12 });
+  host.sent = [];
+  handleCommit(host, roomId);
+  assert(host.find('turnChanged').length === 1, 'the moves were legal and the commit went through');
+  assert(host.find('moveFeedback').length === 0, 'no feedback when there was only one way to play');
+  assert(room.history.length === 0, 'nothing recorded');
+});
+
+describe('analyzeGame — ignored until the game is over', () => {
+  const { host, roomId } = twoHumanGame();
+  host.sent = [];
+  handleAnalyzeGame(host, roomId);
+  assert(host.sent.length === 0, 'no analysis while playing');
 });
 
 // ---- Summary ----------------------------------------------------------------

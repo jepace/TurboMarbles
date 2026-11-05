@@ -8,7 +8,7 @@ import {
   createRoom, joinRoom, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
-  handleUndo, handleCommit,
+  handleUndo, handleCommit, handleAnalyzeGame,
 } from './GameManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -149,7 +149,7 @@ wss.on('connection', (ws, req) => {
 
 const KNOWN_ACTIONS = new Set([
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
-  'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect',
+  'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
 ]);
 
 function dispatch(ws, msg) {
@@ -243,6 +243,13 @@ function dispatch(ws, msg) {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
       handleCommit(ws, roomId);
+      break;
+    }
+
+    case 'analyzeGame': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      handleAnalyzeGame(ws, roomId);
       break;
     }
 

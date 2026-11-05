@@ -236,6 +236,20 @@ button.secondary { background: #fff2; }
 }
 .log-entry { padding: 1px 0; display: flex; align-items: baseline; gap: 5px; }
 .log-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+.log-feedback { padding-left: 13px; font-style: italic; }
+.log-feedback.agree { color: #7fbf7f; }
+.log-feedback.differ { color: #e0b050; }
+
+/* ---- Settings (sidebar) ---- */
+#settings { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); }
+#settings label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+/* ---- Post-game analysis (Game Over card) ---- */
+#win-card { max-width: 560px; max-height: 90%; }
+#analysis { overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 6px; text-align: left; }
+#analysis .summary { font-weight: 600; }
+#analysis .mistake { padding: 6px 8px; background: var(--surface); border-radius: 6px; }
+#analysis .muted { color: var(--muted); }
 
 /* ---- Player color CSS vars used in JS ---- */
 .color-yellow { background: var(--yellow); }

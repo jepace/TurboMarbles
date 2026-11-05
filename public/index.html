@@ -67,13 +67,15 @@
       <canvas id="board-canvas"></canvas>
       <!-- Win overlay: covers only the board, so the sidebar log stays usable -->
       <div id="win-overlay" style="display:none">
-        <div class="card">
+        <div class="card" id="win-card">
           <h2>Game Over</h2>
           <p id="winner-msg"></p>
           <div class="btn-row">
+            <button id="btn-analyze" class="secondary">Analyze Game</button>
             <button id="btn-copy-log" class="secondary">Copy Log</button>
             <button id="btn-play-again">Play Again</button>
           </div>
+          <div id="analysis" style="display:none"></div>
         </div>
       </div>
     </div>
@@ -92,6 +94,10 @@
       <div id="move-hint" style="display:none"></div>
       <div id="player-list"></div>
       <div id="game-log"></div>
+      <div id="settings">
+        <label title="After each roll, show how the robot would have played it"><input type="checkbox" id="opt-feedback"> Move feedback</label>
+        <label title="Offer a rollout analysis of your moves when the game ends"><input type="checkbox" id="opt-analysis"> Post-game analysis</label>
+      </div>
     </div>
   </div>
 </div>

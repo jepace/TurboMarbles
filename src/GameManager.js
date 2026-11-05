@@ -7,6 +7,8 @@ import {
   MARBLES_PER_PLAYER,
 } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
+import { Worker } from 'worker_threads';
+import { moveFeedback } from './Analysis.js';
 
 const DISCONNECT_TIMEOUT_MS  = 30 * 60 * 1000; // 30 minutes
 const ROBOT_TURN_DELAY_MS    = 800;            // pause before robot's turn starts
@@ -15,9 +17,14 @@ const MAX_TOTAL_ROOMS        = 200;            // global cap — prevents memory
 const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
 const LOBBY_TTL_MS           = 2 * 60 * 60 * 1000; // unstarted lobbies expire after 2 h
 const ILLEGAL_LOG_INTERVAL_MS = 10_000;        // at most one illegal-move warning per socket per 10 s
+const MAX_ANALYSES          = 1;              // post-game analyses running at once (CPU-heavy)
+const MAX_ANALYSIS_DECISIONS = 60;             // per player per game
 export const config = {
   skipTurnDelayMs: 1500,  // show dice before auto-advancing a skipped turn
   initialTurnIndex: null, // null = random; set to 0 in tests to pin first player
+  // Post-game analysis: playouts per option to screen all options, playouts
+  // for the top `keep` options (plus the one played) in depth.
+  analysis: { screen: 40, deep: 300, keep: 3 },
 };
 
 const rooms = new Map();    // roomId → Room
@@ -98,6 +105,8 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
     disconnectTimers: new Map(),
     robotTurnTimer: null,
     skipTimer: null,
+    history: [],        // human decisions, for post-game analysis
+    analyses: new Map(),// playerIndex → finished analysis result
   };
   rooms.set(roomId, room);
 
@@ -213,7 +222,16 @@ function performRoll(game) {
   game._humanMadeMove = false;
   game._committed = false; // guard: reject undo after commitTurn fires
   game._undoStack = []; // per-move snapshots for undo; reset on each roll
+  game._afterRoll = snapshot(game); // position + dice, for move feedback and analysis
   return dice;
+}
+
+// The parts of a game the rules engine needs — no private bookkeeping fields.
+function snapshot(game) {
+  return structuredClone({
+    players: game.players, turnIndex: game.turnIndex, phase: game.phase,
+    dice: game.dice, diceUsed: game.diceUsed, winner: game.winner,
+  });
 }
 
 // ---------- In-game actions ----------
@@ -605,6 +623,7 @@ function commitTurn(room) {
     broadcast(room, { event: 'extraRoll', playerIndex: game.turnIndex });
   } else {
     nextTurn(game);
+    game._turnNo = (game._turnNo ?? 1) + 1;   // same numbering as the client's move log
     broadcast(room, { event: 'turnChanged', playerIndex: game.turnIndex });
   }
   scheduleCurrentTurn(room);
@@ -793,7 +812,76 @@ export function handleCommit(ws, roomId) {
   // Both dice must be consumed before committing
   if (!game.diceUsed[0] || !game.diceUsed[1]) return;
 
+  recordDecision(room, ws);
   commitTurn(room);
+}
+
+// After a human commits a roll: tell them how the robot would have played it
+// (the client shows it if the player has move feedback turned on), and keep
+// the decision for post-game analysis. Rolls with no real choice are skipped.
+function recordDecision(room, ws) {
+  const { game } = room;
+  if (!game._afterRoll) return;
+  const pi = game.turnIndex;
+  let fb;
+  try { fb = moveFeedback(game._afterRoll, game, pi); } catch (err) {
+    console.error('[analysis] move feedback failed', err);
+    return;
+  }
+  if (!fb) return;
+  sendTo(ws, { event: 'moveFeedback', playerIndex: pi, ...fb });
+  if (room.history.filter(d => d.pi === pi).length < MAX_ANALYSIS_DECISIONS) {
+    room.history.push({ turn: game._turnNo ?? 1, dice: game.dice.slice(), pi,
+      before: game._afterRoll, after: snapshot(game) });
+  }
+}
+
+// ---------- Post-game analysis ----------
+
+let analysesRunning = 0;
+
+// A finished game's player asks for rollout analysis of their decisions. Runs
+// in a worker thread; progress and the result go to that player only.
+export function handleAnalyzeGame(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'finished') return;
+  const sess = sessions.get(ws._id);
+  if (!sess || sess.roomId !== roomId) return;
+  const pi = sess.playerIndex;
+
+  const done = room.analyses.get(pi);
+  if (done === 'running') return;
+  if (done) { sendTo(ws, { event: 'analysisResult', items: done }); return; }
+
+  const decisions = room.history.filter(d => d.pi === pi);
+  if (!decisions.length) { sendTo(ws, { event: 'analysisResult', items: [] }); return; }
+  if (analysesRunning >= MAX_ANALYSES) {
+    sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing another game. Try again in a minute.' });
+    return;
+  }
+
+  analysesRunning++;
+  room.analyses.set(pi, 'running');
+  const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
+    workerData: { decisions, options: config.analysis },
+  });
+  let finished = false;
+  const end = () => { if (!finished) { finished = true; analysesRunning--; } };
+  worker.on('message', msg => {
+    if (msg.type === 'progress') sendTo(ws, { event: 'analysisProgress', done: msg.done, total: msg.total });
+    if (msg.type === 'result') {
+      room.analyses.set(pi, msg.items);
+      sendTo(ws, { event: 'analysisResult', items: msg.items });
+      end();
+    }
+  });
+  worker.on('error', err => {
+    console.error('[analysis] worker failed', err);
+    room.analyses.delete(pi);
+    sendTo(ws, { event: 'error', code: 'ANALYSIS_FAILED', message: 'Analysis failed.' });
+    end();
+  });
+  worker.on('exit', () => { if (!finished) room.analyses.delete(pi); end(); });
 }
 
 // For unit testing only — resets all module-level state between test cases.

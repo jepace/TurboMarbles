@@ -25,6 +25,20 @@ let turnNumber    = 0;    // increments each turnChanged; set to 1 on gameStarte
 let turnLogMoves  = [];   // [{ marbleId, path: [str,...], bumped }] for current turn
 let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
+let pendingFeedback = null; // { text, cls } — robot comparison for my roll, logged with it
+
+// ---- Player options (remembered in this browser) ----
+// Move feedback: after committing a roll, show how the robot would have played it.
+// Post-game analysis: offer the "Analyze Game" button when a game ends.
+const settings = { feedback: true, analysis: true };
+try {
+  const saved = JSON.parse(localStorage.getItem('tm.settings') ?? '{}');
+  if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
+  if (typeof saved.analysis === 'boolean') settings.analysis = saved.analysis;
+} catch { /* storage unavailable: use defaults */ }
+function saveSettings() {
+  try { localStorage.setItem('tm.settings', JSON.stringify(settings)); } catch { /* ignore */ }
+}
 // Bumps seen since the last marbleMoved. The server emits marbleBumped right
 // before the attacker's marbleMoved, so we stash them here and the very next
 // marbleMoved enqueues their fly-home tweens (after the attacker's). Purely an
@@ -329,8 +343,66 @@ $('board-canvas').addEventListener('click', onCanvasClick);
 
 // ---- Socket events ----
 
-on('error', ({ message }) => {
+on('error', ({ code, message }) => {
+  if (code && code.startsWith('ANALYSIS')) resetAnalyzeButton();
   alert(message);
+});
+
+// ---- Move feedback (robot comparison after each committed roll) ----
+on('moveFeedback', fb => {
+  if (fb.playerIndex !== myPlayerIndex || !settings.feedback) return;
+  let text = fb.robotAgrees ? '✓ Robot agrees' : `Robot would play ${fb.robotMoves}`;
+  if (fb.endgame) {
+    text += fb.endgame.best ? ' · exact: best play'
+      : ` · exact: costs +${fb.endgame.cost.toFixed(2)} turns (best ${fb.endgame.bestMoves})`;
+  }
+  const good = fb.robotAgrees && (!fb.endgame || fb.endgame.best);
+  pendingFeedback = { text, cls: good ? 'agree' : 'differ' };
+});
+
+// ---- Post-game analysis ----
+function resetAnalyzeButton() {
+  const btn = $('btn-analyze');
+  btn.disabled = false;
+  btn.textContent = 'Analyze Game';
+}
+$('btn-analyze').addEventListener('click', () => {
+  const btn = $('btn-analyze');
+  btn.disabled = true;
+  btn.textContent = 'Analyzing…';
+  send({ action: 'analyzeGame' });
+});
+on('analysisProgress', ({ done, total }) => {
+  $('btn-analyze').textContent = `Analyzing… ${done}/${total}`;
+});
+on('analysisResult', ({ items }) => {
+  const btn = $('btn-analyze');
+  btn.textContent = 'Analyzed';
+  const box = $('analysis');
+  box.replaceChildren();
+  box.style.display = 'flex';
+  const line = (text, cls) => { const d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; box.appendChild(d); return d; };
+  if (!items.length) { line('No moves to analyse — every roll was forced.', 'muted'); return; }
+  const pct = p => `${Math.round(100 * p)}%`;
+  const mistakes = items.filter(i => i.mistake).sort((a, b) => b.loss - a.loss);
+  const lost = mistakes.reduce((s, i) => s + i.loss, 0);
+  line(`${items.length} decisions analysed · ${mistakes.length} clear mistake${mistakes.length === 1 ? '' : 's'}` +
+       (mistakes.length ? ` · ${Math.round(100 * lost)} win-rate points lost` : ''), 'summary');
+  for (const m of mistakes) {
+    line(`Turn ${m.turn} (${m.dice.join('-')}): you played ${m.played} — ${pct(m.playedWin)} to win. ` +
+         `Better: ${m.best} — ${pct(m.bestWin)} (−${Math.round(100 * m.loss)} pts).`, 'mistake');
+  }
+  line(mistakes.length ? 'Every other decision was as good as the best option.' : 'Every decision was as good as the best option.', 'muted');
+  line('Win rates come from playing each option out hundreds of times with robot-level play.', 'muted');
+});
+
+// ---- Options checkboxes ----
+$('opt-feedback').checked = settings.feedback;
+$('opt-analysis').checked = settings.analysis;
+$('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; saveSettings(); });
+$('opt-analysis').addEventListener('change', e => {
+  settings.analysis = e.target.checked; saveSettings();
+  $('btn-analyze').style.display = settings.analysis ? '' : 'none';
 });
 
 on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots }) => {
@@ -393,6 +465,10 @@ function updateStartButton() {
 
 on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
+  pendingFeedback = null;
+  resetAnalyzeButton();
+  $('analysis').replaceChildren();
+  $('analysis').style.display = 'none';
   show('screen-game');
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
@@ -630,6 +706,7 @@ on('gameOver', ({ winnerIndex }) => {
   gameState.phase = 'GAME_OVER';
   const name = playerName(winnerIndex);
   $('winner-msg').textContent = `${name} wins! 🎉`;
+  $('btn-analyze').style.display = settings.analysis ? '' : 'none';
   $('win-overlay').style.display = 'flex';
   // Board stays visible — no screen switch
   log(`🏆 ${name} wins the game!`);
@@ -964,6 +1041,9 @@ function flushTurnLog() {
     ? turnLogMoves.map(m => m.path.join('/')).join(' ')
     : '--';
   log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
+  // Feedback lines start with "↳", so tools/replay.mjs ignores them in a copied log.
+  if (pendingFeedback && pi === myPlayerIndex) log(`↳ ${pendingFeedback.text}`, null, `log-feedback ${pendingFeedback.cls}`);
+  pendingFeedback = null;
   turnLogMoves = [];
   turnLogDice  = null;
 }
@@ -1052,10 +1132,10 @@ function playerName(index) {
 // Keep the entire game history visible. The ceiling is just a safety guard
 // against pathological unbounded DOM growth, not a normal-game limit.
 const LOG_MAX = 5000;
-function log(msg, color) {
+function log(msg, color, cls) {
   const el = $('game-log');
   const entry = document.createElement('div');
-  entry.className = 'log-entry';
+  entry.className = 'log-entry' + (cls ? ' ' + cls : '');
   if (color) {
     const dot = document.createElement('span');
     dot.className = 'log-dot';
