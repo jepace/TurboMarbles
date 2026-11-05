@@ -795,7 +795,30 @@ let   animationRunning = false;
 function enqueueTween(tween) {
   if (!tween.waypoints || tween.waypoints.length === 0) return;
   animationQueue.push(tween);
+  pinQueuedMarbles();
   if (!animationRunning) runNextAnimation();
+}
+
+// The marble whose tween is currently playing (its override is set per frame).
+let runningMarble = null;
+
+// Game state jumps to a marble's final position as soon as the server's event
+// arrives, but its tween may be waiting behind others (e.g. a robot's extra-
+// roll chain sends moves faster than they animate). Pin every marble that has
+// a queued tween at the start of its FIRST queued tween, so it waits visibly
+// where it is instead of appearing at the end, then snapping back when its
+// tween starts. Covers a marble whose second move is still queued after its
+// first finished.
+function pinQueuedMarbles() {
+  const seen = new Set();
+  for (const tw of animationQueue) {
+    const key = `${tw.playerIndex}:${tw.marbleId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (runningMarble && runningMarble.playerIndex === tw.playerIndex
+        && runningMarble.marbleId === tw.marbleId) continue;
+    setMarbleOverride(tw.playerIndex, tw.marbleId, tw.fromPos);
+  }
 }
 
 // Bumped by resetAnimations(). A running tween checks it on every frame and
@@ -808,6 +831,7 @@ function resetAnimations() {
   animationGen++;
   animationQueue.length = 0;
   animationRunning = false;
+  runningMarble = null;
   bumpHandoff = [];
   lastAnimEnd = null;
   clearAnimatingMarble();
@@ -817,6 +841,7 @@ function resetAnimations() {
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
+    runningMarble = null;
     lastAnimEnd = null;
     return;
   }
@@ -824,9 +849,13 @@ function runNextAnimation() {
   const gen = animationGen;
   const stale = () => gen !== animationGen;
   const { playerIndex, marbleId, fromPos, waypoints, sound } = animationQueue.shift();
+  runningMarble = { playerIndex, marbleId };
 
-  const STEP_MS = 200;  // per-waypoint duration
-  const PAUSE_MS = 350; // beat between two consecutive moves of the same marble
+  // Normal pace, or faster when moves are piling up behind this one, so the
+  // board doesn't fall far behind the server (and the log) on long turns.
+  const behind   = animationQueue.length >= 2;
+  const STEP_MS  = behind ? 110 : 200; // per-waypoint duration
+  const PAUSE_MS = behind ? 180 : 350; // beat between two consecutive moves of the same marble
 
   // Pause a beat when the same marble moves again (both dice on one marble) so a
   // bonk/landing on the prior move is legible before it sets off again.
@@ -846,15 +875,13 @@ function runNextAnimation() {
   function finish() {
     clearMarbleOverride(playerIndex, marbleId);
     clearAnimatingMarble();
+    runningMarble = null;
     lastAnimEnd = { playerIndex, marbleId };
     if (sound === 'bonk') playBonk();
     else if (sound === 'chime') playHomeChime();
-    // Pre-pin the next queued marble at its start position before drawing, so
-    // it doesn't flash at its already-updated destination during this frame.
-    if (animationQueue.length > 0) {
-      const next = animationQueue[0];
-      setMarbleOverride(next.playerIndex, next.marbleId, next.fromPos);
-    }
+    // Re-pin anything still waiting — including this marble, if it has another
+    // move queued — before drawing, so nothing shows at its final position early.
+    pinQueuedMarbles();
     drawBoard(gameState);
     runNextAnimation();
   }
