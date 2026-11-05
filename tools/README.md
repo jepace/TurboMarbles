@@ -91,3 +91,19 @@ Moves come from the real rules engine, so **rebuild the table after any rules
 change that affects movement near home** (and commit the new JSON). The one
 approximation — a star-track hop forced off the region when every other move
 is blocked, 66 of ~85,000 position-rolls — is described in the script.
+
+## rollout.mjs — which choices actually cost the game?
+
+```sh
+node tools/rollout.mjs game.txt                       # every human decision
+node tools/rollout.mjs game.txt --player JEP --games 400 --from 20 --to 40
+```
+
+For every roll where the player had a real choice, plays each distinct way of
+playing that roll out to the end of the game `--games` times (default 300),
+with every player using the robot's strategy afterwards, and compares win
+rates — gnubg-style rollouts. It works at any stage of the game and counts
+bumps and luck, unlike `replay.mjs --analyze` (exact, but endgame-only and
+race-only). A decision is marked ✗ only when the best option beats the played
+one by more than the combined 95% intervals. It is slow: roughly
+options × games × 5 ms per decision, so a whole game takes minutes.
