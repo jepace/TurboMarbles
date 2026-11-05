@@ -22,6 +22,7 @@ sudo rsync ${RSYNC_OPTS} \
     --exclude='.env' \
     --exclude='node_modules/' \
     --exclude='test/' \
+    --exclude='tools/' \
     --exclude='board-drawing' \
     --exclude='board-drawing-full' \
     --exclude='*.sqlite' \
