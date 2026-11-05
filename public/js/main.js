@@ -1082,6 +1082,11 @@ function flushTurnLog() {
     : '--';
   log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
   // Feedback lines start with "↳", so tools/replay.mjs ignores them in a copied log.
+  // A roll with no legal move ("--") is never committed, so the server sends
+  // no feedback for it; it was played the only way it could be.
+  if (!pendingFeedback && pi === myPlayerIndex && settings.feedback && !turnLogMoves.length) {
+    pendingFeedback = { text: '✓ Robot agrees', cls: 'agree' };
+  }
   if (pendingFeedback && pi === myPlayerIndex) log(`↳ ${pendingFeedback.text}`, null, `log-feedback ${pendingFeedback.cls}`);
   pendingFeedback = null;
   turnLogMoves = [];
