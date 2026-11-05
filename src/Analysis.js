@@ -49,7 +49,7 @@ function applyRecorded(game, pi, mv, record) {
   const to = destOf(mv);
   const bump = (to.zone === 'track' || to.zone === 'center') && game.players.some((p, o) => o !== pi &&
     p.marbles.some(m => m.zone === to.zone && (to.zone === 'center' || m.space === to.space)));
-  record.push({ marbleId: mv.marbleId, from: fromOf(game.players[pi].marbles[mv.marbleId]), to, bump });
+  record.push({ marbleId: mv.marbleId, from: fromOf(game.players[pi].marbles[mv.marbleId]), to, bump, die: game.dice?.[mv.dieIndex] });
   applyMove(game, pi, mv);
 }
 
@@ -133,7 +133,7 @@ export function describeRoll(before, after, pi) {
   const plays = allPlays(before, pi);
   const key = boardKey(after, pi);
   const mine = plays.find(p => p.key === key);
-  return { forced: plays.length < 2, played: mine ? notation(mine.moves) : '?', options: plays.length };
+  return { forced: plays.length < 2, played: mine ? notation(mine.moves) : '?', options: plays.length, steps: mine ? mine.moves : [] };
 }
 
 // ---- Post-game rollouts -------------------------------------------------------
@@ -324,7 +324,7 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
     robotAgrees: playedKey === robotKey,
     options: finalists.map(c => ({
       moves: notation(c.p.moves), win: c.win, n: c.res.length, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
-      played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game),
+      played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game), steps: c.p.moves,
       facts: positionFacts(c.p.game, pi),
     })),
     before: (({ race, duel }) => ({ race, duel }))(positionFacts({ ...before, dice: null }, pi)),

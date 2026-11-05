@@ -33,7 +33,7 @@ node test/integration.mjs # integration tests (requires server running)
 - `src/GameManager.js` — WebSocket session/room management. Calls GameEngine. Handles connect/disconnect/reconnect.
 - `src/RobotPlayer.js` — AI heuristics. Calls GameEngine's `allLegalMoves`, picks best move by score. Near home it switches to exact values from the endgame table.
 - `src/EndgameTable.js` + `src/endgame-table.json` — precomputed endgame table (exact expected turns and finish-time distributions for every position within 12 squares of home). Rebuild with `node tools/build-endgame-table.mjs` after any rules change that affects movement near home.
-- `src/DuelTable.js` + `src/duel-table.json` — exact solution of the two-player last-marble duel (both sides with h2–h4 filled and one marble out), used by the robot and the analysis page. Rebuild with `node tools/build-duel-table.mjs` (≈3 min) after any rules change that affects movement.
+- `src/DuelTable.js` + `src/duel-11.json.gz`, `src/duel-12.json.gz` — exact solutions of two-player endgames: both players down to their last marble (any home layout), and last marble vs two out (tidy homes). Used by the robot and the analysis page. Rebuild with `node tools/build-duel-table.mjs` (≈6 min for 11, longer for 12) after any rules change that affects movement; the build checks its move composition against the engine first.
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.

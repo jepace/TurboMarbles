@@ -108,16 +108,18 @@ race-only). A decision is marked ✗ only when the best option beats the played
 one by more than the combined 95% intervals. It is slow: roughly
 options × games × 5 ms per decision, so a whole game takes minutes.
 
-## build-duel-table.mjs — the last-marble duel
+## build-duel-table.mjs — exact two-player endgames
 
 ```
-node tools/build-duel-table.mjs        # ~3 min; writes src/duel-table.json
+node tools/build-duel-table.mjs [11|12]   # writes src/duel-11.json.gz, src/duel-12.json.gz
 ```
 
-Solves the two-player duel exactly: both players have three marbles in
-h2–h4 and one marble left (base, hub or track). For every position and
-whoever is to roll, the chance each side wins with perfect play — racing,
-hitting, and waiting out of reach until the other marble has gone past.
-Moves come from the real engine; one table per distance between the two
-arms. The robot plays duels from it, and the analysis page shows its value.
+Table 11: both players down to their last marble, any home layout (~6 min).
+Table 12: one player down to the last marble with h2–h4 filled, the other
+with two marbles out and h3–h4 filled, plus everything that follows (longer).
+For every position and whoever is to roll: the exact chance each side wins
+with perfect play — racing, hitting, and waiting out of reach. Each player's
+moves come from the real engine; the combined two-player moves are checked
+against the engine on random positions before solving. The robot plays
+these positions from the tables, and the analysis page shows their values.
 Rebuild after any rule change that affects movement.

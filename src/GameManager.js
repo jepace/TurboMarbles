@@ -879,8 +879,8 @@ export function handleAnalyzeGame(ws, roomId) {
   const base = {
     players: room.slots.map((s, i) => ({ name: s.name, color: game.players[i]?.color, isRobot: !!s.isRobot })),
     winner: game.winner,
-    rolls: rolls.map(({ turn, pi, dice, forced, played, options, before }) =>
-      ({ turn, pi, dice, forced, played, options, marbles: before ? before.players.map(p => p.marbles) : null })),
+    rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
+      ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
   };
   const finish = report => {
     room.analysis = { state: 'done', result: report };

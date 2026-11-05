@@ -433,7 +433,6 @@ let apSel = -1;          // selected roll index
 let apOpt = null;        // selected option index within the roll, or null = position before the roll
 const SEV_LABEL = { error: 'Error', blunder: 'Blunder' };
 const SEV_MARK = { error: '?', blunder: '??' };
-const DIE_FACE = ['', '\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685'];
 const pts = x => (100 * x).toFixed(1);
 const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${c})`;
@@ -532,7 +531,7 @@ function renderMoveList() {
     const rowEl = el('div', { class: 'ap-row' + (idx === apSel ? ' sel' : ''), title: p.name },
       el('span', { class: 'turn' }, `${r.turn}.`),
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
-      el('span', { class: 'dice-glyphs', title: r.dice.join('-') }, r.dice.map(d => DIE_FACE[d]).join('')),
+      el('span', {}, r.dice.join('-')),
       el('span', { class: 'play' }, r.played),
       badgeFor(r));
     rowEl.dataset.idx = idx;
@@ -544,7 +543,9 @@ function renderMoveList() {
 
 // Draw a position; with `movedFrom` (the position before the roll), arrows
 // show which marbles moved where, and red dashed arrows show bumped marbles.
-function showPosition(marbles, movedFrom, mover) {
+// `steps` (one per die: { marbleId, from, to, die }) draws one arrow per die,
+// numbered with the die; without steps, one arrow per marble that moved.
+function showPosition(marbles, movedFrom, mover, steps) {
   if (!gameState || !marbles) return;
   resizeBoard();
   const gs = { ...gameState, players: gameState.players.map((p, i) => ({ ...p, marbles: marbles[i] ?? p.marbles })) };
@@ -553,8 +554,13 @@ function showPosition(marbles, movedFrom, mover) {
     const moves = [];
     marbles.forEach((ms, pi) => ms.forEach((m, k) => {
       const o = movedFrom[pi]?.[k];
-      if (o && JSON.stringify(o) !== JSON.stringify(m)) moves.push({ from: o, to: m, playerIndex: pi, bumped: pi !== mover });
+      if (!o || JSON.stringify(o) === JSON.stringify(m)) return;
+      if (pi === mover && steps?.length) return;         // drawn die by die below
+      moves.push({ from: o, to: m, playerIndex: pi, bumped: pi !== mover });
     }));
+    for (const st of steps ?? []) {
+      moves.push({ from: { ...st.from, id: st.marbleId }, to: { ...st.to, id: st.marbleId }, playerIndex: mover, label: st.die });
+    }
     drawMoveArrows(moves);
   }
 }
@@ -625,8 +631,8 @@ function selectRoll(idx, opt = null) {
   }
   box.replaceChildren(...kids);
   if (view === 'before') showPosition(r.marbles);
-  else if (view === 'played') showPosition(after, r.marbles, r.pi);
-  else showPosition(r.analysis.options[view].marbles, r.marbles, r.pi);
+  else if (view === 'played') showPosition(after, r.marbles, r.pi, r.steps);
+  else showPosition(r.analysis.options[view].marbles, r.marbles, r.pi, r.analysis.options[view].steps);
 }
 
 // The exact facts behind an option: which of the mover's marbles can be hit

@@ -785,6 +785,19 @@ export function drawMoveArrows(moves) {
     ctx.closePath();
     ctx.fillStyle = color; ctx.fill();
     ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.stroke();
+    // Die value at the middle of the arrow.
+    if (mv.label != null) {
+      const mx = 0.25 * sx + 0.5 * cx + 0.25 * ex, my = 0.25 * sy + 0.5 * cy + 0.25 * ey;
+      const r = R * 0.75;
+      ctx.beginPath();
+      ctx.roundRect(mx - r, my - r, 2 * r, 2 * r, r * 0.3);
+      ctx.fillStyle = '#fff'; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke();
+      ctx.fillStyle = '#111';
+      ctx.font = `bold ${Math.round(r * 1.4)}px system-ui, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(mv.label), mx, my + 1);
+    }
     ctx.restore();
   }
 }
