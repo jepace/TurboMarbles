@@ -244,6 +244,17 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ---- In-game [-] key — Skip Die (next to Enter on the number pad) ----
+// The lobby's own "-" (remove a robot) only acts on the lobby screen.
+document.addEventListener('keydown', e => {
+  if (e.key !== '-') return;
+  if (!$('screen-game').classList.contains('active')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+  if ($('btn-skip').style.display === 'none') return; // nothing to skip right now
+  e.preventDefault();
+  doSkipDie();
+});
+
 // ---- Lobby [+]/[-] keys — host adds/removes a robot ----
 document.addEventListener('keydown', e => {
   // "=" is an undocumented alias for "+" so adding robots doesn't require Shift.
