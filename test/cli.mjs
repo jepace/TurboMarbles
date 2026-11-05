@@ -109,13 +109,13 @@ describe('buildSpaceGrid — center hub is near grid center', () => {
 describe('describeMove — exitBase', () => {
   const m = describeMove({ type: 'exitBase', marbleId: 0, dieIndex: 0, toSpace: 1 }, [1, 3]);
   assert(m.includes('Exit base'), 'exitBase contains "Exit base"');
-  assert(m.includes('Exit base → B↑1 (start)'), 'exitBase names the start square (B↑1)');
+  assert(m.includes('Exit base → B↑0 (start)'), 'exitBase names the start square (B↑0)');
   assert(m.includes('[die 1=1]'), 'exitBase includes die tag');
 });
 
 describe('describeMove — move to track (non-star)', () => {
   const m = describeMove({ type: 'move', marbleId: 0, dieIndex: 1, toZone: 'track', toSpace: 5 }, [3, 4]);
-  assert(m.includes('Move → B↑5'), 'move to track names the square (space 5 = B↑5)');
+  assert(m.includes('Move → B↑4'), 'move to track names the square (space 5 = B↑4)');
   assert(!m.includes('★'), 'non-star square has no star mark');
   assert(m.includes('[die 2=4]'), 'move includes die tag for dieIndex=1');
 });

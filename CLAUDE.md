@@ -85,8 +85,8 @@ B1 - B4 is the Base
 ### Square Names (move log, feedback, tools)
 Players see squares by colour, not by the internal numbers 1–84 (`spaceName` /
 `parseSpaceName` in `public/js/constants.js`). Each colour's U, in the
-direction of travel: `B↓5 … B↓1` down its right side, `B0` its home entry,
-`B↑1` its start, `B↑2 … B↑7` up its left side, `B★` its star. Letters:
+direction of travel: `B↓5 … B↓1` down its right side, `B↓0` its home entry,
+`B↑0` its start, `B↑1 … B↑6` up its left side (every number is a distance), `B★` its star. Letters:
 B P O Y G W. Home slots are `h1`–`h4`; also `hub` and `base`. Hovering a
 square on the board shows its name.
 
