@@ -351,6 +351,7 @@ on('error', ({ code, message }) => {
 // ---- Move feedback (robot comparison after each committed roll) ----
 on('moveFeedback', fb => {
   if (fb.playerIndex !== myPlayerIndex || !settings.feedback) return;
+  if (fb.forced) { pendingFeedback = { text: 'Only one way to play this roll', cls: 'forced' }; return; }
   let text = fb.robotAgrees ? '✓ Robot agrees' : `Robot would play ${fb.robotMoves}`;
   if (fb.endgame) {
     text += fb.endgame.best ? ' · exact: best play'

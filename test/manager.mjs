@@ -976,7 +976,7 @@ describe('move feedback — sent to the roller on commit, decision recorded', ()
   assert(room.history.length === 1 && room.history[0].pi === 0, 'decision recorded for post-game analysis');
 });
 
-describe('move feedback — no feedback or record for a forced roll', () => {
+describe('move feedback — a forced roll is reported as forced, not recorded', () => {
   const { host, roomId } = twoHumanGame();
   rollWith(host, roomId, 0);                            // 1-1, all in base: exit one, move it 1 — or…
   const room = _getRoom(roomId);
@@ -992,7 +992,8 @@ describe('move feedback — no feedback or record for a forced roll', () => {
   host.sent = [];
   handleCommit(host, roomId);
   assert(host.find('turnChanged').length === 1, 'the moves were legal and the commit went through');
-  assert(host.find('moveFeedback').length === 0, 'no feedback when there was only one way to play');
+  const forced = host.find('moveFeedback');
+  assert(forced.length === 1 && forced[0].forced === true, 'forced roll reported as forced');
   assert(room.history.length === 0, 'nothing recorded');
 });
 

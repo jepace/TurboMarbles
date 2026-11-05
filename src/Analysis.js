@@ -94,15 +94,16 @@ function raceTurns(g, pi, six) {
 }
 
 // `before`: the game as it was right after the roll (dice set, nothing used).
-// `after`:  the game after the player's moves. Returns null when the roll
-// left no real choice, otherwise:
-//   { robotAgrees, robotMoves, endgame: null | { best, cost, bestMoves } }
+// `after`:  the game after the player's moves. Returns { forced: true } when
+// there was only one way to play the roll (optional go-arounds don't count),
+// otherwise:
+//   { forced: false, robotAgrees, robotMoves, endgame: null | { best, cost, bestMoves } }
 export function moveFeedback(before, after, pi) {
   const plays = allPlays(before, pi);
-  if (plays.length < 2) return null;                 // forced
+  if (plays.length < 2) return { forced: true };
   const playedKey = boardKey(after, pi);
   const robot = robotPlay(before, pi);
-  const result = { robotAgrees: robot.key === playedKey, robotMoves: notation(robot.moves), endgame: null };
+  const result = { forced: false, robotAgrees: robot.key === playedKey, robotMoves: notation(robot.moves), endgame: null };
   if (lookup(before.players[pi])) {
     const six = before.dice.includes(6);
     const scored = plays.map(p => ({ p, t: raceTurns(p.game, pi, six) })).filter(x => x.t != null);

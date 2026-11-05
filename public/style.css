@@ -239,6 +239,7 @@ button.secondary { background: #fff2; }
 .log-feedback { padding-left: 13px; font-style: italic; }
 .log-feedback.agree { color: #7fbf7f; }
 .log-feedback.differ { color: #e0b050; }
+.log-feedback.forced { opacity: 0.6; }
 
 /* ---- Settings (sidebar) ---- */
 #settings { display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: var(--muted); }

@@ -818,7 +818,8 @@ export function handleCommit(ws, roomId) {
 
 // After a human commits a roll: tell them how the robot would have played it
 // (the client shows it if the player has move feedback turned on), and keep
-// the decision for post-game analysis. Rolls with no real choice are skipped.
+// the decision for post-game analysis. A roll with only one way to play is
+// reported as forced and not kept.
 function recordDecision(room, ws) {
   const { game } = room;
   if (!game._afterRoll) return;
@@ -828,8 +829,8 @@ function recordDecision(room, ws) {
     console.error('[analysis] move feedback failed', err);
     return;
   }
-  if (!fb) return;
   sendTo(ws, { event: 'moveFeedback', playerIndex: pi, ...fb });
+  if (fb.forced) return;                       // nothing to analyse later
   if (room.history.filter(d => d.pi === pi).length < MAX_ANALYSIS_DECISIONS) {
     room.history.push({ turn: game._turnNo ?? 1, dice: game.dice.slice(), pi,
       before: game._afterRoll, after: snapshot(game) });
