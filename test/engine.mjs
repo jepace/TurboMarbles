@@ -657,6 +657,39 @@ describe('home entry — pass-home offered as an optional (skippable) move', () 
     'die=4 at homeEntry with blocked home → optional around-the-track move');
 });
 
+// ---- Home entry: own marble on the entry blocks moves into home -------------
+
+describe('home entry — own marble on the entry space blocks marbles behind it', () => {
+  // Reported bug: blue marbles on 83 and 84 (home entry), die 5. The marble on
+  // 83 was offered home slot 4, jumping over the marble on 84.
+  const s = makeState(2);
+  setMarble(s, 0, 0, 'track', 84);
+  setMarble(s, 0, 1, 'track', 83);
+  setDice(s, 5, 2);
+  const behind = legalMovesForDie(s, 0, 0, 1);
+  assert(!behind.some(m => m.toZone === 'home'), 'marble on 83 cannot pass its own marble on 84 into home');
+  assert(behind.length === 0, 'marble on 83 has no move with a 5');
+  const front = legalMovesForDie(s, 0, 0, 0);
+  assert(!front.some(m => m.toZone === 'home'), 'marble on 84 cannot use a 5 (overshoots slot 4)');
+});
+
+describe('home entry — free entry still lets a marble walk into home', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 1, 'track', 83);
+  setDice(s, 5, 2);
+  assert(legalMovesForDie(s, 0, 0, 1).some(m => m.toZone === 'home' && m.toSlot === 4),
+    'marble on 83 with a 5 → home slot 4 when 84 is empty');
+});
+
+describe('home entry — opponent on the entry does not block', () => {
+  const s = makeState(2);
+  setMarble(s, 0, 1, 'track', 83);
+  setMarble(s, 1, 0, 'track', 84);
+  setDice(s, 5, 2);
+  assert(legalMovesForDie(s, 0, 0, 1).some(m => m.toZone === 'home' && m.toSlot === 4),
+    'marble on 83 passes an opponent on 84 into home');
+});
+
 // ---- Hub: only a 1 leaves it -----------------------------------------------
 
 describe('hub — a 6 does nothing (only a 1 leaves the hub)', () => {

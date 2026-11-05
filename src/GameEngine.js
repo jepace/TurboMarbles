@@ -271,9 +271,13 @@ function computeTrackMove(state, player, marble, dieVal, ignoreHome = false) {
     if (!ignoreHome && (pos === homeEntry || (crossesHome(pos, homeEntry, next)))) {
       const stepsToEntry = (marble.space === homeEntry) ? 0 : trackDistance(marble.space, homeEntry);
       const stepsIntoHome = dieVal - stepsToEntry;
+      // The home entry is part of the path (unless the marble starts on it),
+      // so an own marble sitting there blocks — whether this move stops on the
+      // entry or continues into home. Previously only stopping was checked,
+      // so a marble could jump over its own marble into home.
+      if (marble.space !== homeEntry && ownMarbleAtSpace(player, homeEntry)) return null;
       if (stepsIntoHome === 0) {
         // Lands exactly on homeEntry — stays on the track at that space
-        if (ownMarbleAtSpace(player, homeEntry)) return null;
         return { toZone: 'track', toSpace: homeEntry };
       }
       const targetSlot = stepsIntoHome;
