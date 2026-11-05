@@ -118,7 +118,7 @@ updateColorPicker(4); // initialize with default
 // ---- Join ----
 $('btn-join-confirm').addEventListener('click', () => {
   const code = $('join-code').value.trim().toUpperCase();
-  if (code.length !== 4) return;
+  if (!code) return; // the server validates the code itself
   connect();
   send({ action: 'joinRoom', code, name: myName });
 });
@@ -203,10 +203,13 @@ function setCommitVisible(visible) { $('btn-commit').style.display  = visible ? 
 function skippableDieIndex() {
   if (!isMyTurn() || !legalMovesCache || commitPending) return -1;
   const used = gameState?.diceUsed ?? [false, false];
+  // Mirrors the server: no skipping while the other die still has a mandatory
+  // move, since playing it first might give this die one.
+  const mandatory = i => !used[i] && (legalMovesCache[i] ?? []).some(m => !m.optional);
   for (let i = 0; i < 2; i++) {
     if (used[i]) continue;
     const moves = legalMovesCache[i] ?? [];
-    if (moves.length > 0 && moves.every(m => m.optional)) return i;
+    if (moves.length > 0 && moves.every(m => m.optional) && !mandatory(1 - i)) return i;
   }
   return -1;
 }
@@ -389,11 +392,7 @@ on('gameStarted', ({ gameState: gs }) => {
   turnLogMoves  = [];
   turnLogDice   = null;
   turnLogPlayer = null;
-  bumpHandoff   = [];
-  lastAnimEnd   = null;
-  animationQueue.length = 0;
-  animationRunning = false;
-  clearAllMarbleOverrides();
+  resetAnimations();
   renderSidebar();
   renderDice(null, gameState.players[gameState.turnIndex]?.color);
   drawBoard(gameState);
@@ -599,14 +598,10 @@ on('undone', ({ gameState: gs }) => {
   selectedMarble = null;
   selectedMarbleMoves = [];
   commitPending = false;
-  bumpHandoff = [];
-  lastAnimEnd = null;
   // Clear any in-flight animations and overrides — server state is authoritative
-  animationQueue.length = 0;
-  animationRunning = false;
-  clearAllMarbleOverrides();
-  // Roll back the turn log to only the moves that still stand
-  turnLogMoves = [];
+  resetAnimations();
+  // Undo reverts exactly one move (LIFO), so drop only that move from the log.
+  popLastLoggedMove();
   setCommitVisible(false); setUndoVisible(false);
   renderDice(gameState.dice);
   drawBoard(gameState);
@@ -639,8 +634,39 @@ on('reconnected', ({ gameState: gs }) => {
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
+  legalMovesCache = null;
+  selectedMarble = null;
+  selectedMarbleMoves = [];
+  resetAnimations();
   renderSidebar();
+  renderDice(gameState.dice, gameState.players[gameState.turnIndex]?.color);
+  // Restore the controls for whatever point of the turn we came back to. The
+  // server follows up with legalMoves (mid-roll) or readyToCommit as needed.
+  const canRoll = isMyTurn() && !gameState.dice
+    && (gameState.phase === 'IN_TURN' || gameState.phase === 'EXTRA_ROLL');
+  if (canRoll) enableRoll(); else $('btn-roll').disabled = true;
+  updateSkipButton();
   drawBoard(gameState);
+});
+
+on('hostChanged', ({ playerIndex }) => {
+  if (playerIndex !== myPlayerIndex) return;
+  // The previous host left the lobby; this player can now add robots and start.
+  $('host-controls').style.display = 'flex';
+  $('lobby-wait-msg').style.display = 'none';
+  // Re-render so robot slots get their remove buttons.
+  const slots = [...document.querySelectorAll('#lobby-slots li')].map(li => {
+    const text = li.querySelector('.slot-name').textContent;
+    return {
+      index: Number(li.id.replace('slot-', '')),
+      name: text.replace(/ 🤖$/, ''),
+      color: li.dataset.color,
+      isRobot: text.endsWith('🤖'),
+      filled: text !== '(empty)',
+    };
+  });
+  renderLobbySlots(slots);
+  updateStartButton();
 });
 
 // ---- Canvas interaction ----
@@ -772,6 +798,22 @@ function enqueueTween(tween) {
   if (!animationRunning) runNextAnimation();
 }
 
+// Bumped by resetAnimations(). A running tween checks it on every frame and
+// stops if it changed, so an undo / reconnect / new game mid-animation can't
+// leave an old tween drawing a marble in a stale place or running a second
+// queue-drain loop alongside a new one.
+let animationGen = 0;
+
+function resetAnimations() {
+  animationGen++;
+  animationQueue.length = 0;
+  animationRunning = false;
+  bumpHandoff = [];
+  lastAnimEnd = null;
+  clearAnimatingMarble();
+  clearAllMarbleOverrides();
+}
+
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
@@ -779,6 +821,8 @@ function runNextAnimation() {
     return;
   }
   animationRunning = true;
+  const gen = animationGen;
+  const stale = () => gen !== animationGen;
   const { playerIndex, marbleId, fromPos, waypoints, sound } = animationQueue.shift();
 
   const STEP_MS = 200;  // per-waypoint duration
@@ -816,12 +860,14 @@ function runNextAnimation() {
   }
 
   function animateToNext() {
+    if (stale()) return;
     if (step >= waypoints.length) { finish(); return; }
     const targetPos = waypoints[step++];
     const startPos  = prevPos;
     const start     = performance.now();
 
     function frame(now) {
+      if (stale()) return;
       const t    = Math.min((now - start) / STEP_MS, 1);
       const ease = t * t * (3 - 2 * t); // smoothstep
       setMarbleOverride(playerIndex, marbleId, {
@@ -855,6 +901,16 @@ function locNotation(loc) {
   return '?';
 }
 
+// Remove the most recent move from this turn's notation (used by undo).
+// Consecutive moves of one marble share an entry ("4/9/12"), so dropping the
+// last move either shortens that path or removes the entry.
+function popLastLoggedMove() {
+  const last = turnLogMoves[turnLogMoves.length - 1];
+  if (!last) return;
+  if (last.path.length > 2) last.path.pop();
+  else turnLogMoves.pop();
+}
+
 // Emit accumulated moves for the current turn as a single numbered log line.
 function flushTurnLog() {
   if (!turnLogDice) return;
@@ -879,6 +935,7 @@ function renderLobbySlots(slots) {
   for (const slot of slots) {
     const li = document.createElement('li');
     li.id = `slot-${slot.index}`;
+    li.dataset.color = slot.color;
     const dot = document.createElement('span');
     dot.className = 'slot-dot';
     dot.style.background = COLOR_MAP[slot.color] ?? '#888';

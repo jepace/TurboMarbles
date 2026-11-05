@@ -490,7 +490,7 @@ async function createFlow() {
   myPlayerIndex  = 0;
 
   console.log('\n╔══════════════════════╗');
-  console.log(`║  ROOM CODE:  ${code}    ║`);
+  console.log(`║  ROOM CODE:  ${code}  ║`);
   console.log('╚══════════════════════╝\n');
 
   registerSpectatorEvents();

@@ -46,7 +46,7 @@ export function createGame(players, armIndices, initialTurnIndex) {
       zone: 'base',
       space: null,   // track space (1-84) when zone==='track'
       slot: null,    // home slot (1-4) when zone==='home'
-      starEligible: false, // true when sitting on own star space
+      starEligible: false, // true when sitting on any star (can use the star track)
     })),
   }));
 

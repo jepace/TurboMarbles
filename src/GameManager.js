@@ -6,13 +6,15 @@ import {
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
   MARBLES_PER_PLAYER,
 } from './GameEngine.js';
-import { robotTakeTurn, pickNextRobotMove } from './RobotPlayer.js';
+import { pickNextRobotMove } from './RobotPlayer.js';
 
 const DISCONNECT_TIMEOUT_MS  = 30 * 60 * 1000; // 30 minutes
 const ROBOT_TURN_DELAY_MS    = 800;            // pause before robot's turn starts
 const ROBOT_MOVE_DELAY_MS    = 600;            // pause between robot's individual moves
 const MAX_TOTAL_ROOMS        = 200;            // global cap — prevents memory exhaustion
 const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
+const LOBBY_TTL_MS           = 2 * 60 * 60 * 1000; // unstarted lobbies expire after 2 h
+const ILLEGAL_LOG_INTERVAL_MS = 10_000;        // at most one illegal-move warning per socket per 10 s
 export const config = {
   skipTurnDelayMs: 1500,  // show dice before auto-advancing a skipped turn
   initialTurnIndex: null, // null = random; set to 0 in tests to pin first player
@@ -21,11 +23,13 @@ export const config = {
 const rooms = new Map();    // roomId → Room
 const sessions = new Map(); // wsId → { roomId, playerIndex }
 
+export const ROOM_CODE_LENGTH = 6;
+
 function genCode() {
-  // 32 printable chars; Math.random() excluded — use crypto PRNG so room codes
-  // cannot be predicted even if an attacker observes many codes from the same process.
+  // 32 unambiguous chars (no I/O/0/1), crypto PRNG. 256 % 32 === 0, so no bias.
+  // 6 chars ≈ 1.07 billion codes — scanning for live lobbies isn't practical.
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = randomBytes(4);
+  const bytes = randomBytes(ROOM_CODE_LENGTH);
   return Array.from(bytes, b => chars[b % chars.length]).join('');
 }
 
@@ -36,16 +40,23 @@ function genId() {
 
 // ---------- Room structure ----------
 // {
-//   id, code, hostId,
+//   id, code, hostIndex,
 //   slots: [{ index, playerId|null, name, color, isRobot, ws|null }],
-//   totalPlayers,
+//   totalPlayers, createdAt,
 //   state: 'lobby' | 'playing' | 'finished',
 //   game: GameEngine state | null,
 //   disconnectTimers: Map<playerIndex, timer>,  // human reconnect grace timers
-//   robotTurnTimer: TimeoutId | null,           // pending robot-move setTimeout handle
+//   robotTurnTimer: TimeoutId | null,           // pending robot turn-start or move timer
+//   skipTimer: TimeoutId | null,                // pending auto-advance of a skipped turn
 // }
+//
+// A socket is in at most one room at a time: createRoom / joinRoom first leave
+// the socket's current room. (Previously a socket could create several rooms
+// but was only tracked in the last, so the others leaked forever.)
 
 export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
+  if (sessions.has(hostWs._id)) leaveRoom(hostWs);
+  sweepStaleLobbies();
   if (rooms.size >= MAX_TOTAL_ROOMS) return { error: 'Server is full' };
   hostWs._roomsCreated = (hostWs._roomsCreated ?? 0) + 1;
   if (hostWs._roomsCreated > MAX_ROOMS_PER_WS) return { error: 'Room limit reached' };
@@ -79,12 +90,14 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
   }));
 
   const room = {
-    id: roomId, code, hostId,
+    id: roomId, code, hostIndex: 0,
     slots, totalPlayers,
+    createdAt: Date.now(),
     state: 'lobby',
     game: null,
     disconnectTimers: new Map(),
     robotTurnTimer: null,
+    skipTimer: null,
   };
   rooms.set(roomId, room);
 
@@ -98,7 +111,13 @@ export function joinRoom(ws, code, playerName) {
   const room = [...rooms.values()].find(r => r.code === code && r.state === 'lobby');
   if (!room) return { error: 'Room not found or already started' };
 
-  const slot = room.slots.find(s => !s.isRobot && !s.playerId && s.index !== 0);
+  // Leave any current room first (joining the same lobby twice from one socket
+  // used to take a second seat that was never freed).
+  if (sessions.has(ws._id)) leaveRoom(ws);
+  if (!rooms.has(room.id)) return { error: 'Room not found or already started' };
+
+  // Any empty human seat, including slot 0 if a departed host left it empty.
+  const slot = room.slots.find(s => !s.isRobot && !s.playerId);
   if (!slot) return { error: 'Room is full' };
 
   const playerId = genId();
@@ -193,9 +212,7 @@ function performRoll(game) {
   game.phase = 'AWAITING_MOVE';
   game._humanMadeMove = false;
   game._committed = false; // guard: reject undo after commitTurn fires
-  // Snapshot marble positions for undo support
-  game._rollSnapshot = game.players.map(p => p.marbles.map(m => ({ ...m })));
-  game._undoStack = []; // reset undo stack on new roll
+  game._undoStack = []; // per-move snapshots for undo; reset on each roll
   return dice;
 }
 
@@ -243,7 +260,14 @@ export function handleMove(ws, roomId, move) {
   // Illegal moves are reported back to the sender only (not broadcast).
   const result = tryApplyMove(room, game.turnIndex, move);
   if (result.error) {
-    console.warn(`[game] illegal move room=${roomId} player=${sess.playerIndex} move=${JSON.stringify(move)} error=${result.error}`);
+    // Throttled and truncated: clients control this content and rate.
+    const now = Date.now();
+    if (!ws._lastIllegalLog || now - ws._lastIllegalLog > ILLEGAL_LOG_INTERVAL_MS) {
+      ws._lastIllegalLog = now;
+      let detail;
+      try { detail = JSON.stringify(move); } catch { detail = '(unserializable)'; }
+      console.warn(`[game] illegal move room=${room.code} player=${sess.playerIndex} move=${String(detail).slice(0, 200)} error=${result.error}`);
+    }
     sendTo(ws, { event: 'error', code: 'ILLEGAL_MOVE', message: result.error });
   }
 }
@@ -260,12 +284,17 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   // Validate dieIndex is exactly 0 or 1 — reject strings, undefined, out-of-range.
   const idx = Number(dieIndex);
   if (idx !== 0 && idx !== 1) return;
+  // Already used or forfeited (e.g. a second forfeit during the skipped-turn
+  // delay, which used to schedule a second turn advance).
+  if (game.diceUsed[idx]) return;
 
-  // A player may forfeit a die only when its remaining legal moves are all
-  // OPTIONAL (e.g. the pass-home "go around the board again" choice). Mandatory
-  // moves cannot be skipped — this prevents forfeit from dodging a real play.
+  // A die may be forfeited only when it has no mandatory move AND the other
+  // die (if still unused) has none either — playing the other die first could
+  // open up a mandatory move for this one. Same rule as the auto-forfeit in
+  // advanceTurnIfDone. Optional moves (pass home and go around) never count.
   const legal = allLegalMoves(game, game.turnIndex);
-  if (legal[idx] && legal[idx].some(m => !m.optional)) {
+  const hasMandatory = i => !game.diceUsed[i] && (legal[i] ?? []).some(m => !m.optional);
+  if (hasMandatory(idx) || hasMandatory(1 - idx)) {
     sendTo(ws, { event: 'error', code: 'ILLEGAL_FORFEIT', message: 'Mandatory moves exist' });
     return;
   }
@@ -281,6 +310,12 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
 // ---------- Disconnect handling ----------
 
 export function handleDisconnect(ws) {
+  leaveRoom(ws);
+}
+
+// Detach a socket from its room: on socket close, or when the socket creates or
+// joins another room.
+function leaveRoom(ws) {
   const sess = sessions.get(ws._id);
   if (!sess) return;
   sessions.delete(ws._id);
@@ -290,6 +325,9 @@ export function handleDisconnect(ws) {
 
   const slot = room.slots[sess.playerIndex];
   if (!slot || slot.isRobot) return;
+  // A reconnect may already have moved this seat to a newer socket; the old
+  // socket's late close must not detach the player.
+  if (slot.ws !== ws) return;
   slot.ws = null;
 
   if (room.state === 'lobby') {
@@ -297,7 +335,22 @@ export function handleDisconnect(ws) {
     slot.playerId = null;
     slot.name = null;
     broadcast(room, { event: 'playerLeft', playerIndex: sess.playerIndex });
-    cleanupIfAbandoned(room); // delete the room if no humans remain
+    if (cleanupIfAbandoned(room)) return; // delete the room if no humans remain
+    // Hand the host role to another human still in the lobby, so the room
+    // can still be started.
+    if (sess.playerIndex === room.hostIndex) {
+      const next = room.slots.find(s => s.ws && !s.isRobot);
+      if (next) {
+        room.hostIndex = next.index;
+        broadcast(room, { event: 'hostChanged', playerIndex: next.index });
+      }
+    }
+    return;
+  }
+
+  if (room.state === 'finished') {
+    // Nothing left to play; drop the room once nobody is looking at it.
+    if (!room.slots.some(s => s.ws)) deleteRoom(room);
     return;
   }
 
@@ -306,6 +359,7 @@ export function handleDisconnect(ws) {
   broadcast(room, { event: 'playerDisconnected', playerIndex: sess.playerIndex, timeoutMs: DISCONNECT_TIMEOUT_MS });
 
   const timer = setTimeout(() => {
+    if (!rooms.has(room.id)) return;
     room.disconnectTimers.delete(sess.playerIndex);
     slot.isRobot = true;
     broadcast(room, { event: 'robotTookOver', playerIndex: sess.playerIndex });
@@ -335,15 +389,37 @@ export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
   // A name-only check would allow any client who knows the name to hijack the slot.
   if (!reconnectToken || slot.playerId !== reconnectToken) return { error: 'Invalid token' };
 
+  // This socket may be sitting in some other room; leave it first.
+  const existing = sessions.get(ws._id);
+  if (existing && (existing.roomId !== roomId || existing.playerIndex !== pi)) leaveRoom(ws);
+
   // Cancel disconnect timer — the player made it back in time
-  const timer = room.disconnectTimers.get(playerIndex);
-  if (timer) { clearTimeout(timer); room.disconnectTimers.delete(playerIndex); }
+  const timer = room.disconnectTimers.get(pi);
+  if (timer) { clearTimeout(timer); room.disconnectTimers.delete(pi); }
+
+  // If the old socket hasn't been noticed as closed yet (half-dead mobile
+  // connection), retire it now: drop its session so its eventual close is a
+  // no-op, and close it so it can't keep sending actions.
+  const old = slot.ws;
+  if (old && old !== ws) {
+    sessions.delete(old._id);
+    try { old.terminate?.(); } catch { /* already gone */ }
+  }
 
   slot.ws = ws;
-  sessions.set(ws._id, { roomId, playerIndex });
+  sessions.set(ws._id, { roomId, playerIndex: pi });
 
   sendTo(ws, { event: 'reconnected', gameState: publicState(room) });
-  broadcast(room, { event: 'playerReconnected', playerIndex }, ws);
+  // Re-send what the player needs to act if it's their turn mid-roll.
+  const { game } = room;
+  if (game.turnIndex === pi && game.phase === 'AWAITING_MOVE') {
+    if (game.diceUsed[0] && game.diceUsed[1]) {
+      if (game._humanMadeMove) sendTo(ws, { event: 'readyToCommit', playerIndex: pi });
+    } else {
+      sendTo(ws, { event: 'legalMoves', moves: allLegalMoves(game, pi), diceUsed: game.diceUsed });
+    }
+  }
+  broadcast(room, { event: 'playerReconnected', playerIndex: pi }, ws);
   return { ok: true };
 }
 
@@ -363,10 +439,30 @@ function humanCount(room) {
 // Returns true if the room was deleted.
 function cleanupIfAbandoned(room) {
   if (humanCount(room) > 0) return false;
-  if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
-  for (const t of room.disconnectTimers.values()) clearTimeout(t);
-  rooms.delete(room.id);
+  deleteRoom(room);
   return true;
+}
+
+// Remove a room and everything that could still act on it: every pending
+// timer, and any sessions pointing at it.
+function deleteRoom(room) {
+  if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
+  if (room.skipTimer)      { clearTimeout(room.skipTimer);      room.skipTimer = null; }
+  for (const t of room.disconnectTimers.values()) clearTimeout(t);
+  room.disconnectTimers.clear();
+  for (const [wsId, s] of sessions) if (s.roomId === room.id) sessions.delete(wsId);
+  rooms.delete(room.id);
+}
+
+// Lobbies nobody ever started expire, so idle-but-connected sockets can't hold
+// room slots forever.
+function sweepStaleLobbies(now = Date.now()) {
+  for (const room of [...rooms.values()]) {
+    if (room.state === 'lobby' && now - room.createdAt > LOBBY_TTL_MS) {
+      broadcast(room, { event: 'error', code: 'ROOM_EXPIRED', message: 'This lobby expired. Please create a new game.' });
+      deleteRoom(room);
+    }
+  }
 }
 
 // ---------- Internal helpers ----------
@@ -479,7 +575,11 @@ function advanceTurnIfDone(room) {
         // Human turn with zero legal moves: show dice briefly before advancing
         broadcast(room, { event: 'turnSkipped', playerIndex: game.turnIndex });
         if (config.skipTurnDelayMs > 0) {
-          setTimeout(() => commitTurn(room), config.skipTurnDelayMs);
+          if (room.skipTimer) clearTimeout(room.skipTimer);
+          room.skipTimer = setTimeout(() => {
+            room.skipTimer = null;
+            if (rooms.has(room.id)) commitTurn(room);
+          }, config.skipTurnDelayMs);
         } else {
           commitTurn(room);
         }
@@ -493,6 +593,12 @@ function advanceTurnIfDone(room) {
 // Advance to the next turn (extra roll or next player). Called by commitTurn and robots.
 function commitTurn(room) {
   const { game } = room;
+  // Runs at most once per roll. Several paths can reach here for the same
+  // roll (explicit commit, skipped-turn timer, robot takeover); the first one
+  // advances the turn and the rest are no-ops. Without this guard a second
+  // call hit earnsExtraRoll(null) and crashed the process.
+  if (game.phase !== 'AWAITING_MOVE' || !game.diceUsed[0] || !game.diceUsed[1]) return;
+  if (room.skipTimer) { clearTimeout(room.skipTimer); room.skipTimer = null; }
   game._committed = true; // prevent undo from popping the stack after turn has advanced
   if (earnsExtraRoll(game.dice)) {
     startExtraRoll(game);
@@ -528,7 +634,7 @@ function scheduleCurrentTurn(room) {
 
 function doRobotTurn(room) {
   const { game } = room;
-  if (!game || game.phase === 'GAME_OVER') return;
+  if (!rooms.has(room.id) || !game || game.phase === 'GAME_OVER') return;
 
   // Roll using the shared helper (same logic path as a human roll)
   if (game.phase === 'IN_TURN' || game.phase === 'EXTRA_ROLL') {
@@ -545,9 +651,12 @@ function applyNextRobotMove(room) {
   if (!game || game.phase === 'GAME_OVER') { room.state = 'finished'; return; }
   if (game.diceUsed[0] && game.diceUsed[1]) { advanceTurnIfDone(room); return; }
 
-  const chosen = pickNextRobotMove(game, game.turnIndex);
-
-  setTimeout(() => {
+  // Tracked in robotTurnTimer so deleting the room cancels the chain
+  // (otherwise an abandoned room's robots kept playing to the end).
+  room.robotTurnTimer = setTimeout(() => {
+    room.robotTurnTimer = null;
+    if (!rooms.has(room.id) || game.phase !== 'AWAITING_MOVE') return;
+    const chosen = pickNextRobotMove(game, game.turnIndex);
     if (chosen) {
       const events = applyMove(game, game.turnIndex, chosen);
       events.forEach(ev => broadcast(room, ev));
@@ -561,7 +670,7 @@ function applyNextRobotMove(room) {
 }
 
 function isHost(ws, room) {
-  return room.slots[0].ws === ws;
+  return !!ws && room.slots[room.hostIndex]?.ws === ws;
 }
 
 function broadcast(room, msg, excludeWs = null) {
@@ -604,6 +713,7 @@ function lobbySnapshot(room) {
   return {
     code: room.code,
     totalPlayers: room.totalPlayers,
+    hostIndex: room.hostIndex,
     slots: room.slots.map(s => ({
       index: s.index,
       name: s.name,

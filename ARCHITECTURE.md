@@ -352,22 +352,23 @@ Create or Join.
 
 ## Robot Player
 
-`RobotPlayer.js` exports `robotTakeTurn(game, playerIndex, applyCallback)`.
+`RobotPlayer.js` exports `pickNextRobotMove(game, playerIndex)`, which returns the
+best move for one unused die (or `null` to forfeit). GameManager calls it once per
+die, with a delay between moves so clients can animate them.
 
 Score priorities (higher = preferred):
 | Move type | Score |
 |-----------|-------|
 | Win move (last marble to home, all others in home) | 10000 |
-| Bump opponent | 800 |
-| Advance toward home | 600 + slot×40 |
-| Enter home | 550 + slot×40 |
-| Exit base | 400 |
-| Exit center (bump) | 750 |
-| Exit center (no bump) | 300 + progress |
-| Enter center | 250 |
-| Normal move | 200 + progress |
+| Bump opponent (track / leaving the hub) | 800 / 750 |
+| Enter home from the track | 550 + slot×40 |
+| Move within home | 230 + slot |
+| Positional move (track, star track, hub, leaving base) | 200 + 5 × (reduction in estimated distance to home) |
 
-The robot always uses both dice. If a die has no legal moves, it's forfeited.
+The distance estimate counts the star-track shortcut and adds penalties for
+positions that need a specific roll (exact star landing, a 1 to leave the hub,
+a 1 or 6 to leave base). Optional moves (passing home to go around) are never
+taken. If a die has no move worth making, it's forfeited.
 
 ---
 

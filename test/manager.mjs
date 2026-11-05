@@ -44,7 +44,7 @@ describe('createRoom', () => {
   const result = createRoom(host, 'Alice', 3);
 
   assert(typeof result.roomId === 'string' && result.roomId.length > 0, 'returns roomId');
-  assert(typeof result.code === 'string' && result.code.length === 4, 'returns 4-char code');
+  assert(typeof result.code === 'string' && result.code.length === 6, 'returns 6-char code');
   assert(typeof result.reconnectToken === 'string', 'returns reconnectToken');
   assert(getRoomByWs(host) === result.roomId, 'host session registered');
 });
@@ -830,6 +830,127 @@ describe('handleUndo — undo with empty stack is no-op (pre-roll)', () => {
   try { handleUndo(host, roomId); } catch { threw = true; }
   assert(!threw, 'undo with empty stack does not throw');
   assert(host.find('undone').length === 0, 'no undone event when stack is empty');
+});
+
+// ---- Review fixes -----------------------------------------------------------
+
+function twoHumanGame() {
+  setup();
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Alice', 2);
+  joinRoom(guest, code, 'Bob');
+  startGame(host, roomId);
+  return { host, guest, roomId };
+}
+function rollWith(ws, roomId, rand) {
+  const r = Math.random; Math.random = () => rand; handleRoll(ws, roomId); Math.random = r;
+}
+
+describe('skipped turn — commit during the delay advances the turn exactly once', () => {
+  const { host, guest, roomId } = twoHumanGame();
+  // Capture the skip timer instead of waiting for it (tests run synchronously).
+  const pending = [];
+  const realSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = (fn, ms) => { pending.push(fn); return pending.length; };
+  try {
+    rollWith(host, roomId, 0.4);         // 3-3, all in base: no moves → skip timer
+    handleCommit(host, roomId);          // commit inside the delay window
+    handleForfeitDie(host, roomId, 0);   // and a stray forfeit
+    for (const fn of pending.splice(0)) fn(); // now let the skip timer fire
+  } finally {
+    globalThis.setTimeout = realSetTimeout;
+  }
+  const changes = guest.find('turnChanged').length;
+  assert(changes === 1, `one turnChanged, no crash (got ${changes})`);
+  assert(_getRoom(roomId).game.turnIndex === 1, 'turn moved to the next player once');
+});
+
+describe('reconnect — old socket closing late does not detach the new one', () => {
+  const { guest, roomId } = twoHumanGame();
+  const token = _getRoom(roomId).slots[1].playerId;
+  const fresh = mockWs();
+  handleReconnect(fresh, roomId, 1, token);
+  handleDisconnect(guest);               // the old socket's close arrives afterwards
+  const room = _getRoom(roomId);
+  assert(room.slots[1].ws === fresh, 'seat still bound to the new socket');
+  assert(!room.disconnectTimers.has(1), 'no robot-takeover timer started');
+});
+
+describe('reconnect — string playerIndex is normalised', () => {
+  const { guest, roomId } = twoHumanGame();
+  const room = _getRoom(roomId);
+  const token = room.slots[0].playerId;
+  // Host disconnects, then reconnects sending "0" as a string.
+  const hostWs = room.slots[0].ws;
+  handleDisconnect(hostWs);
+  const fresh = mockWs();
+  handleReconnect(fresh, roomId, '0', token);
+  assert(!room.disconnectTimers.has(0) && !room.disconnectTimers.has('0'), 'takeover timer cancelled');
+  rollWith(fresh, roomId, 0.99);         // host's turn (turnIndex 0)
+  assert(fresh.find('rolled').length === 1, 'reconnected player can roll');
+});
+
+describe('reconnect — mid-roll, legal moves are re-sent', () => {
+  const { host, roomId } = twoHumanGame();
+  const room = _getRoom(roomId);
+  rollWith(host, roomId, 0);             // 1-1: exitBase available
+  const token = room.slots[0].playerId;
+  handleDisconnect(host);
+  const fresh = mockWs();
+  handleReconnect(fresh, roomId, 0, token);
+  assert(fresh.find('legalMoves').length === 1, 'legalMoves sent after reconnect');
+});
+
+describe('forfeit — cannot skip a die while the other die has a mandatory move', () => {
+  const { host, roomId } = twoHumanGame();
+  const r = Math.random; let k = 0;
+  Math.random = () => (k++ % 2 === 0 ? 0.9 : 0.4); // 6 and 3 → dice [6,3]
+  handleRoll(host, roomId); Math.random = r;
+  host.sent = [];
+  handleForfeitDie(host, roomId, 1);     // the 3 has no move yet, but the 6 does
+  assert(host.find('error').some(e => e.code === 'ILLEGAL_FORFEIT'), 'forfeit of the 3 refused');
+  assert(_getRoom(roomId).game.diceUsed[1] === false, 'die still unused');
+});
+
+describe('rooms — a socket that creates several rooms leaves only one behind', () => {
+  setup();
+  const ws = mockWs();
+  const a = createRoom(ws, 'A', 2), b = createRoom(ws, 'B', 2), c = createRoom(ws, 'C', 2);
+  assert(!_getRoom(a.roomId) && !_getRoom(b.roomId) && _getRoom(c.roomId), 'earlier rooms deleted on creating a new one');
+  handleDisconnect(ws);
+  assert(!_getRoom(c.roomId), 'last room deleted on disconnect');
+});
+
+describe('rooms — joining the same lobby twice takes one seat', () => {
+  setup();
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Host', 3);
+  joinRoom(guest, code, 'G'); joinRoom(guest, code, 'G');
+  const taken = _getRoom(roomId).slots.filter(s => s.playerId).length;
+  assert(taken === 2, `host + one guest seat (got ${taken})`);
+});
+
+describe('lobby — host leaving hands host to another player', () => {
+  setup();
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Host', 2);
+  joinRoom(guest, code, 'G');
+  handleDisconnect(host);
+  const room = _getRoom(roomId);
+  assert(room && room.hostIndex === 1, 'guest is now host');
+  assert(guest.find('hostChanged').some(e => e.playerIndex === 1), 'hostChanged broadcast');
+  addRobot(guest, roomId);
+  assert(startGame(guest, roomId).ok, 'new host can fill the seat and start');
+});
+
+describe('lobby — stale lobbies expire', () => {
+  setup();
+  const old = mockWs();
+  const { roomId } = createRoom(old, 'Old', 2);
+  _getRoom(roomId).createdAt = Date.now() - 3 * 60 * 60 * 1000;
+  createRoom(mockWs(), 'New', 2);        // any createRoom sweeps
+  assert(!_getRoom(roomId), 'three-hour-old lobby removed');
+  assert(old.find('error').some(e => e.code === 'ROOM_EXPIRED'), 'its players were told');
 });
 
 // ---- Summary ----------------------------------------------------------------

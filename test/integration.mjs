@@ -22,10 +22,17 @@ function makeClient() {
     ws.on('open', () => resolve({
       ws,
       send(obj) { ws.send(JSON.stringify(obj)); },
-      next() {
-        return msgs.length
-          ? Promise.resolve(msgs.shift())
-          : new Promise(r => waiting.push(r));
+      // Next message, or null after `ms` (if given). A timed-out wait is
+      // removed, so it can't swallow a later message meant for another step.
+      next(ms) {
+        if (msgs.length) return Promise.resolve(msgs.shift());
+        return new Promise(r => {
+          waiting.push(r);
+          if (ms !== undefined) setTimeout(() => {
+            const i = waiting.indexOf(r);
+            if (i !== -1) { waiting.splice(i, 1); r(null); }
+          }, ms);
+        });
       },
       close() { ws.close(); },
     }));
@@ -37,16 +44,16 @@ async function runTests() {
 
   // ---- Test 1: createRoom ----
   console.log('1. createRoom');
-  const host = await makeClient();
+  let host = await makeClient();
   host.send({ action: 'createRoom', name: 'Alice', totalPlayers: 2 });
   const created = await host.next();
   assert(created.event === 'roomCreated', 'event is roomCreated');
-  assert(typeof created.code === 'string' && created.code.length === 4, 'code is 4 chars');
+  assert(typeof created.code === 'string' && created.code.length === 6, 'code is 6 chars');
   const { code, roomId } = created;
 
   // ---- Test 2: joinRoom ----
   console.log('\n2. joinRoom');
-  const guest = await makeClient();
+  let guest = await makeClient();
   guest.send({ action: 'joinRoom', code, name: 'Bob' });
 
   // Host receives playerJoined
@@ -76,11 +83,15 @@ async function runTests() {
   assert(startedGuest.event === 'gameStarted', 'guest sees gameStarted');
   const gs = startedHost.gameState;
   assert(gs.players.length === 2, '2 players');
-  assert(gs.turnIndex === 0, 'host goes first');
+  assert(gs.turnIndex === 0 || gs.turnIndex === 1, 'a valid first player');
   assert(gs.phase === 'IN_TURN', 'phase is IN_TURN');
   // All marbles in base
   const allInBase = gs.players.every(p => p.marbles.every(m => m.zone === 'base'));
   assert(allInBase, 'all marbles start in base');
+
+  // The first player is random. From here on, "host" means whoever moves first
+  // and "guest" the other player, so the flow below works either way.
+  if (gs.turnIndex === 1) [host, guest] = [guest, host];
 
   // ---- Test 5: roll (host turn) ----
   console.log('\n5. roll');
@@ -97,11 +108,11 @@ async function runTests() {
   console.log('\n6. guest roll rejected on host turn');
   guest.send({ action: 'roll' });
   // Should receive nothing (server silently drops it). Wait briefly.
-  const noMsg = await Promise.race([
-    guest.next().then(m => m),
-    new Promise(r => setTimeout(() => r(null), 200)),
-  ]);
-  assert(noMsg === null, 'guest roll silently ignored');
+  // The guest may legitimately receive broadcasts here (e.g. dieForfeit when
+  // the first roll had no moves); what must not happen is a second roll.
+  const seen = [];
+  for (let m; (m = await guest.next(200)); ) seen.push(m);
+  assert(!seen.some(m => m.event === 'rolled'), 'guest roll silently ignored');
 
   // ---- Test 7: exitBase move (if dice allow) ----
   console.log('\n7. exitBase or forfeit dice');
@@ -127,7 +138,7 @@ async function runTests() {
   const collectTurnChange = async () => {
     // Drain until turnChanged or timeout
     for (let i = 0; i < 5; i++) {
-      const m = await Promise.race([host.next(), new Promise(r => setTimeout(() => r(null), 300))]);
+      const m = await host.next(300);
       if (!m) break;
       if (m.event === 'turnChanged') return m;
     }
@@ -146,11 +157,11 @@ async function runTests() {
   // We'll have guest roll, then try an invalid move
   // First check whose turn it is via roll attempt
   guest.send({ action: 'roll' });
-  const r2 = await Promise.race([guest.next(), new Promise(r => setTimeout(() => r(null), 300))]);
+  const r2 = await guest.next(300);
   if (r2 && r2.event === 'rolled') {
     // Guest's turn — try invalid move
     guest.send({ action: 'move', move: { type: 'move', dieIndex: 0, marbleId: 99 } });
-    const errReply = await Promise.race([guest.next(), new Promise(r => setTimeout(() => r(null), 200))]);
+    const errReply = await guest.next(200);
     if (errReply) {
       assert(errReply.event === 'error', 'illegal move returns error');
       assert(errReply.code === 'ILLEGAL_MOVE', 'error code is ILLEGAL_MOVE');
@@ -158,7 +169,7 @@ async function runTests() {
       assert(false, 'expected error for illegal move');
     }
     // Drain rolled message on host side
-    await Promise.race([host.next(), new Promise(r => setTimeout(() => r(null), 100))]);
+    await host.next(100);
   } else {
     console.log('   (host got extra roll — skipping guest illegal move test)');
     assert(true, 'skipped (extra roll turn)');

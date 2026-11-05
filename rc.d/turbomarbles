@@ -7,32 +7,30 @@
 # Add the following to /etc/rc.conf to enable TurboMarbles at jail start:
 #
 #   turbomarbles_enable="YES"
-#   turbomarbles_port="8080"          # optional, default 8080 (matches the
-#                                      # existing nginx proxy_pass target)
-#   turbomarbles_host="127.0.0.1"     # optional, default 127.0.0.1
-#   turbomarbles_origin=""            # optional, e.g. https://example.com
-#   turbomarbles_user="marbles"       # optional, default marbles
 #
-# The service user is provisioned by deploy.sh (pw useradd), as a
-# dedicated account rather than reusing the system "www" user — cleaner
-# separation between the web server and arbitrary app daemons.
+# Optional overrides (defaults match the production setup behind nginx):
 #
-# Privilege drop: rc.subr has a BUILT-IN convention — if ${name}_user is
-# set (here, turbomarbles_user), run_rc_command automatically wraps the
-# whole command in `su -m ${turbomarbles_user} -c '...'` before executing
-# it. We rely on that native mechanism and do NOT also pass daemon(8)'s
-# own -u flag — doing both caused a double privilege-drop: rc.subr's su
-# wrap already puts the process under the unprivileged user, so a second
-# `daemon -u` then tried to setusercontext(3) from a non-root process,
-# which fails with "failed to set user environment" (confirmed by testing
-# the same daemon -u invocation manually, as root, where it worked fine —
-# the difference was specifically the rc.subr su-wrap layering on top).
+#   turbomarbles_port="8080"          # nginx proxy_pass target port
+#   turbomarbles_host="127.0.0.1"     # in a classic jail this binds the jail's IP
+#   turbomarbles_origin="https://marbles.pacehouse.com"
+#                                     # only WebSocket connections from this page
+#                                     # are accepted; set "" to allow any origin
+#   turbomarbles_trust_proxy="1"      # take the client IP from X-Forwarded-For
+#                                     # (set by nginx); "" when not behind a proxy
+#   turbomarbles_user="marbles"       # service account (created by deploy.sh)
 #
-# Confirmed by direct testing in this jail: the pidfile directory must be
-# owned by the service user, since daemon ends up running as that user
-# (via the su wrap) by the time it creates the pidfile. /var/run is
-# root:wheel 755, so a non-wheel user can't create a pidfile there
-# directly — hence the dedicated, owned turbomarbles_piddir below.
+# How it runs:
+# - rc.subr's built-in ${name}_user support wraps the command in
+#   `su -m turbomarbles_user`, so daemon(8) and node both run unprivileged.
+#   (daemon's own -u must NOT also be used: a second privilege drop from an
+#   already-unprivileged process fails with "failed to set user environment".)
+# - daemon(8) supervises node: -r restarts it 5 s after any crash (-R 5),
+#   -P writes the SUPERVISOR's pid, which is what rc.subr stops/checks
+#   (procname defaults to $command, i.e. daemon), and -H reopens the log on
+#   SIGHUP so newsyslog can rotate it. Stopping sends SIGTERM to the
+#   supervisor, which stops node and exits without restarting it.
+# - The pid directory is owned by the service user, because the supervisor
+#   (already unprivileged) creates the pidfile; /var/run itself is root-only.
 
 . /etc/rc.subr
 
@@ -44,7 +42,8 @@ load_rc_config "${name}"
 : ${turbomarbles_enable:="NO"}
 : ${turbomarbles_port:="8080"}
 : ${turbomarbles_host:="127.0.0.1"}
-: ${turbomarbles_origin:=""}
+: ${turbomarbles_origin="https://marbles.pacehouse.com"}
+: ${turbomarbles_trust_proxy="1"}
 : ${turbomarbles_user:="marbles"}
 : ${turbomarbles_dir:="/var/www/marbles"}
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
@@ -53,33 +52,19 @@ load_rc_config "${name}"
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
-# rc.subr's status/stop logic verifies the pid in the pidfile actually
-# belongs to a process named $procname (defaults to $command, i.e.
-# "daemon"). But daemon execs through env into node, replacing its own
-# image — the live process at that pid is actually "node", not "daemon".
-# Without this, `service status`/`stop` falsely report "not running"
-# even while the process (and daemon's own internal pidfile lock) say
-# otherwise — confirmed directly in this jail: daemon refused a second
-# start ("already running") while `service status` simultaneously said
-# "not running" for the exact same live pid.
-procname="/usr/local/bin/node"
-# No -u here: rc.subr's native ${name}_user (turbomarbles_user) support
-# already drops privileges via su -m before this command ever runs.
-# /usr/bin/env sets the child's environment without needing extra shell
-# quoting to interpret VAR=val assignments.
-command_args="-f -p ${turbomarbles_pidfile} -o ${turbomarbles_log} \
-    /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} ORIGIN=${turbomarbles_origin} \
+command_args="-f -r -R 5 -H -P ${turbomarbles_pidfile} -o ${turbomarbles_log} \
+    /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} \
+    ORIGIN=${turbomarbles_origin} TRUST_PROXY=${turbomarbles_trust_proxy} \
     /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
 start_precmd="turbomarbles_prestart"
 
 turbomarbles_prestart()
 {
-    # Pidfile directory must be owned by turbomarbles_user — daemon -u
-    # creates the pidfile as that user, after the privilege drop.
     install -d -o "${turbomarbles_user}" -m 755 "${turbomarbles_piddir}"
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
+    chmod 640 "${turbomarbles_log}"
 }
 
 run_rc_command "$1"

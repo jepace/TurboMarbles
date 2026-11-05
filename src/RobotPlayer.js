@@ -32,34 +32,6 @@ export function pickNextRobotMove(game, playerIndex) {
   return chosen; // null means forfeit the next unused die
 }
 
-export function robotTakeTurn(game, playerIndex, applyCallback) {
-  for (let pass = 0; pass < 2; pass++) {
-    if (game.diceUsed[0] && game.diceUsed[1]) break;
-    const legal = allLegalMoves(game, playerIndex);
-
-    let chosen = null;
-    let bestScore = -Infinity;
-
-    for (const dieIdx of [0, 1]) {
-      if (game.diceUsed[dieIdx]) continue;
-      for (const move of (legal[dieIdx] || [])) {
-        if (move.optional) continue; // see pickNextRobotMove
-        const s = scoreMove(game, playerIndex, move);
-        if (s > bestScore) { bestScore = s; chosen = move; }
-      }
-    }
-
-    if (!chosen) {
-      // Forfeit first unused die
-      const dieIdx = game.diceUsed[0] ? 1 : 0;
-      game.diceUsed[dieIdx] = true;
-      applyCallback(null);
-    } else {
-      applyCallback(chosen);
-    }
-  }
-}
-
 function scoreMove(game, playerIndex, move) {
   const player = game.players[playerIndex];
   const cfg    = player.config; // arm-mapped config, not raw PLAYER_CONFIG index

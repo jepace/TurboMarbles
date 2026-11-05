@@ -39,30 +39,43 @@ fi
 # Install / update production dependencies inside the jail.
 bastille cmd marbles sh -c "cd /var/www/marbles && npm install --omit=dev --prefer-offline"
 
-# Provision the dedicated service account, idempotently. A real home
-# directory is required: daemon(8) -u uses setusercontext(3), which
-# chdir(2)s to the user's home — FreeBSD's stock "www" account has
-# pw_dir=/nonexistent and breaks that. Reusing www would also blur the
-# line between the web server account and an application service account.
+# Provision the dedicated service account, idempotently. Using our own
+# account rather than "www" keeps the web server's account separate from
+# this app's.
 bastille cmd marbles sh -c '
     pw usershow marbles >/dev/null 2>&1 || \
         pw useradd marbles -c "TurboMarbles service" \
             -d /var/www/marbles -s /usr/sbin/nologin -w no
 '
 
-# Fix ownership so the service user can read/write the app files.
-bastille cmd marbles chown -R marbles:marbles /var/www/marbles
+# App code is owned by root and only readable by the service user, so a
+# compromised server process can't rewrite its own code or dependencies.
+# The service writes only its log and pid directory (set up by the rc script).
+bastille cmd marbles sh -c 'chown -R root:wheel /var/www/marbles && chmod -R u=rwX,go=rX /var/www/marbles'
 
-# Install the RC script and make it executable.
-sudo mkdir -p "${JAIL_ROOT}/usr/local/etc/rc.d"
-sudo cp "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
-sudo chmod 755 "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
-
-# Restart the service if it is enabled in the jail's rc.conf; otherwise
-# remind the operator to enable it.
+ENABLED=no
 if bastille cmd marbles sysrc -n turbomarbles_enable 2>/dev/null | grep -qi "^YES$"; then
-    bastille cmd marbles service turbomarbles restart
-    echo "turbomarbles service restarted."
+    ENABLED=yes
+fi
+
+# Stop with the CURRENTLY installed rc script before replacing it, so a change
+# in how the script tracks the process (pidfile, procname) can't strand the
+# old process. Not running is fine.
+if [ "${ENABLED}" = yes ]; then
+    bastille cmd marbles service turbomarbles onestop || true
+fi
+
+# Install the RC script and log rotation config.
+sudo mkdir -p "${JAIL_ROOT}/usr/local/etc/rc.d" "${JAIL_ROOT}/etc/newsyslog.conf.d"
+sudo install -m 755 "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/turbomarbles"
+sudo install -m 644 "${SRC}/rc.d/turbomarbles.newsyslog.conf" \
+    "${JAIL_ROOT}/etc/newsyslog.conf.d/turbomarbles.conf"
+
+# Start the service if it is enabled in the jail's rc.conf; otherwise
+# remind the operator to enable it.
+if [ "${ENABLED}" = yes ]; then
+    bastille cmd marbles service turbomarbles start
+    echo "turbomarbles service started."
 else
     echo ""
     echo "NOTE: TurboMarbles is not yet enabled as a service."
