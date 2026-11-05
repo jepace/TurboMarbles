@@ -360,7 +360,7 @@ function describeSquare(hit) {
   const n = Number(name.slice(2));
   return name[1] === '\u2193'
     ? [name, `${n} before ${armName(owner)}'s home entry`]
-    : [name, `${n - 1} after ${armName(owner)}'s start`];
+    : [name, `${n} after ${armName(owner)}'s start`];
 }
 $('board-canvas').addEventListener('mousemove', e => {
   const canvas = e.currentTarget, tip = $('board-tip');
