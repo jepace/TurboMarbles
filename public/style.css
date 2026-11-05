@@ -369,8 +369,14 @@ button.secondary { background: #fff2; }
 .ap-opt.error { box-shadow: inset 3px 0 0 #ff7070; }
 .ap-opt.blunder { box-shadow: inset 3px 0 0 #ff3048; }
 #ap-detail { border-top: 1px solid #fff1; padding-top: 6px; display: flex; flex-direction: column; gap: 5px; flex: 0 0 auto; max-height: 45%; overflow-y: auto; }
-.ap-opt { display: grid; grid-template-columns: 1fr 4.2em 4.2em; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer;
+.ap-opt { display: grid; grid-template-columns: 1fr 3.6em 3.6em 4.4em; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer;
   font-family: ui-monospace, monospace; }
 .ap-opt:hover, .ap-opt.sel { background: #fff1; }
 .ap-opt .tags { font-family: 'Segoe UI', system-ui, sans-serif; color: var(--muted); font-size: 0.72rem; margin-left: 6px; }
 .ap-opt .num { text-align: right; }
+
+.ap-opt .hit { color: #ff9a8a; }
+.facts { background: #0d1b2a; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; }
+.facts-head { color: var(--muted); font-size: 0.85rem; }
+.fact.danger b { color: #ff9a8a; }
+.fact.safe { color: #5fd35f; }

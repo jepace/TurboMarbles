@@ -10,7 +10,7 @@
 // analysisWorker.js), because it takes seconds per decision.
 import { allLegalMoves, applyMove, earnsExtraRoll, rollDice } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
-import { lookup, expectedTurns } from './EndgameTable.js';
+import { lookup, expectedTurns, finishedBy } from './EndgameTable.js';
 import { spaceName } from '../public/js/constants.js';
 
 // ---- Positions and notation -------------------------------------------------
@@ -205,6 +205,66 @@ export function severityOf(loss, significant) {
 
 const marblesOf = g => g.players.map(p => p.marbles.map(m => ({ ...m })));
 
+// ---- Position facts: hit chances and race odds -------------------------------
+//
+// Exact, not sampled. For the position after a play by `pi`:
+//   hits: every marble of pi's an opponent could bump with their next roll
+//         (all 36 dice outcomes, every way to play each), with the rolls that do
+//         it; anyHit = chance that at least one of them gets bumped. Each
+//         opponent's next roll is counted separately (in 3+ player games the
+//         chances are combined as if independent). An extra roll after a 6 is
+//         not counted.
+//   race: for each player within the endgame table's region, the chance to
+//         finish on their next turn and the expected turns to finish.
+const DICE = [];
+for (let a = 6; a >= 1; a--) for (let b = a; b >= 1; b--) DICE.push({ d: [a, b], w: a === b ? 1 : 2 });
+
+// "any 5, 4-1, 3-2": faces whose every combination hits, then the rest.
+function rollsText(hitting) {
+  const set = new Set(hitting.map(d => d.join('-')));
+  const anyFace = [6, 5, 4, 3, 2, 1].filter(f => DICE.every(({ d }) => !d.includes(f) || set.has(d.join('-'))));
+  const rest = hitting.filter(d => !anyFace.some(f => d.includes(f))).map(d => d.join('-'));
+  return [...anyFace.map(f => `any ${f}`), ...rest].join(', ');
+}
+
+export function positionFacts(game, pi) {
+  const mine = game.players[pi].marbles;
+  const exposed = mine.map((m, id) => ({ m, id })).filter(({ m }) => m.zone === 'track' || m.zone === 'center');
+  const perMarble = new Map(exposed.map(({ id }) => [id, { p: 0, rolls: [], miss: 1 }]));
+  let anyMiss = 1;
+  game.players.forEach((_, o) => {
+    if (o === pi || !exposed.length || game.winner != null) return;
+    let any = 0;
+    const local = new Map(exposed.map(({ id }) => [id, { w: 0, rolls: [] }]));
+    for (const { d, w } of DICE) {
+      const g = structuredClone(game);
+      g.turnIndex = o; g.dice = d.slice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+      const hit = new Set();
+      for (const play of allPlays(g, o)) {
+        play.game.players[pi].marbles.forEach((m, id) => { if (perMarble.has(id) && m.zone === 'base') hit.add(id); });
+      }
+      if (hit.size) any += w;
+      for (const id of hit) { local.get(id).w += w; local.get(id).rolls.push(d); }
+    }
+    anyMiss *= 1 - any / 36;
+    for (const [id, l] of local) {
+      const pm = perMarble.get(id);
+      pm.miss *= 1 - l.w / 36;
+      if (l.w) pm.rolls.push(game.players.length > 2 ? `${rollsText(l.rolls)} (player ${o + 1})` : rollsText(l.rolls));
+    }
+  });
+  const hits = exposed.map(({ m, id }) => {
+    const pm = perMarble.get(id);
+    return { id, at: locStr(m), p: 1 - pm.miss, rolls: pm.rolls.join('; ') };
+  }).filter(h => h.p > 0);
+  const race = [];
+  game.players.forEach((p, i) => {
+    const e = lookup(p);
+    if (e && expectedTurns(e) > 0) race.push({ pi: i, next: finishedBy(e, 1), turns: expectedTurns(e) });
+  });
+  return { anyHit: 1 - anyMiss, hits, race };
+}
+
 // Analyse one decision: screen every option with a few playouts, then roll
 // out the most promising few plus the played option in depth, all on the same
 // dice streams.
@@ -229,8 +289,8 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
   finalists.sort((a, b) => b.win - a.win);
   let best = finalists[0];
   const mine = finalists.find(c => c.p.key === playedKey) ?? null;
-  // A loss that may be real but isn't clear yet: give the two options more
-  // playouts (same new seeds for both) until it is clear or the budget runs out.
+  // A loss that may be real but isn't clear yet: give the finalists more
+  // playouts (same new seeds for all) until it is clear or the budget runs out.
   const grow = c => {
     const n = c.res.length;
     const more = outcomes(c.p.game, pi, dice, n, seed + 1_000_003 + n * 7919);
@@ -240,11 +300,10 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
   const unclear = () => mine && mine !== best && best.win - mine.win >= SEVERITY.at(-1).min
     && best.win - mine.win <= 1.96 * pairedSE(best.res, mine.res);
   while (unclear() && best.res.length < maxDeep) {
-    grow(best); grow(mine);
-    if (mine.win > best.win) best = mine;
+    for (const c of finalists) grow(c);          // all of them: same dice, same sample size
+    finalists.sort((x, y) => y.win - x.win);
+    best = finalists[0];
   }
-  finalists.sort((x, y) => y.win - x.win);
-  if (best !== finalists[0] && finalists[0].res.length === best.res.length) best = finalists[0];
   const loss = mine ? Math.max(0, best.win - mine.win) : 0;
   const se = mine && mine !== best ? pairedSE(best.res, mine.res) : 0;
   const significant = !!mine && mine !== best && loss > 1.96 * se;
@@ -262,6 +321,8 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
     options: finalists.map(c => ({
       moves: notation(c.p.moves), win: c.win, n: c.res.length, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
       played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game),
+      facts: positionFacts(c.p.game, pi),
     })),
+    before: { race: positionFacts(before, pi).race },
   };
 }

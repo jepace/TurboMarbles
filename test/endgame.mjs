@@ -3,6 +3,8 @@
 import { createGame, applyMove } from '../src/GameEngine.js';
 import { lookup, expectedTurns, finishedBy, raceWinProbability, REGION } from '../src/EndgameTable.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
+import { positionFacts } from '../src/Analysis.js';
+import { parseSpaceName } from '../public/js/constants.js';
 
 let passed = 0, failed = 0;
 const assert = (cond, label) => {
@@ -69,6 +71,24 @@ describe('robot — uses the table near home', () => {
   const where = g.players[1].marbles.map(m => m.zone === 'home' ? 'h' + m.slot : m.space).sort().join(' ');
   assert(where === '40 42 h2 h4', `3-1 → 40 42 h2 h4 (got ${where})`);
 });
+
+// Position facts — the final race from a real game: both players have three
+// marbles home; Blue is on O↑4, Yellow stops on Y↓4 (5 from h1) or Y↓3.
+{
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
+  const put = (pi, last) => g.players[pi].marbles.forEach((m, i) => {
+    delete m.space; delete m.slot;
+    Object.assign(m, i < 3 ? { zone: 'home', slot: i + 2 } : { zone: 'track', space: parseSpaceName(last) });
+  });
+  put(0, 'O↑4');
+  put(1, 'Y↓4');
+  const f4 = positionFacts(g, 1);
+  put(1, 'Y↓3');
+  const f3 = positionFacts(g, 1);
+  assert(Math.abs(f4.anyHit - 15 / 36) < 1e-9 && f4.hits[0].rolls === 'any 5, 4-1, 3-2', `Y↓4 hit 15/36 by any 5, 4-1, 3-2 (${f4.hits[0]?.rolls})`);
+  assert(Math.abs(f3.anyHit - 16 / 36) < 1e-9 && f3.hits[0].rolls === 'any 6, 5-1, 4-2, 3-3', `Y↓3 hit 16/36 by any 6, 5-1, 4-2, 3-3 (${f3.hits[0]?.rolls})`);
+  assert(f4.race[0].next > f3.race[0].next, 'five away finishes next turn more often than four away');
+}
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

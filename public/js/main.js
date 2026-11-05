@@ -598,12 +598,15 @@ function selectRoll(idx, opt = null) {
   } else {
     const a = r.analysis;
     kids.push(el('div', { class: 'ap-opt head' },
-      el('span', {}, 'Options (click to see on the board)'), el('span', { class: 'num' }, 'Win'), el('span', { class: 'num' }, 'vs best')));
+      el('span', {}, 'Options (click to see on the board)'),
+      el('span', { class: 'num', title: 'Chance an opponent can hit one of these marbles with their next roll' }, 'Hit'),
+      el('span', { class: 'num' }, 'Win'), el('span', { class: 'num' }, 'vs best')));
     a.options.forEach((o, k) => {
       const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'robot'].filter(Boolean).join(' · ');
       const cls = o.played ? (a.severity === 'ok' ? ' good' : ` ${a.severity}`) : '';
       const line = el('div', { class: 'ap-opt' + cls + (view === k ? ' sel' : ''), title: `${o.n} playouts` },
         el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
+        el('span', { class: 'num hit' }, o.facts && o.facts.anyHit > 0 ? pctTxt(o.facts.anyHit) : '—'),
         el('span', { class: 'num' }, pctTxt(o.win)),
         el('span', { class: 'num' }, o.loss > 0 ? `−${pts(o.loss)}%` : ''));
       line.addEventListener('click', () => selectRoll(idx, k));
@@ -614,10 +617,37 @@ function selectRoll(idx, opt = null) {
       : `${SEV_LABEL[a.severity]} ${SEV_MARK[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
     kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
   }
+  if (r.analysis) {
+    const a = r.analysis;
+    const o = view === 'before' ? null : view === 'played' ? a.options.find(x => x.played) : a.options[view];
+    const factsBox = renderFacts(rep, r, o, view === 'before' ? a.before : o?.facts);
+    if (factsBox) kids.splice(kids.length - 1, 0, factsBox);
+  }
   box.replaceChildren(...kids);
   if (view === 'before') showPosition(r.marbles);
   else if (view === 'played') showPosition(after, r.marbles, r.pi);
   else showPosition(r.analysis.options[view].marbles, r.marbles, r.pi);
+}
+
+// The exact facts behind an option: which of the mover's marbles can be hit
+// next roll and by which rolls, and race odds for players near home.
+function renderFacts(rep, r, opt, facts) {
+  if (!facts) return null;
+  const who = rep.players[r.pi].name;
+  const lines = [];
+  if (opt) {
+    lines.push(el('div', { class: 'facts-head' }, `After ${opt.moves}:`));
+    if (!facts.hits?.length) lines.push(el('div', { class: 'fact safe' }, `✓ None of ${who}'s marbles can be hit next roll.`));
+    for (const h of facts.hits ?? []) {
+      lines.push(el('div', { class: 'fact danger' }, el('b', {}, h.at), ` can be hit: ${pctTxt(h.p)} `, el('span', { class: 'muted' }, `(${h.rolls})`)));
+    }
+    if ((facts.hits?.length ?? 0) > 1) lines.push(el('div', { class: 'fact' }, `At least one hit: ${pctTxt(facts.anyHit)}`));
+  }
+  for (const x of facts.race ?? []) {
+    lines.push(el('div', { class: 'fact' }, `🏁 ${rep.players[x.pi].name} finishes next turn ${(100 * x.next).toFixed(1)}% · expected ${x.turns.toFixed(2)} turns to finish`));
+  }
+  if (!lines.length) return null;
+  return el('div', { class: 'facts', title: 'Exact: every roll and every way to play it. Extra rolls after a 6 are not counted.' }, ...lines);
 }
 
 // Win chance through the game. For two players one line (the first player's
