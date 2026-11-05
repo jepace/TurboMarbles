@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -431,7 +431,9 @@ on('analysisResult', ({ report }) => {
 let analysisReport = null;
 let apSel = -1;          // selected roll index
 let apOpt = null;        // selected option index within the roll, or null = position before the roll
-const SEV_LABEL = { inaccuracy: 'Inaccuracy', mistake: 'Mistake', blunder: 'Blunder' };
+const SEV_LABEL = { error: 'Error', blunder: 'Blunder' };
+const SEV_MARK = { error: '?', blunder: '??' };
+const DIE_FACE = ['', '\u2680', '\u2681', '\u2682', '\u2683', '\u2684', '\u2685'];
 const pts = x => (100 * x).toFixed(1);
 const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${c})`;
@@ -449,7 +451,7 @@ function playerStats(rep, pi) {
   return {
     rolls: rolls.length, forced: rolls.length - choices.length, choices: choices.length,
     agree: choices.filter(r => r.analysis.robotAgrees).length,
-    inaccuracy: sev('inaccuracy'), mistake: sev('mistake'), blunder: sev('blunder'),
+    error: sev('error'), blunder: sev('blunder'),
     lost, rate, rating: choices.length ? RATINGS.find(([max]) => rate < max)[1] : '—',
   };
 }
@@ -476,12 +478,13 @@ function openAnalysis() {
       p.name + (rep.winner === i ? ' 🏆' : ''))));
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
-    row('Rating', s => el('span', {}, el('span', { class: 'rating' }, s.rating), s.choices ? ` · ${s.rate.toFixed(2)}` : ''),
-      'Error rate: average win-rate points lost per real choice'),
-    row('Win-rate pts lost', s => (100 * s.lost).toFixed(1), 'Total of all clear losses'),
+    row('Rating', s => el('span', { class: 'rating' }, s.rating), 'From the error rate'),
+    row('Error rate', s => s.choices ? `${s.rate.toFixed(1)}% per choice` : '—', 'Average win chance given away per real choice (clear losses only)'),
+    row('Win chance given away', s => `${(100 * s.lost).toFixed(1)}%`, 'Total over the game of all clear losses'),
     row('Rolls', s => `${s.rolls} (${s.forced} forced ✓)`, 'Forced = only one way to play, or no legal move: correct by definition'),
     row('Agreed with robot', s => s.choices ? `${s.agree}/${s.choices}` : '—'),
-    row('Inacc. / Mist. / Blund.', s => `${s.inaccuracy} / ${s.mistake} / ${s.blunder}`, 'Lost 2–5 / 5–10 / 10+ win-rate points'),
+    row('Errors (?)', s => el('span', { class: s.error ? 'sev-error' : '' }, String(s.error)), 'Lost 3–10% win chance'),
+    row('Blunders (??)', s => el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder)), 'Lost 10% win chance or more'),
   ));
   $('ap-summary').replaceChildren(table);
 
@@ -515,8 +518,9 @@ function visibleRolls() {
 function badgeFor(r) {
   if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
   const a = r.analysis;
-  if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${pts(a.loss)} ± ${pts(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `±${pts(1.96 * a.se)}` }, `${SEV_LABEL[a.severity]} −${pts(a.loss)}`);
+  if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${pts(a.loss)}% ± ${pts(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
+  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: win chance ${pts(a.loss)}% lower than the best play (± ${pts(1.96 * a.se)})` },
+    `${SEV_MARK[a.severity]} −${pts(a.loss)}%`);
 }
 
 function renderMoveList() {
@@ -528,7 +532,7 @@ function renderMoveList() {
     const rowEl = el('div', { class: 'ap-row' + (idx === apSel ? ' sel' : ''), title: p.name },
       el('span', { class: 'turn' }, `${r.turn}.`),
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
-      el('span', {}, r.dice.join('-')),
+      el('span', { class: 'dice-glyphs', title: r.dice.join('-') }, r.dice.map(d => DIE_FACE[d]).join('')),
       el('span', { class: 'play' }, r.played),
       badgeFor(r));
     rowEl.dataset.idx = idx;
@@ -538,18 +542,29 @@ function renderMoveList() {
   if (!list.length) box.append(el('div', { class: 'muted', style: 'padding:6px' }, 'Nothing to show.'));
 }
 
-function showPosition(marbles, movedFrom) {
+// Draw a position; with `movedFrom` (the position before the roll), arrows
+// show which marbles moved where, and red dashed arrows show bumped marbles.
+function showPosition(marbles, movedFrom, mover) {
   if (!gameState || !marbles) return;
   resizeBoard();
   const gs = { ...gameState, players: gameState.players.map((p, i) => ({ ...p, marbles: marbles[i] ?? p.marbles })) };
   drawBoard(gs);
-  // Ring the marbles that moved (compared with the position before the roll).
   if (movedFrom) {
+    const moves = [];
     marbles.forEach((ms, pi) => ms.forEach((m, k) => {
       const o = movedFrom[pi]?.[k];
-      if (o && JSON.stringify(o) !== JSON.stringify(m)) highlightMarbleAt(m, pi);
+      if (o && JSON.stringify(o) !== JSON.stringify(m)) moves.push({ from: o, to: m, playerIndex: pi, bumped: pi !== mover });
     }));
+    drawMoveArrows(moves);
   }
+}
+
+// The position after roll i was played = the position at the next roll.
+function afterOf(i) { return analysisReport.rolls[i + 1]?.marbles ?? null; }
+
+function diceEl(dice, color) {
+  return el('span', { class: 'ap-dice' }, ...dice.map(d =>
+    el('span', { class: 'die small', style: `--die-color:${colorVar(color)}` }, String(d))));
 }
 
 function selectRoll(idx, opt = null) {
@@ -563,35 +578,46 @@ function selectRoll(idx, opt = null) {
 
   const p = rep.players[r.pi];
   const box = $('ap-detail');
-  const title = el('div', {}, el('b', {}, `Turn ${r.turn} · ${p.name} · ${r.dice.join('-')}`));
-  const before = el('div', { class: 'ap-opt' + (opt === null ? ' sel' : ''), title: 'The board right after the roll' },
-    el('span', {}, 'Position before the move'), el('span'), el('span'));
-  before.addEventListener('click', () => selectRoll(idx, null));
-  const kids = [title, before];
+  const after = afterOf(idx);
+  // Views: 'before' (just rolled), 'played' (what was played, with arrows), or an option index.
+  const view = opt ?? (after ? 'played' : 'before');
+  apOpt = view;
+  const title = el('div', { class: 'ap-title' }, diceEl(r.dice, p.color),
+    el('b', {}, `Turn ${r.turn} · ${p.name}`), el('span', { class: 'muted' }, ` played ${r.played}`));
+  const viewBtn = (key, label, tip) => {
+    const b = el('button', { class: 'secondary ap-view' + (view === key ? ' on' : ''), title: tip }, label);
+    b.addEventListener('click', () => selectRoll(idx, key));
+    return b;
+  };
+  const kids = [title, el('div', { class: 'ap-views' },
+    viewBtn('before', 'Before', 'The board right after the roll, before moving (B)'),
+    ...(after ? [viewBtn('played', 'Played', 'What was played: arrows show who moved where (P)')] : []))];
   if (!r.analysis) {
     kids.push(el('div', { class: 'muted' }, r.played === '--' ? 'No legal move — nothing to decide.'
-      : `Only one way to play this roll: ${r.played}. Correct by definition.`));
+      : 'Only one way to play this roll — correct by definition.'));
   } else {
     const a = r.analysis;
-    kids.push(el('div', { class: 'ap-opt', style: 'cursor:default;color:var(--muted)' },
-      el('span', {}, 'Option'), el('span', { class: 'num' }, 'win'), el('span', { class: 'num' }, 'loss')));
+    kids.push(el('div', { class: 'ap-opt head' },
+      el('span', {}, 'Options (click to see on the board)'), el('span', { class: 'num' }, 'Win'), el('span', { class: 'num' }, 'vs best')));
     a.options.forEach((o, k) => {
-      const tags = [o.played && 'played', o.robot && 'robot', k === 0 && 'best'].filter(Boolean).join(' · ');
-      const line = el('div', { class: 'ap-opt' + (opt === k ? ' sel' : ''), title: `${o.n} playouts` },
+      const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'robot'].filter(Boolean).join(' · ');
+      const cls = o.played ? (a.severity === 'ok' ? ' good' : ` ${a.severity}`) : '';
+      const line = el('div', { class: 'ap-opt' + cls + (view === k ? ' sel' : ''), title: `${o.n} playouts` },
         el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
         el('span', { class: 'num' }, pctTxt(o.win)),
-        el('span', { class: 'num' }, o.loss > 0 ? `−${pts(o.loss)}` : ''));
+        el('span', { class: 'num' }, o.loss > 0 ? `−${pts(o.loss)}%` : ''));
       line.addEventListener('click', () => selectRoll(idx, k));
       kids.push(line);
     });
     const verdict = a.severity === 'ok'
-      ? (a.loss > 0 ? `Within the noise (−${pts(a.loss)} ± ${pts(1.96 * a.se)}) — counts as correct.` : 'Best play.')
-      : `${SEV_LABEL[a.severity]}: −${pts(a.loss)} win-rate points (± ${pts(1.96 * a.se)}).`;
-    kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were rolled out.`));
+      ? (a.loss > 0 ? `✓ Within the noise (−${pts(a.loss)}% ± ${pts(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
+      : `${SEV_LABEL[a.severity]} ${SEV_MARK[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
+    kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
   }
   box.replaceChildren(...kids);
-  if (opt !== null && r.analysis) showPosition(r.analysis.options[opt].marbles, r.marbles);
-  else showPosition(r.marbles);
+  if (view === 'before') showPosition(r.marbles);
+  else if (view === 'played') showPosition(after, r.marbles, r.pi);
+  else showPosition(r.analysis.options[view].marbles, r.marbles, r.pi);
 }
 
 // Win chance through the game. For two players one line (the first player's
@@ -622,14 +648,14 @@ function drawChart() {
     const pl = add('polyline', { points: ptsArr.map(([i, v]) => `${x(i)},${y(v)}`).join(' '), fill: 'none', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' });
     pl.style.stroke = colorVar(rep.players[pi].color);
   }
-  const sevColor = { inaccuracy: '#ffe08a', mistake: '#ff9a40', blunder: '#ff4060' };
+  const sevColor = { error: '#ff8a8a', blunder: '#ff2040' };
   rep.rolls.forEach((r, i) => {
     const a = r.analysis;
     if (!a || a.severity === 'ok') return;
     const v = two && r.pi !== 0 ? 1 - a.playedWin : a.playedWin;
     const c = add('circle', { cx: x(i), cy: y(v), r: 4, fill: sevColor[a.severity], stroke: '#000', style: 'cursor:pointer' });
     const t = document.createElementNS(ns, 'title');
-    t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${pts(a.loss)}`;
+    t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${pts(a.loss)}%`;
     c.append(t);
     c.addEventListener('click', () => selectRoll(i));
   });
@@ -641,6 +667,8 @@ document.addEventListener('keydown', e => {
   if (!$('game-layout').classList.contains('analysis-mode')) return;
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.key === 'Escape') { closeAnalysis(); return; }
+  if (e.key === 'b' || e.key === 'B') { selectRoll(apSel, 'before'); return; }
+  if (e.key === 'p' || e.key === 'P') { selectRoll(apSel, null); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   e.preventDefault();
   const list = visibleRolls().map(v => v.idx);

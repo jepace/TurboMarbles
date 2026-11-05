@@ -326,9 +326,9 @@ button.secondary { background: #fff2; }
 #game-layout.analysis-mode #sidebar { display: none; }
 #game-layout.analysis-mode #win-overlay { display: none !important; }
 #analysis-panel {
-  width: min(520px, 48vw); flex-shrink: 0; background: var(--surface);
+  width: min(600px, 50vw); flex-shrink: 0; background: var(--surface);
   display: flex; flex-direction: column; gap: 0.6rem; padding: 0.8rem 1rem;
-  overflow: hidden; font-size: 0.82rem;
+  overflow: hidden; font-size: 0.95rem;
 }
 #analysis-panel .muted { color: var(--muted); }
 .ap-head { display: flex; align-items: center; justify-content: space-between; }
@@ -343,7 +343,7 @@ button.secondary { background: #fff2; }
 .ap-filters { display: flex; gap: 0.5rem; align-items: center; }
 .ap-filters select { background: var(--card); color: var(--text); border: 1px solid #fff2; border-radius: 6px; padding: 2px 6px; }
 #ap-moves { flex: 1 1 auto; overflow-y: auto; min-height: 100px; border-top: 1px solid #fff1; }
-.ap-row { display: grid; grid-template-columns: 2.4em 10px 3em 1fr auto; gap: 6px; align-items: center;
+.ap-row { display: grid; grid-template-columns: 2.4em 10px 2.6em 1fr auto; gap: 6px; align-items: center;
   padding: 3px 4px; cursor: pointer; border-radius: 4px; }
 .ap-row:hover { background: #fff1; }
 .ap-row.sel { background: #fff2; outline: 1px solid #fff4; }
@@ -351,10 +351,24 @@ button.secondary { background: #fff2; }
 .ap-row .play { font-family: ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .badge { font-size: 0.72rem; padding: 1px 6px; border-radius: 8px; white-space: nowrap; }
 .badge.forced { color: #7a8; } .badge.ok { color: #7fbf7f; }
-.badge.inaccuracy { background: #6a5a10; color: #ffe08a; }
-.badge.mistake { background: #7a3a10; color: #ffc08a; }
-.badge.blunder { background: #8a1a2a; color: #ffb0b8; }
-#ap-detail { border-top: 1px solid #fff1; padding-top: 6px; display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; max-height: 40%; overflow-y: auto; }
+.badge { font-size: 0.85rem; font-weight: 600; }
+.badge.ok { color: #5fd35f; }
+.badge.error { color: #ff7070; }
+.badge.blunder { background: #c0182c; color: #fff; }
+.sev-error { color: #ff7070; font-weight: 700; }
+.sev-blunder { color: #ff3048; font-weight: 700; }
+.dice-glyphs { font-size: 1.45rem; line-height: 1; letter-spacing: 1px; }
+.ap-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ap-dice { display: inline-flex; gap: 5px; }
+.die.small { width: 34px; height: 34px; font-size: 1.25rem; border-radius: 7px; }
+.ap-views { display: flex; gap: 6px; }
+.ap-view { padding: 0.25rem 0.8rem; font-size: 0.85rem; }
+.ap-view.on { background: var(--accent); }
+.ap-opt.head { cursor: default; color: var(--muted); font-family: inherit; font-size: 0.85rem; }
+.ap-opt.good { box-shadow: inset 3px 0 0 #5fd35f; }
+.ap-opt.error { box-shadow: inset 3px 0 0 #ff7070; }
+.ap-opt.blunder { box-shadow: inset 3px 0 0 #ff3048; }
+#ap-detail { border-top: 1px solid #fff1; padding-top: 6px; display: flex; flex-direction: column; gap: 5px; flex: 0 0 auto; max-height: 45%; overflow-y: auto; }
 .ap-opt { display: grid; grid-template-columns: 1fr 4.2em 4.2em; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer;
   font-family: ui-monospace, monospace; }
 .ap-opt:hover, .ap-opt.sel { background: #fff1; }

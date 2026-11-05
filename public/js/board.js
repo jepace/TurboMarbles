@@ -737,3 +737,54 @@ export function getSpacePosition(space) {
   }
   return null;
 }
+
+// ---- Move arrows (analysis replay) ----
+// For each moved marble: a faded ghost where it started and a curved arrow to
+// where it ended. moves: [{ from, to, playerIndex, bumped }] (marble objects).
+// Bumped marbles (sent back to base) get a red dashed arrow.
+export function drawMoveArrows(moves) {
+  if (!ctx) return;
+  const R = W * 0.019;
+  for (const mv of moves) {
+    const a = marblePosition(mv.from, mv.playerIndex);
+    const b = marblePosition(mv.to, mv.playerIndex);
+    if (!a || !b) continue;
+    const color = mv.bumped ? '#ff3040' : COLORS[playerToArm[mv.playerIndex] ?? mv.playerIndex];
+    // Ghost at the start square.
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, R, 0, Math.PI * 2);
+    ctx.fillStyle = color + '55';
+    ctx.fill();
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = color;
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Curved arrow, bent to one side so it doesn't hide the squares it crosses.
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+    if (len < 1) { ctx.restore(); continue; }
+    const ux = dx / len, uy = dy / len;
+    const sx = a.x + ux * R, sy = a.y + uy * R;          // leave the ghost
+    const ex = b.x - ux * R * 1.25, ey = b.y - uy * R * 1.25; // stop at the marble
+    const bend = Math.min(len * 0.2, W * 0.05);
+    const cx = (sx + ex) / 2 - uy * bend, cy = (sy + ey) / 2 + ux * bend;
+    const stroke = (w, c, dash) => {
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.quadraticCurveTo(cx, cy, ex, ey);
+      ctx.lineWidth = w; ctx.strokeStyle = c; ctx.setLineDash(dash); ctx.stroke(); ctx.setLineDash([]);
+    };
+    stroke(6, 'rgba(0,0,0,0.7)', mv.bumped ? [8, 5] : []);
+    stroke(3, color, mv.bumped ? [8, 5] : []);
+    // Arrowhead along the curve's end tangent.
+    const tx = ex - cx, ty = ey - cy, tl = Math.hypot(tx, ty) || 1;
+    const hx = tx / tl, hy = ty / tl, H = R * 1.1;
+    ctx.beginPath();
+    ctx.moveTo(ex + hx * 2, ey + hy * 2);
+    ctx.lineTo(ex - hx * H - hy * H * 0.6, ey - hy * H + hx * H * 0.6);
+    ctx.lineTo(ex - hx * H + hy * H * 0.6, ey - hy * H - hx * H * 0.6);
+    ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.stroke();
+    ctx.restore();
+  }
+}

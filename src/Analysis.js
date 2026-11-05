@@ -193,10 +193,10 @@ function pairedSE(a, b) {
 }
 
 // Severity of a loss in win-rate points (0–1 scale), when it is real.
+// Two levels, as in backgammon tools: error (?) and blunder (??).
 export const SEVERITY = [
   { key: 'blunder', min: 0.10 },
-  { key: 'mistake', min: 0.05 },
-  { key: 'inaccuracy', min: 0.02 },
+  { key: 'error', min: 0.03 },
 ];
 export function severityOf(loss, significant) {
   if (!significant) return 'ok';
