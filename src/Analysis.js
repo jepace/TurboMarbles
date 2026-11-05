@@ -118,7 +118,35 @@ export function moveFeedback(before, after, pi) {
   return result;
 }
 
+// ---- Recording rolls ----------------------------------------------------------
+
+// What a roll was, for the post-game report: whether there was a choice and
+// what was played. `before` is the game right after the roll, `after` the game
+// once the roll was played.
+export function describeRoll(before, after, pi) {
+  const plays = allPlays(before, pi);
+  const key = boardKey(after, pi);
+  const mine = plays.find(p => p.key === key);
+  return { forced: plays.length < 2, played: mine ? notation(mine.moves) : '?', options: plays.length };
+}
+
 // ---- Post-game rollouts -------------------------------------------------------
+//
+// Options are compared with common random numbers: playout i of every option
+// uses the same dice stream (seed i), so the luck of the dice cancels out of
+// the comparison and only the difference the play makes is left. That makes
+// the difference between two options far less noisy than either win rate.
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 // Play out from just after `pi` played a roll of `dice`; returns the winner.
 function playout(g, pi, dice) {
@@ -137,39 +165,98 @@ function playout(g, pi, dice) {
   }
   return g.winner;
 }
-function winRate(g, pi, dice, n) {
-  let w = 0;
-  for (let i = 0; i < n; i++) if (playout(structuredClone(g), pi, dice) === pi) w++;
-  return w / n;
+
+// Outcomes (1 = pi won) of n playouts using seeds seed0 … seed0+n-1.
+function outcomes(g, pi, dice, n, seed0) {
+  const out = new Uint8Array(n);
+  const saved = Math.random;
+  try {
+    for (let i = 0; i < n; i++) {
+      Math.random = mulberry32(seed0 + i * 7919);
+      out[i] = playout(structuredClone(g), pi, dice) === pi ? 1 : 0;
+    }
+  } finally { Math.random = saved; }
+  return out;
 }
-const halfWidth = (p, n) => 1.96 * Math.sqrt(Math.max(p * (1 - p), 0.0025) / n);
+const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+// Standard error of mean(a − b) for paired samples.
+function pairedSE(a, b) {
+  const n = a.length; let s = 0, s2 = 0;
+  for (let i = 0; i < n; i++) { const d = a[i] - b[i]; s += d; s2 += d * d; }
+  const m = s / n;
+  return Math.sqrt(Math.max(s2 / n - m * m, 0) / Math.max(n - 1, 1));
+}
+
+// Severity of a loss in win-rate points (0–1 scale), when it is real.
+export const SEVERITY = [
+  { key: 'blunder', min: 0.10 },
+  { key: 'mistake', min: 0.05 },
+  { key: 'inaccuracy', min: 0.02 },
+];
+export function severityOf(loss, significant) {
+  if (!significant) return 'ok';
+  return SEVERITY.find(s => loss >= s.min)?.key ?? 'ok';
+}
+
+const marblesOf = g => g.players.map(p => p.marbles.map(m => ({ ...m })));
 
 // Analyse one decision: screen every option with a few playouts, then roll
-// out the most promising few plus the played option in depth.
+// out the most promising few plus the played option in depth, all on the same
+// dice streams.
 //   decision: { before (game after the roll), after (game after the play), pi }
-// Returns { played, playedWin, best, bestWin, loss, mistake, options }.
-export function analyzeDecision({ before, after, pi }, { screen = 40, deep = 300, keep = 3 } = {}) {
+// Returns { played, playedWin, best, bestWin, loss, se, severity, mistake,
+//           robotAgrees, options: [{ moves, win, loss, played, robot, marbles }] }.
+export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400, keep = 3, maxDeep = 1600, seed = 1 } = {}) {
   const plays = allPlays(before, pi);
   const playedKey = boardKey(after, pi);
+  const robotKey = robotPlay(before, pi).key;
   const dice = before.dice;
-  let cands = plays.map(p => ({ p, win: winRate(p.game, pi, dice, screen), n: screen }));
+  const nScreen = plays.length > 12 ? Math.ceil(screen / 2) : screen;   // many options: cheaper screen
+  let cands = plays.map(p => ({ p, res: outcomes(p.game, pi, dice, nScreen, seed) }));
+  for (const c of cands) c.win = mean(c.res);
   cands.sort((a, b) => b.win - a.win);
   const finalists = cands.slice(0, keep);
-  const played = cands.find(c => c.p.key === playedKey);
-  if (played && !finalists.includes(played)) finalists.push(played);
-  for (const c of finalists) { c.win = winRate(c.p.game, pi, dice, deep); c.n = deep; }
+  for (const k of [playedKey, robotKey]) {
+    const c = cands.find(x => x.p.key === k);
+    if (c && !finalists.includes(c)) finalists.push(c);
+  }
+  for (const c of finalists) { c.res = outcomes(c.p.game, pi, dice, deep, seed + 1_000_003); c.win = mean(c.res); }
   finalists.sort((a, b) => b.win - a.win);
-  const best = finalists[0];
-  const mine = played ?? null;
-  const loss = mine ? best.win - mine.win : 0;
-  const mistake = !!mine && loss > halfWidth(best.win, best.n) + halfWidth(mine.win, mine.n);
+  let best = finalists[0];
+  const mine = finalists.find(c => c.p.key === playedKey) ?? null;
+  // A loss that may be real but isn't clear yet: give the two options more
+  // playouts (same new seeds for both) until it is clear or the budget runs out.
+  const grow = c => {
+    const n = c.res.length;
+    const more = outcomes(c.p.game, pi, dice, n, seed + 1_000_003 + n * 7919);
+    const r = new Uint8Array(2 * n); r.set(c.res); r.set(more, n);
+    c.res = r; c.win = mean(r);
+  };
+  const unclear = () => mine && mine !== best && best.win - mine.win >= SEVERITY.at(-1).min
+    && best.win - mine.win <= 1.96 * pairedSE(best.res, mine.res);
+  while (unclear() && best.res.length < maxDeep) {
+    grow(best); grow(mine);
+    if (mine.win > best.win) best = mine;
+  }
+  finalists.sort((x, y) => y.win - x.win);
+  if (best !== finalists[0] && finalists[0].res.length === best.res.length) best = finalists[0];
+  const loss = mine ? Math.max(0, best.win - mine.win) : 0;
+  const se = mine && mine !== best ? pairedSE(best.res, mine.res) : 0;
+  const significant = !!mine && mine !== best && loss > 1.96 * se;
+  const severity = severityOf(loss, significant);
   return {
     played: mine ? notation(mine.p.moves) : '?',
     playedWin: mine ? mine.win : null,
     best: notation(best.p.moves),
     bestWin: best.win,
     loss: Math.round(loss * 1000) / 1000,
-    mistake,
-    options: finalists.map(c => ({ moves: notation(c.p.moves), win: c.win, played: c === mine })),
+    se: Math.round(se * 1000) / 1000,
+    severity,
+    mistake: severity !== 'ok',
+    robotAgrees: playedKey === robotKey,
+    options: finalists.map(c => ({
+      moves: notation(c.p.moves), win: c.win, n: c.res.length, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
+      played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game),
+    })),
   };
 }

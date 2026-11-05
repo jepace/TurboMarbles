@@ -973,7 +973,7 @@ describe('move feedback — sent to the roller on commit, decision recorded', ()
   assert(typeof fb[0]?.robotAgrees === 'boolean' && typeof fb[0]?.robotMoves === 'string',
     `feedback has robotAgrees and robotMoves (${fb[0]?.robotMoves})`);
   assert(guest.find('moveFeedback').length === 0, 'other players do not get it');
-  assert(room.history.length === 1 && room.history[0].pi === 0, 'decision recorded for post-game analysis');
+  assert(room.game._pendingRoll?.pi === 0, 'roll kept for post-game analysis');
 });
 
 describe('move feedback — a forced roll is reported as forced, not recorded', () => {
@@ -994,7 +994,6 @@ describe('move feedback — a forced roll is reported as forced, not recorded', 
   assert(host.find('turnChanged').length === 1, 'the moves were legal and the commit went through');
   const forced = host.find('moveFeedback');
   assert(forced.length === 1 && forced[0].forced === true, 'forced roll reported as forced');
-  assert(room.history.length === 0, 'nothing recorded');
 });
 
 describe('analyzeGame — ignored until the game is over', () => {
@@ -1003,6 +1002,41 @@ describe('analyzeGame — ignored until the game is over', () => {
   handleAnalyzeGame(host, roomId);
   assert(host.sent.length === 0, 'no analysis while playing');
 });
+
+describe('analyzeGame — reports every roll of every player', () => {});
+{
+  const { host, guest, roomId } = twoHumanGame();
+  const r = Math.random; let k = 0;
+  Math.random = () => (k++ % 2 === 0 ? 0.9 : 0);              // 6-1: a real choice
+  handleRoll(host, roomId); Math.random = r;
+  const legal = host.find('rolled')[0].moves;
+  handleMove(host, roomId, legal['0'][0]);
+  handleMove(host, roomId, (host.find('legalMoves').pop().moves['1'] ?? [])[0]);
+  handleCommit(host, roomId);                                  // 6 → extra roll
+  const room = _getRoom(roomId);
+  room.game.phase = 'GAME_OVER'; room.game.winner = 0; room.state = 'finished';
+  room.game.diceUsed = [true, true];
+  gmConfig.analysis = { screen: 4, deep: 8, keep: 2, maxDeep: 8 };
+  host.sent = []; guest.sent = [];
+  handleAnalyzeGame(host, roomId);
+  handleAnalyzeGame(guest, roomId);                            // joins the running analysis
+  const t0 = Date.now();
+  while (!host.find('analysisResult').length && !host.find('error').length && Date.now() - t0 < 30000) {
+    await new Promise(res => setTimeout(res, 50));
+  }
+  const rep = host.find('analysisResult')[0]?.report;
+  assert(!!rep, 'host gets the report');
+  assert(guest.find('analysisResult').length === 1, 'the other player who asked gets it too');
+  assert(rep?.players?.length === 2 && rep.winner === 0, 'report names the players and the winner');
+  assert(rep?.rolls?.length === 1 && rep.rolls[0].pi === 0 && rep.rolls[0].forced === false, 'the 6-1 is recorded as a real choice');
+  const an = rep?.rolls?.[0]?.analysis;
+  assert(an && typeof an.loss === 'number' && typeof an.severity === 'string' && an.options.length >= 1,
+    `the choice was rolled out (${an?.severity}, ${an?.options?.length} options)`);
+  assert(Array.isArray(an?.options?.[0]?.marbles), 'options carry positions for the replay board');
+  host.sent = [];
+  handleAnalyzeGame(host, roomId);
+  assert(host.find('analysisResult').length === 1, 'asking again returns the cached report at once');
+}
 
 // ---- Summary ----------------------------------------------------------------
 

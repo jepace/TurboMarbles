@@ -407,6 +407,7 @@ function resetAnalyzeButton() {
   btn.textContent = 'Analyze Game';
 }
 $('btn-analyze').addEventListener('click', () => {
+  if (analysisReport) { openAnalysis(); return; }
   const btn = $('btn-analyze');
   btn.disabled = true;
   btn.textContent = 'Analyzing…';
@@ -415,25 +416,239 @@ $('btn-analyze').addEventListener('click', () => {
 on('analysisProgress', ({ done, total }) => {
   $('btn-analyze').textContent = `Analyzing… ${done}/${total}`;
 });
-on('analysisResult', ({ items }) => {
+on('analysisResult', ({ report }) => {
   const btn = $('btn-analyze');
-  btn.textContent = 'Analyzed';
-  const box = $('analysis');
-  box.replaceChildren();
-  box.style.display = 'flex';
-  const line = (text, cls) => { const d = document.createElement('div'); d.textContent = text; if (cls) d.className = cls; box.appendChild(d); return d; };
-  if (!items.length) { line('No moves to analyse — every roll was forced.', 'muted'); return; }
-  const pct = p => `${Math.round(100 * p)}%`;
-  const mistakes = items.filter(i => i.mistake).sort((a, b) => b.loss - a.loss);
-  const lost = mistakes.reduce((s, i) => s + i.loss, 0);
-  line(`${items.length} decisions analysed · ${mistakes.length} clear mistake${mistakes.length === 1 ? '' : 's'}` +
-       (mistakes.length ? ` · ${Math.round(100 * lost)} win-rate points lost` : ''), 'summary');
-  for (const m of mistakes) {
-    line(`Turn ${m.turn} (${m.dice.join('-')}): you played ${m.played} — ${pct(m.playedWin)} to win. ` +
-         `Better: ${m.best} — ${pct(m.bestWin)} (−${Math.round(100 * m.loss)} pts).`, 'mistake');
+  btn.disabled = false;
+  btn.textContent = 'Show Analysis';
+  analysisReport = report;
+  openAnalysis();
+});
+
+// ---- Analysis page ----
+// Every roll of the game in a list; the board shows the position of the
+// selected roll, or the result of one of its options. Rolls with one way to
+// play (or none) are correct by definition; the others were rolled out.
+let analysisReport = null;
+let apSel = -1;          // selected roll index
+let apOpt = null;        // selected option index within the roll, or null = position before the roll
+const SEV_LABEL = { inaccuracy: 'Inaccuracy', mistake: 'Mistake', blunder: 'Blunder' };
+const pts = x => (100 * x).toFixed(1);
+const pctTxt = x => `${Math.round(100 * x)}%`;
+const colorVar = c => `var(--${c})`;
+
+// Error-rate bands: average win-rate points lost per real choice.
+const RATINGS = [[0.5, 'Robot-level'], [1, 'Expert'], [2, 'Advanced'], [3.5, 'Intermediate'], [6, 'Casual'], [Infinity, 'Beginner']];
+
+function playerStats(rep, pi) {
+  const rolls = rep.rolls.filter(r => r.pi === pi);
+  const choices = rolls.filter(r => r.analysis);
+  const sev = k => choices.filter(r => r.analysis.severity === k).length;
+  // Only clear losses count (a difference inside the rollout noise counts as 0).
+  const lost = choices.reduce((s, r) => s + (r.analysis.severity !== 'ok' ? r.analysis.loss : 0), 0);
+  const rate = choices.length ? 100 * lost / choices.length : 0;
+  return {
+    rolls: rolls.length, forced: rolls.length - choices.length, choices: choices.length,
+    agree: choices.filter(r => r.analysis.robotAgrees).length,
+    inaccuracy: sev('inaccuracy'), mistake: sev('mistake'), blunder: sev('blunder'),
+    lost, rate, rating: choices.length ? RATINGS.find(([max]) => rate < max)[1] : '—',
+  };
+}
+
+function el(tag, props = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else e[k] = v;
   }
-  line(mistakes.length ? 'Every other decision was as good as the best option.' : 'Every decision was as good as the best option.', 'muted');
-  line('Win rates come from playing each option out hundreds of times with robot-level play.', 'muted');
+  for (const c of kids) e.append(c);
+  return e;
+}
+
+function openAnalysis() {
+  const rep = analysisReport;
+  if (!rep) return;
+  $('game-layout').classList.add('analysis-mode');
+  $('analysis-panel').style.display = 'flex';
+
+  // Summary table, one column per player.
+  const stats = rep.players.map((_, i) => playerStats(rep, i));
+  const head = el('tr', {}, el('th'), ...rep.players.map((p, i) =>
+    el('th', {}, el('span', { class: 'log-dot', style: `background:${colorVar(p.color)};margin-right:4px` }),
+      p.name + (rep.winner === i ? ' 🏆' : ''))));
+  const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
+  const table = el('table', {}, el('thead', {}, head), el('tbody', {},
+    row('Rating', s => el('span', {}, el('span', { class: 'rating' }, s.rating), s.choices ? ` · ${s.rate.toFixed(2)}` : ''),
+      'Error rate: average win-rate points lost per real choice'),
+    row('Win-rate pts lost', s => (100 * s.lost).toFixed(1), 'Total of all clear losses'),
+    row('Rolls', s => `${s.rolls} (${s.forced} forced ✓)`, 'Forced = only one way to play, or no legal move: correct by definition'),
+    row('Agreed with robot', s => s.choices ? `${s.agree}/${s.choices}` : '—'),
+    row('Inacc. / Mist. / Blund.', s => `${s.inaccuracy} / ${s.mistake} / ${s.blunder}`, 'Lost 2–5 / 5–10 / 10+ win-rate points'),
+  ));
+  $('ap-summary').replaceChildren(table);
+
+  const sel = $('ap-player');
+  sel.replaceChildren(el('option', { value: 'all', textContent: 'All players' }),
+    ...rep.players.map((p, i) => el('option', { value: String(i), textContent: p.name })));
+  if (myPlayerIndex != null) sel.value = 'all';
+  drawChart();
+  renderMoveList();
+  const firstErr = rep.rolls.findIndex(r => r.pi === myPlayerIndex && r.analysis && r.analysis.severity !== 'ok');
+  selectRoll(firstErr >= 0 ? firstErr : 0);
+}
+
+function closeAnalysis() {
+  $('game-layout').classList.remove('analysis-mode');
+  $('analysis-panel').style.display = 'none';
+  resizeBoard();
+  if (gameState) drawBoard(gameState);
+}
+$('btn-close-analysis').addEventListener('click', closeAnalysis);
+$('ap-filter').addEventListener('change', renderMoveList);
+$('ap-player').addEventListener('change', renderMoveList);
+
+function visibleRolls() {
+  const f = $('ap-filter').value, who = $('ap-player').value;
+  return analysisReport.rolls.map((r, idx) => ({ r, idx })).filter(({ r }) =>
+    (who === 'all' || r.pi === Number(who)) &&
+    (f === 'all' || (f === 'choices' && r.analysis) || (f === 'errors' && r.analysis && r.analysis.severity !== 'ok')));
+}
+
+function badgeFor(r) {
+  if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
+  const a = r.analysis;
+  if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${pts(a.loss)} ± ${pts(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
+  return el('span', { class: `badge ${a.severity}`, title: `±${pts(1.96 * a.se)}` }, `${SEV_LABEL[a.severity]} −${pts(a.loss)}`);
+}
+
+function renderMoveList() {
+  const rep = analysisReport;
+  const box = $('ap-moves');
+  const list = visibleRolls();
+  box.replaceChildren(...list.map(({ r, idx }) => {
+    const p = rep.players[r.pi];
+    const rowEl = el('div', { class: 'ap-row' + (idx === apSel ? ' sel' : ''), title: p.name },
+      el('span', { class: 'turn' }, `${r.turn}.`),
+      el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
+      el('span', {}, r.dice.join('-')),
+      el('span', { class: 'play' }, r.played),
+      badgeFor(r));
+    rowEl.dataset.idx = idx;
+    rowEl.addEventListener('click', () => selectRoll(idx));
+    return rowEl;
+  }));
+  if (!list.length) box.append(el('div', { class: 'muted', style: 'padding:6px' }, 'Nothing to show.'));
+}
+
+function showPosition(marbles, movedFrom) {
+  if (!gameState || !marbles) return;
+  resizeBoard();
+  const gs = { ...gameState, players: gameState.players.map((p, i) => ({ ...p, marbles: marbles[i] ?? p.marbles })) };
+  drawBoard(gs);
+  // Ring the marbles that moved (compared with the position before the roll).
+  if (movedFrom) {
+    marbles.forEach((ms, pi) => ms.forEach((m, k) => {
+      const o = movedFrom[pi]?.[k];
+      if (o && JSON.stringify(o) !== JSON.stringify(m)) highlightMarbleAt(m, pi);
+    }));
+  }
+}
+
+function selectRoll(idx, opt = null) {
+  const rep = analysisReport;
+  if (!rep || idx < 0 || idx >= rep.rolls.length) return;
+  apSel = idx; apOpt = opt;
+  const r = rep.rolls[idx];
+  for (const rowEl of $('ap-moves').children) rowEl.classList.toggle('sel', Number(rowEl.dataset.idx) === idx);
+  $('ap-moves').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+  drawChart();
+
+  const p = rep.players[r.pi];
+  const box = $('ap-detail');
+  const title = el('div', {}, el('b', {}, `Turn ${r.turn} · ${p.name} · ${r.dice.join('-')}`));
+  const before = el('div', { class: 'ap-opt' + (opt === null ? ' sel' : ''), title: 'The board right after the roll' },
+    el('span', {}, 'Position before the move'), el('span'), el('span'));
+  before.addEventListener('click', () => selectRoll(idx, null));
+  const kids = [title, before];
+  if (!r.analysis) {
+    kids.push(el('div', { class: 'muted' }, r.played === '--' ? 'No legal move — nothing to decide.'
+      : `Only one way to play this roll: ${r.played}. Correct by definition.`));
+  } else {
+    const a = r.analysis;
+    kids.push(el('div', { class: 'ap-opt', style: 'cursor:default;color:var(--muted)' },
+      el('span', {}, 'Option'), el('span', { class: 'num' }, 'win'), el('span', { class: 'num' }, 'loss')));
+    a.options.forEach((o, k) => {
+      const tags = [o.played && 'played', o.robot && 'robot', k === 0 && 'best'].filter(Boolean).join(' · ');
+      const line = el('div', { class: 'ap-opt' + (opt === k ? ' sel' : ''), title: `${o.n} playouts` },
+        el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
+        el('span', { class: 'num' }, pctTxt(o.win)),
+        el('span', { class: 'num' }, o.loss > 0 ? `−${pts(o.loss)}` : ''));
+      line.addEventListener('click', () => selectRoll(idx, k));
+      kids.push(line);
+    });
+    const verdict = a.severity === 'ok'
+      ? (a.loss > 0 ? `Within the noise (−${pts(a.loss)} ± ${pts(1.96 * a.se)}) — counts as correct.` : 'Best play.')
+      : `${SEV_LABEL[a.severity]}: −${pts(a.loss)} win-rate points (± ${pts(1.96 * a.se)}).`;
+    kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were rolled out.`));
+  }
+  box.replaceChildren(...kids);
+  if (opt !== null && r.analysis) showPosition(r.analysis.options[opt].marbles, r.marbles);
+  else showPosition(r.marbles);
+}
+
+// Win chance through the game. For two players one line (the first player's
+// chance; the other's is the rest); otherwise one line per player.
+function drawChart() {
+  const rep = analysisReport;
+  const n = rep.rolls.length;
+  const Wd = 500, Ht = 120, padX = 6, padY = 8;
+  const x = i => padX + (n > 1 ? i / (n - 1) : 0.5) * (Wd - 2 * padX);
+  const y = v => padY + (1 - v) * (Ht - 2 * padY);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  const add = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.append(e); return e; };
+  add('line', { x1: 0, x2: Wd, y1: y(0.5), y2: y(0.5), stroke: '#fff3', 'stroke-dasharray': '4 4' });
+  if (apSel >= 0) add('line', { x1: x(apSel), x2: x(apSel), y1: 0, y2: Ht, stroke: '#fff6' });
+  const two = rep.players.length === 2;
+  const lines = two ? [0] : rep.players.map((_, i) => i);
+  for (const pi of lines) {
+    const ptsArr = rep.rolls.map((r, i) => {
+      if (!r.analysis || r.analysis.playedWin == null) return null;
+      if (r.pi === pi) return [i, r.analysis.playedWin];
+      return two ? [i, 1 - r.analysis.playedWin] : null;
+    }).filter(Boolean);
+    if (rep.winner != null) ptsArr.push([n - 1, rep.winner === pi ? 1 : 0]);
+    if (!ptsArr.length) continue;
+    const pl = add('polyline', { points: ptsArr.map(([i, v]) => `${x(i)},${y(v)}`).join(' '), fill: 'none', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' });
+    pl.style.stroke = colorVar(rep.players[pi].color);
+  }
+  const sevColor = { inaccuracy: '#ffe08a', mistake: '#ff9a40', blunder: '#ff4060' };
+  rep.rolls.forEach((r, i) => {
+    const a = r.analysis;
+    if (!a || a.severity === 'ok') return;
+    const v = two && r.pi !== 0 ? 1 - a.playedWin : a.playedWin;
+    const c = add('circle', { cx: x(i), cy: y(v), r: 4, fill: sevColor[a.severity], stroke: '#000', style: 'cursor:pointer' });
+    const t = document.createElementNS(ns, 'title');
+    t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${pts(a.loss)}`;
+    c.append(t);
+    c.addEventListener('click', () => selectRoll(i));
+  });
+  const label = two ? `${rep.players[0].name}'s chance to win` : 'Each player’s chance to win';
+  $('ap-chart').replaceChildren(svg, el('div', { class: 'muted', style: 'font-size:0.72rem' }, label + ' after each real choice · dots are errors (click to jump)'));
+}
+
+document.addEventListener('keydown', e => {
+  if (!$('game-layout').classList.contains('analysis-mode')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 'Escape') { closeAnalysis(); return; }
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  e.preventDefault();
+  const list = visibleRolls().map(v => v.idx);
+  if (!list.length) return;
+  const pos = list.indexOf(apSel);
+  const step = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1;
+  const next = pos < 0 ? list[0] : list[Math.max(0, Math.min(list.length - 1, pos + step))];
+  selectRoll(next);
 });
 
 // ---- Options checkboxes ----
@@ -507,8 +722,8 @@ on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
   pendingFeedback = null;
   resetAnalyzeButton();
-  $('analysis').replaceChildren();
-  $('analysis').style.display = 'none';
+  analysisReport = null; apSel = -1;
+  if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
   show('screen-game');
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
@@ -1197,7 +1412,8 @@ function log(msg, color, cls) {
 // ---- Canvas resize ----
 window.addEventListener('resize', () => {
   resizeBoard();
-  if (gameState) drawBoard(gameState);
+  if ($('game-layout').classList.contains('analysis-mode') && apSel >= 0) selectRoll(apSel, apOpt);
+  else if (gameState) drawBoard(gameState);
 });
 
 // ---- Initial connect on load ----

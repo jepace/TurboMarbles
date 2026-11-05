@@ -8,7 +8,8 @@ import {
 } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { Worker } from 'worker_threads';
-import { moveFeedback } from './Analysis.js';
+import { moveFeedback, describeRoll } from './Analysis.js';
+import { availableParallelism } from 'os';
 
 const DISCONNECT_TIMEOUT_MS  = 30 * 60 * 1000; // 30 minutes
 const ROBOT_TURN_DELAY_MS    = 800;            // pause before robot's turn starts
@@ -18,13 +19,15 @@ const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
 const LOBBY_TTL_MS           = 2 * 60 * 60 * 1000; // unstarted lobbies expire after 2 h
 const ILLEGAL_LOG_INTERVAL_MS = 10_000;        // at most one illegal-move warning per socket per 10 s
 const MAX_ANALYSES          = 1;              // post-game analyses running at once (CPU-heavy)
-const MAX_ANALYSIS_DECISIONS = 60;             // per player per game
+const MAX_RECORDED_ROLLS    = 400;            // per game (all players), for post-game analysis
 export const config = {
   skipTurnDelayMs: 1500,  // show dice before auto-advancing a skipped turn
   initialTurnIndex: null, // null = random; set to 0 in tests to pin first player
   // Post-game analysis: playouts per option to screen all options, playouts
-  // for the top `keep` options (plus the one played) in depth.
-  analysis: { screen: 40, deep: 300, keep: 3 },
+  // for the top `keep` options (plus the one played and the robot's) in depth,
+  // and up to maxDeep for a loss that is still unclear.
+  analysis: { screen: 60, deep: 400, keep: 3, maxDeep: 1600 },
+  analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
 };
 
 const rooms = new Map();    // roomId → Room
@@ -105,8 +108,7 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
     disconnectTimers: new Map(),
     robotTurnTimer: null,
     skipTimer: null,
-    history: [],        // human decisions, for post-game analysis
-    analyses: new Map(),// playerIndex → finished analysis result
+    analysis: null,     // post-game analysis: null | { state: 'running', waiting: Set<ws> } | { state: 'done', result }
   };
   rooms.set(roomId, room);
 
@@ -222,8 +224,29 @@ function performRoll(game) {
   game._humanMadeMove = false;
   game._committed = false; // guard: reject undo after commitTurn fires
   game._undoStack = []; // per-move snapshots for undo; reset on each roll
+  finishRollRecord(game);
   game._afterRoll = snapshot(game); // position + dice, for move feedback and analysis
+  game._rolls ??= [];
+  if (game._rolls.length < MAX_RECORDED_ROLLS) {
+    game._pendingRoll = { turn: game._turnNo ?? 1, pi: game.turnIndex, dice: dice.slice(), before: game._afterRoll };
+  }
   return dice;
+}
+
+// Every roll of the game, kept for the post-game report: the position after
+// the roll and after it was played. A roll is completed when the next roll
+// happens (or the game ends), so undo and skipped dice need no special care.
+function finishRollRecord(game) {
+  const r = game._pendingRoll;
+  if (!r) return;
+  game._pendingRoll = null;
+  const after = snapshot(game);
+  let info;
+  try { info = describeRoll(r.before, after, r.pi); } catch (err) {
+    console.error('[analysis] could not record roll', err);
+    return;
+  }
+  game._rolls.push(info.forced ? { ...r, ...info } : { ...r, ...info, after });
 }
 
 // The parts of a game the rules engine needs — no private bookkeeping fields.
@@ -830,59 +853,84 @@ function recordDecision(room, ws) {
     return;
   }
   sendTo(ws, { event: 'moveFeedback', playerIndex: pi, ...fb });
-  if (fb.forced) return;                       // nothing to analyse later
-  if (room.history.filter(d => d.pi === pi).length < MAX_ANALYSIS_DECISIONS) {
-    room.history.push({ turn: game._turnNo ?? 1, dice: game.dice.slice(), pi,
-      before: game._afterRoll, after: snapshot(game) });
-  }
 }
 
 // ---------- Post-game analysis ----------
 
 let analysesRunning = 0;
 
-// A finished game's player asks for rollout analysis of their decisions. Runs
-// in a worker thread; progress and the result go to that player only.
+// A finished game's player asks for the post-game report. Every decision of
+// every player is rolled out (in worker threads, so games keep running); the
+// report is cached on the room and sent to everyone who asked.
 export function handleAnalyzeGame(ws, roomId) {
   const room = rooms.get(roomId);
-  if (!room || room.state !== 'finished') return;
+  if (!room || room.state !== 'finished' || !room.game) return;
   const sess = sessions.get(ws._id);
   if (!sess || sess.roomId !== roomId) return;
-  const pi = sess.playerIndex;
 
-  const done = room.analyses.get(pi);
-  if (done === 'running') return;
-  if (done) { sendTo(ws, { event: 'analysisResult', items: done }); return; }
+  const a = room.analysis;
+  if (a?.state === 'done') { sendTo(ws, { event: 'analysisResult', report: a.result }); return; }
+  if (a?.state === 'running') { a.waiting.add(ws); return; }
 
-  const decisions = room.history.filter(d => d.pi === pi);
-  if (!decisions.length) { sendTo(ws, { event: 'analysisResult', items: [] }); return; }
+  const { game } = room;
+  finishRollRecord(game);
+  const rolls = game._rolls ?? [];
+  const decisions = rolls.map((r, idx) => ({ r, idx })).filter(x => !x.r.forced);
+  const base = {
+    players: room.slots.map((s, i) => ({ name: s.name, color: game.players[i]?.color, isRobot: !!s.isRobot })),
+    winner: game.winner,
+    rolls: rolls.map(({ turn, pi, dice, forced, played, options, before }) =>
+      ({ turn, pi, dice, forced, played, options, marbles: before ? before.players.map(p => p.marbles) : null })),
+  };
+  const finish = report => {
+    room.analysis = { state: 'done', result: report };
+    for (const w of waiting) sendTo(w, { event: 'analysisResult', report });
+  };
+  const waiting = new Set([ws]);
+  if (!decisions.length) { finish(base); return; }
   if (analysesRunning >= MAX_ANALYSES) {
     sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing another game. Try again in a minute.' });
     return;
   }
-
   analysesRunning++;
-  room.analyses.set(pi, 'running');
-  const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
-    workerData: { decisions, options: config.analysis },
-  });
-  let finished = false;
-  const end = () => { if (!finished) { finished = true; analysesRunning--; } };
-  worker.on('message', msg => {
-    if (msg.type === 'progress') sendTo(ws, { event: 'analysisProgress', done: msg.done, total: msg.total });
-    if (msg.type === 'result') {
-      room.analyses.set(pi, msg.items);
-      sendTo(ws, { event: 'analysisResult', items: msg.items });
-      end();
-    }
-  });
-  worker.on('error', err => {
+  room.analysis = { state: 'running', waiting };
+
+  // Split the decisions over a few workers, interleaved so each gets a mix.
+  const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, decisions.length));
+  const chunks = Array.from({ length: nWorkers }, (_, w) => decisions.filter((_, k) => k % nWorkers === w));
+  const results = new Map();
+  let done = 0, live = nWorkers, failed = false;
+  const end = () => { analysesRunning--; };
+  const fail = err => {
+    if (failed) return;
+    failed = true;
     console.error('[analysis] worker failed', err);
-    room.analyses.delete(pi);
-    sendTo(ws, { event: 'error', code: 'ANALYSIS_FAILED', message: 'Analysis failed.' });
+    for (const w of workers) w.terminate();
+    room.analysis = null;
+    for (const w of waiting) sendTo(w, { event: 'error', code: 'ANALYSIS_FAILED', message: 'Analysis failed.' });
     end();
+  };
+  const workers = chunks.map(chunk => {
+    const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
+      workerData: { decisions: chunk.map(({ r, idx }) => ({ idx, before: r.before, after: r.after, pi: r.pi })), options: config.analysis },
+    });
+    worker.on('message', msg => {
+      if (failed) return;
+      if (msg.type === 'item') {
+        results.set(msg.idx, msg.item);
+        done++;
+        for (const w of waiting) sendTo(w, { event: 'analysisProgress', done, total: decisions.length });
+      }
+      if (msg.type === 'end' && --live === 0) {
+        base.rolls.forEach((r, idx) => { if (results.has(idx)) r.analysis = results.get(idx); });
+        finish(base);
+        end();
+      }
+    });
+    worker.on('error', fail);
+    worker.on('exit', code => { if (code !== 0) fail(new Error(`worker exited ${code}`)); });
+    return worker;
   });
-  worker.on('exit', () => { if (!finished) room.analyses.delete(pi); end(); });
 }
 
 // For unit testing only — resets all module-level state between test cases.

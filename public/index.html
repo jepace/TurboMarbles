@@ -80,6 +80,25 @@
         </div>
       </div>
     </div>
+    <div id="analysis-panel" style="display:none">
+      <div class="ap-head">
+        <h2>Game Analysis</h2>
+        <button id="btn-close-analysis" class="secondary" title="Back to the game (Esc)">Close</button>
+      </div>
+      <div id="ap-summary"></div>
+      <div id="ap-chart"></div>
+      <div class="ap-filters">
+        <select id="ap-filter">
+          <option value="all">All rolls</option>
+          <option value="choices">Real choices</option>
+          <option value="errors">Errors only</option>
+        </select>
+        <select id="ap-player"></select>
+        <span class="muted">← → to step</span>
+      </div>
+      <div id="ap-moves"></div>
+      <div id="ap-detail"></div>
+    </div>
     <div id="sidebar">
       <div id="dice-area">
         <div class="die" id="die-0">–</div>
