@@ -4,7 +4,8 @@ import { createGame, applyMove } from '../src/GameEngine.js';
 import { lookup, expectedTurns, finishedBy, raceWinProbability, REGION } from '../src/EndgameTable.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 import { positionFacts } from '../src/Analysis.js';
-import { parseSpaceName } from '../public/js/constants.js';
+import { parseSpaceName, spaceName } from '../public/js/constants.js';
+import { isDuel, duelWinChance } from '../src/DuelTable.js';
 
 let passed = 0, failed = 0;
 const assert = (cond, label) => {
@@ -88,6 +89,27 @@ describe('robot — uses the table near home', () => {
   assert(Math.abs(f4.anyHit - 15 / 36) < 1e-9 && f4.hits[0].rolls === 'any 5, 4-1, 3-2', `Y↓4 hit 15/36 by any 5, 4-1, 3-2 (${f4.hits[0]?.rolls})`);
   assert(Math.abs(f3.anyHit - 16 / 36) < 1e-9 && f3.hits[0].rolls === 'any 6, 5-1, 4-2, 3-3', `Y↓3 hit 16/36 by any 6, 5-1, 4-2, 3-3 (${f3.hits[0]?.rolls})`);
   assert(f4.race[0].next > f3.race[0].next, 'five away finishes next turn more often than four away');
+}
+
+// The duel table: same race, Yellow's last marble in the hub, Yellow rolls 3-1.
+// Exact best is to wait on a far star (hub/G★/P★, 65.6%) rather than run in
+// to Y↓4 (61.6%) in front of Blue's marble.
+{
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 1);
+  g.players.forEach((p, pi) => p.marbles.forEach((m, i) => {
+    delete m.space; delete m.slot;
+    Object.assign(m, i < 3 ? { zone: 'home', slot: i + 2 } : pi === 0 ? { zone: 'track', space: parseSpaceName('O↑4') } : { zone: 'center' });
+  }));
+  g.dice = [3, 1]; g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+  assert(isDuel(g), 'two last marbles with h2–h4 filled is a duel');
+  const v = duelWinChance(g, 1, 1);
+  assert(v > 0.4 && v < 0.7, `duel value is a probability (${v.toFixed(3)})`);
+  const mv1 = pickNextRobotMove(g, 1);
+  applyMove(g, 1, mv1);
+  const mv2 = pickNextRobotMove(g, 1);
+  applyMove(g, 1, mv2);
+  const at = g.players[1].marbles[3];
+  assert(at.zone === 'track' && spaceName(at.space) === 'P★', `robot waits on P★ (went to ${at.zone === 'track' ? spaceName(at.space) : at.zone})`);
 }
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

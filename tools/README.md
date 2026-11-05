@@ -107,3 +107,17 @@ bumps and luck, unlike `replay.mjs --analyze` (exact, but endgame-only and
 race-only). A decision is marked ✗ only when the best option beats the played
 one by more than the combined 95% intervals. It is slow: roughly
 options × games × 5 ms per decision, so a whole game takes minutes.
+
+## build-duel-table.mjs — the last-marble duel
+
+```
+node tools/build-duel-table.mjs        # ~3 min; writes src/duel-table.json
+```
+
+Solves the two-player duel exactly: both players have three marbles in
+h2–h4 and one marble left (base, hub or track). For every position and
+whoever is to roll, the chance each side wins with perfect play — racing,
+hitting, and waiting out of reach until the other marble has gone past.
+Moves come from the real engine; one table per distance between the two
+arms. The robot plays duels from it, and the analysis page shows its value.
+Rebuild after any rule change that affects movement.

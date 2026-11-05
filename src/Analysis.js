@@ -12,6 +12,7 @@ import { allLegalMoves, applyMove, earnsExtraRoll, rollDice } from './GameEngine
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { lookup, expectedTurns, finishedBy } from './EndgameTable.js';
 import { spaceName } from '../public/js/constants.js';
+import { duelWinChance } from './DuelTable.js';
 
 // ---- Positions and notation -------------------------------------------------
 
@@ -262,7 +263,10 @@ export function positionFacts(game, pi) {
     const e = lookup(p);
     if (e && expectedTurns(e) > 0) race.push({ pi: i, next: finishedBy(e, 1), turns: expectedTurns(e) });
   });
-  return { anyHit: 1 - anyMiss, hits, race };
+  // Two-player last-marble duel: the exact chance to win with perfect play.
+  const next = game.dice && earnsExtraRoll(game.dice) ? pi : (pi + 1) % game.players.length;
+  const duel = duelWinChance(game, pi, next);
+  return { anyHit: 1 - anyMiss, hits, race, duel };
 }
 
 // Analyse one decision: screen every option with a few playouts, then roll
@@ -323,6 +327,6 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
       played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game),
       facts: positionFacts(c.p.game, pi),
     })),
-    before: { race: positionFacts(before, pi).race },
+    before: (({ race, duel }) => ({ race, duel }))(positionFacts({ ...before, dice: null }, pi)),
   };
 }

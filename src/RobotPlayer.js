@@ -15,6 +15,8 @@ const WIN_SCORE = 10000;
 
 import { allLegalMoves, applyMove, TRACK_SIZE, ALL_STARS } from './GameEngine.js';
 import { lookup } from './EndgameTable.js';
+import { isDuel, duelWinChance } from './DuelTable.js';
+import { earnsExtraRoll } from './GameEngine.js';
 
 // Score of a die that has no move left to make: same as a move that neither
 // helps nor hurts (positional moves score 200 + 5 × gain).
@@ -33,6 +35,7 @@ const NO_MOVE_SCORE = 200;
 // before the robot's next turn subtracted (see threatMap / risk).
 export function pickNextRobotMove(game, playerIndex) {
   if (game.diceUsed[0] && game.diceUsed[1]) return null;
+  if (isDuel(game)) return pickWithDuel(game, playerIndex);
   const threats = RISK_WEIGHT > 0 ? threatMap(game, playerIndex) : null;
   if (lookup(game.players[playerIndex])) return pickWithTable(game, playerIndex, threats);
   const locs = marbleLocs(game, playerIndex);
@@ -54,6 +57,26 @@ export function pickNextRobotMove(game, playerIndex) {
       total = s1 + bestSingleMove(after, playerIndex, locs1, removed1, threats).score;
     }
     if (total > bestScore) { bestScore = total; best = first; }
+  }
+  return best;
+}
+
+// ---- Last-marble duel: exact values ----------------------------------------
+//
+// Two players, each down to one marble (the rest in h2–h4): play the roll the
+// way that maximises the exact chance to win (src/DuelTable.js). That covers
+// racing, hitting, and waiting out of reach until the other marble has passed.
+function pickWithDuel(game, playerIndex) {
+  const next = earnsExtraRoll(game.dice) ? playerIndex : 1 - playerIndex;
+  const value = g => g.winner != null ? (g.winner === playerIndex ? 1 : 0)
+    : duelWinChance(g, playerIndex, next) ?? 0;
+  const apply = (g, mv) => { const g2 = structuredClone(g); applyMove(g2, playerIndex, mv); return g2; };
+  let best = null, bestV = -1;
+  for (const first of candidateMoves(game, playerIndex)) {
+    const g1 = apply(game, first);
+    const second = g1.winner != null || (g1.diceUsed[0] && g1.diceUsed[1]) ? [] : candidateMoves(g1, playerIndex);
+    const v = second.length ? Math.max(...second.map(m2 => value(apply(g1, m2)))) : value(g1);
+    if (v > bestV) { bestV = v; best = first; }
   }
   return best;
 }

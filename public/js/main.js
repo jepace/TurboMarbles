@@ -643,6 +643,9 @@ function renderFacts(rep, r, opt, facts) {
     }
     if ((facts.hits?.length ?? 0) > 1) lines.push(el('div', { class: 'fact' }, `At least one hit: ${pctTxt(facts.anyHit)}`));
   }
+  if (facts.duel != null) {
+    lines.push(el('div', { class: 'fact' }, `🎯 Last-marble duel, exact with perfect play: ${who} wins ${(100 * facts.duel).toFixed(1)}%`));
+  }
   for (const x of facts.race ?? []) {
     lines.push(el('div', { class: 'fact' }, `🏁 ${rep.players[x.pi].name} finishes next turn ${(100 * x.next).toFixed(1)}% · expected ${x.turns.toFixed(2)} turns to finish`));
   }
