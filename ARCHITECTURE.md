@@ -353,22 +353,26 @@ Create or Join.
 ## Robot Player
 
 `RobotPlayer.js` exports `pickNextRobotMove(game, playerIndex)`, which returns the
-best move for one unused die (or `null` to forfeit). GameManager calls it once per
-die, with a delay between moves so clients can animate them.
+next move (or `null` to forfeit). GameManager calls it once per die, with a delay
+between moves so clients can animate them. With both dice unused it plans the
+whole roll: every first move (either die) followed by the best second move in the
+resulting position, scored as the sum of the two moves; it plays the first move
+of the best pair.
 
-Score priorities (higher = preferred):
+Move scores (higher = preferred):
 | Move type | Score |
 |-----------|-------|
 | Win move (last marble to home, all others in home) | 10000 |
-| Bump opponent (track / leaving the hub) | 800 / 750 |
 | Enter home from the track | 550 + slot×40 |
 | Move within home | 230 + slot |
-| Positional move (track, star track, hub, leaving base) | 200 + 5 × (reduction in estimated distance to home) |
+| Positional move (track, star track, hub, leaving base) | 200 + 5 × (reduction in estimated distance to home), +50 if it bumps an opponent |
+| No move left for a die (planning only) | 200 |
 
 The distance estimate counts the star-track shortcut and adds penalties for
 positions that need a specific roll (exact star landing, a 1 to leave the hub,
 a 1 or 6 to leave base). Optional moves (passing home to go around) are never
-taken. If a die has no move worth making, it's forfeited.
+taken. If a die has no move, it's forfeited. Constants were tuned by self-play
+against the previous robot in 2-, 3-, 4- and 6-player games.
 
 ---
 

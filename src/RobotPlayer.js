@@ -3,33 +3,72 @@
 // chooses a winning move first, regardless of other heuristic values.
 const WIN_SCORE = 10000;
 
-// Strategy priority (highest first):
+// Move scores (highest first):
 //   1. Win move (place last marble in final home slot)
-//   2. Bump an opponent
-//   3. Enter home from the track
-//   4. Positional moves (track, star track, hub, leaving base), ranked by how
-//      much they cut the marble's estimated distance to home — see distToHome
-//   5. Shuffling a marble forward inside home (safe there; only when nothing
+//   2. Enter home from the track
+//   3. Positional moves (track, star track, hub, leaving base), ranked by how
+//      much they cut the marble's estimated distance to home — see distToHome —
+//      plus a bonus when the move bumps an opponent
+//   4. Shuffling a marble forward inside home (safe there; only when nothing
 //      else is useful)
+// A whole roll is planned: both dice, both orders (pickNextRobotMove).
 
-import { allLegalMoves, TRACK_SIZE, ALL_STARS } from './GameEngine.js';
+import { allLegalMoves, applyMove, TRACK_SIZE, ALL_STARS } from './GameEngine.js';
 
-// Pick the single best move for the next unused die, or null to forfeit.
+// Score of a die that has no move left to make: same as a move that neither
+// helps nor hurts (positional moves score 200 + 5 × gain).
+const NO_MOVE_SCORE = 200;
+
+// Pick the next move, or null to forfeit the next unused die.
+//
+// With both dice unused, the robot plans the whole roll: every first move
+// (either die), followed by the best second move in the position it creates.
+// It plays the first move of the best pair; on the next call (one die left)
+// the greedy pick below is exactly the plan's second move. This finds
+// combinations the one-die-at-a-time robot missed, e.g. a move that only
+// becomes possible after another, or a first move that strands the second die.
 export function pickNextRobotMove(game, playerIndex) {
   if (game.diceUsed[0] && game.diceUsed[1]) return null;
+  if (game.diceUsed[0] || game.diceUsed[1]) return bestSingleMove(game, playerIndex).move;
+
+  let best = null, bestScore = -Infinity;
+  for (const first of candidateMoves(game, playerIndex)) {
+    const s1 = scoreMove(game, playerIndex, first);
+    let total;
+    if (s1 >= WIN_SCORE) {
+      total = s1;
+    } else {
+      const after = structuredClone(game);
+      applyMove(after, playerIndex, first);
+      total = s1 + bestSingleMove(after, playerIndex).score;
+    }
+    if (total > bestScore) { bestScore = total; best = first; }
+  }
+  return best;
+}
+
+// Best move for the unused die(s) in this position, and its score
+// (NO_MOVE_SCORE if no move is available).
+function bestSingleMove(game, playerIndex) {
+  let move = null, score = -Infinity;
+  for (const m of candidateMoves(game, playerIndex)) {
+    const s = scoreMove(game, playerIndex, m);
+    if (s > score) { score = s; move = m; }
+  }
+  return move ? { move, score } : { move: null, score: NO_MOVE_SCORE };
+}
+
+// Legal moves for every unused die. Optional moves (pass home and go around
+// again) are never worth it — better to wait next to home and burn the die.
+function candidateMoves(game, playerIndex) {
+  if (game.phase === 'GAME_OVER') return [];
   const legal = allLegalMoves(game, playerIndex);
-  let chosen = null, bestScore = -Infinity;
+  const out = [];
   for (const dieIdx of [0, 1]) {
     if (game.diceUsed[dieIdx]) continue;
-    for (const move of (legal[dieIdx] || [])) {
-      // Optional moves (pass home and go around again) are never worth it:
-      // better to wait next to home and burn the die.
-      if (move.optional) continue;
-      const s = scoreMove(game, playerIndex, move);
-      if (s > bestScore) { bestScore = s; chosen = move; }
-    }
+    for (const m of (legal[dieIdx] || [])) if (!m.optional) out.push(m);
   }
-  return chosen; // null means forfeit the next unused die
+  return out;
 }
 
 function scoreMove(game, playerIndex, move) {
@@ -51,18 +90,22 @@ function scoreMove(game, playerIndex, move) {
 
   if (move.toZone === 'home') return 550 + move.toSlot * 40; // entering home
 
-  // Landing on an opponent sends them back to base.
-  if (move.toZone === 'track' && bumpsOpponent(game, playerIndex, move.toSpace, 'track')) {
-    return move.type === 'exitCenter' ? 750 : 800;
-  }
-
   // Everything else is positional: reward how much the move shortens the
   // marble's estimated trip home. Shortcuts count; positions that need an
   // exact roll to make progress cost extra.
   const before = distToHome(cfg, marbleLoc(marble));
   const after  = distToHome(cfg, moveDest(move));
-  return 200 + 5 * (before - after);
+  // Landing on an opponent sends them back to base: a bonus on top of the
+  // move's own positional value, not a flat override. A flat 800 made the
+  // robot chase bumps into bad positions — with planning it lost in games of
+  // 3+ players, where a bump sets back only one of several rivals.
+  const bump = move.toZone === 'track' && bumpsOpponent(game, playerIndex, move.toSpace, 'track');
+  return 200 + 5 * (before - after) + (bump ? BUMP_BONUS : 0);
 }
+
+// Tuned by self-play (planning robot vs the previous robot): 50 wins in 2-,
+// 3-, 4- and 6-player games; 0 and ≥ 300 do worse with 3+ players.
+const BUMP_BONUS = 50;
 
 // ---- Distance-to-home estimate --------------------------------------------
 //
