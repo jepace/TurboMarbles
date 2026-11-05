@@ -34,3 +34,46 @@ export const ALL_STARS = new Set(PLAYER_CONFIG.map(p => p.star));
 
 // Derived: color name per arm index (for UI color pickers and labels)
 export const ARM_COLORS = PLAYER_CONFIG.map(p => p.color);
+
+// ---- Square names -----------------------------------------------------------
+//
+// Squares are named after the coloured U they sit in, by one letter (B P O Y
+// G W) and a number, with an arrow for the side of the U, in the direction of
+// travel:
+//
+//   B↓5 … B↓1   coming DOWN Blue's right side from the previous colour's star
+//   B0          Blue's home entry
+//   B↑1         Blue's start
+//   B↑2 … B↑7   on and UP Blue's left side
+//   B★          Blue's star
+//
+// B↓k is k steps before Blue's home entry; B↑k is k−1 steps after Blue's
+// start. After a star comes the next colour's ↓5 (B★ → P↓5).
+export const COLOR_LETTERS = PLAYER_CONFIG.map(p => p.color[0].toUpperCase()); // B P O Y G W
+export const UP = '\u2191', DOWN = '\u2193', STAR_MARK = '\u2605';
+
+export function spaceName(space) {
+  const arm = Math.floor((space - 1) / 14);
+  const k = ((space - 1) % 14) + 1;                     // 1..14 within the arm's block
+  if (k === 8) return COLOR_LETTERS[arm] + STAR_MARK;
+  if (k < 8) return COLOR_LETTERS[arm] + UP + k;
+  // 9..14 sit in the NEXT colour's U, before its start: 14 is its home entry.
+  const before = 14 - k;                                // 5 … 0
+  return COLOR_LETTERS[(arm + 1) % 6] + (before === 0 ? '0' : DOWN + before);
+}
+
+// Inverse of spaceName. Accepts "B↓3", "B↑4", "B0", "B★"; returns the track
+// number 1–84, or null if the text isn't a square name.
+export function parseSpaceName(text) {
+  const m = /^([A-Za-z])(★|0|[↑↓]\d)$/.exec(String(text).trim());
+  if (!m) return null;
+  const arm = COLOR_LETTERS.indexOf(m[1].toUpperCase());
+  if (arm === -1) return null;
+  const prev = ((arm + 5) % 6) * 14;                    // previous arm's block
+  if (m[2] === STAR_MARK) return arm * 14 + 8;
+  if (m[2] === '0') return prev + 14;
+  const n = Number(m[2].slice(1));
+  if (m[2][0] === UP && n >= 1 && n <= 7) return arm * 14 + n;
+  if (m[2][0] === DOWN && n >= 1 && n <= 5) return prev + 14 - n;
+  return null;
+}

@@ -23,6 +23,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { createGame, allLegalMoves, applyMove, earnsExtraRoll } from '../src/GameEngine.js';
+import { spaceName, parseSpaceName } from '../public/js/constants.js';
 import { lookup, expectedTurns, finishedBy, raceWinProbability } from '../src/EndgameTable.js';
 
 const args = process.argv.slice(2);
@@ -68,7 +69,7 @@ function parseLoc(tok) {
   if (tok === 'hub') return { zone: 'center' };
   const h = tok.match(/^h(\d)$/);
   if (h) return { zone: 'home', slot: +h[1] };
-  return { zone: 'track', space: +tok };
+  return { zone: 'track', space: /^\d+$/.test(tok) ? +tok : parseSpaceName(tok) };
 }
 function at(m, loc) {
   if (m.zone !== loc.zone) return false;
@@ -81,8 +82,8 @@ function dest(mv) {
   if (mv.toZone === 'center') return { zone: 'center' };
   return { zone: 'track', space: mv.toSpace };
 }
-const locStr = l => l.zone === 'track' ? String(l.space) : l.zone === 'home' ? `h${l.slot}` : l.zone === 'center' ? 'hub' : 'base';
-const marbleStr = m => m.zone === 'track' ? String(m.space) : m.zone === 'home' ? `h${m.slot}` : m.zone === 'center' ? 'hub' : 'base';
+const locStr = l => l.zone === 'track' ? spaceName(l.space) : l.zone === 'home' ? `h${l.slot}` : l.zone === 'center' ? 'hub' : 'base';
+const marbleStr = m => m.zone === 'track' ? spaceName(m.space) : m.zone === 'home' ? `h${m.slot}` : m.zone === 'center' ? 'hub' : 'base';
 function describe(mv, pi) {
   const m = game.players[pi].marbles[mv.marbleId];
   return `${marbleStr(m)}→${locStr(dest(mv))} (die ${game.dice[mv.dieIndex]}${mv.optional ? ', optional' : ''})`;

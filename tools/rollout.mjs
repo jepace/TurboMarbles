@@ -17,6 +17,7 @@
 // and ignores bumps). Differences smaller than the ± are noise.
 import { readFileSync } from 'fs';
 import { createGame, allLegalMoves, applyMove, earnsExtraRoll, rollDice } from '../src/GameEngine.js';
+import { spaceName, parseSpaceName } from '../public/js/constants.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 
 const args = process.argv.slice(2);
@@ -38,10 +39,10 @@ const turns = [...text.matchAll(/^(\d+)\. (.+?): (\d)-(\d): (.+)$/gm)].map(m => 
 // --- log parsing / replay helpers (as in tools/replay.mjs) ---
 const parseLoc = tok => { tok = tok.replace('*', '');
   if (tok === 'base') return { zone: 'base' }; if (tok === 'hub') return { zone: 'center' };
-  const h = tok.match(/^h(\d)$/); return h ? { zone: 'home', slot: +h[1] } : { zone: 'track', space: +tok }; };
+  const h = tok.match(/^h(\d)$/); return h ? { zone: 'home', slot: +h[1] } : { zone: 'track', space: /^\d+$/.test(tok) ? +tok : parseSpaceName(tok) }; };
 const at = (m, l) => m.zone === l.zone && (l.zone === 'track' ? m.space === l.space : l.zone === 'home' ? m.slot === l.slot : true);
 const dest = mv => mv.toZone === 'home' ? { zone: 'home', slot: mv.toSlot } : mv.toZone === 'center' ? { zone: 'center' } : { zone: 'track', space: mv.toSpace };
-const str = m => m.zone === 'track' ? String(m.space) : m.zone === 'home' ? `h${m.slot}` : m.zone === 'center' ? 'hub' : 'base';
+const str = m => m.zone === 'track' ? spaceName(m.space) : m.zone === 'home' ? `h${m.slot}` : m.zone === 'center' ? 'hub' : 'base';
 const keyOf = (g, pi) => g.players[pi].marbles.map(str).sort().join(' ');
 // The whole position, ignoring which same-coloured marble is which: the
 // player's marbles first, then every player's (bumps show up here).

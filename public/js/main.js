@@ -5,8 +5,8 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides } from './board.js';
-import { ARM_MAP, ARM_COLORS } from './constants.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt } from './board.js';
+import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
 // ---- State ----
@@ -340,6 +340,44 @@ $('btn-copy-log').addEventListener('click', async () => {
 
 // ---- Canvas click (marble selection & move) ----
 $('board-canvas').addEventListener('click', onCanvasClick);
+
+// ---- Square names on hover ----
+// Shows e.g. "B↓3 · 3 before Blue's home entry" next to the cursor.
+const armName = a => ARM_COLORS[a][0].toUpperCase() + ARM_COLORS[a].slice(1);
+function describeSquare(hit) {
+  if (hit.kind === 'hub')  return ['hub', 'centre hub — leave with a 1'];
+  if (hit.kind === 'base') return ['base', `${armName(hit.arm)}'s base`];
+  if (hit.kind === 'home') return [`h${hit.slot}`, `${armName(hit.arm)}'s home, slot ${hit.slot}`];
+  const name = spaceName(hit.space);
+  const arm = PLAYER_CONFIG.findIndex(c => c.start === hit.space || c.homeEntry === hit.space || c.star === hit.space);
+  if (arm !== -1) {
+    const c = PLAYER_CONFIG[arm];
+    if (c.start === hit.space)     return [name, `${armName(arm)}'s start`];
+    if (c.homeEntry === hit.space) return [name, `${armName(arm)}'s home entry`];
+    return [name, `${armName(arm)}'s star — star track`];
+  }
+  const owner = 'BPOYGW'.indexOf(name[0]);
+  const n = Number(name.slice(2));
+  return name[1] === '\u2193'
+    ? [name, `${n} before ${armName(owner)}'s home entry`]
+    : [name, `${n - 1} after ${armName(owner)}'s start`];
+}
+$('board-canvas').addEventListener('mousemove', e => {
+  const canvas = e.currentTarget, tip = $('board-tip');
+  const rect = canvas.getBoundingClientRect();
+  const hit = spaceAt((e.clientX - rect.left) * canvas.width / rect.width,
+                      (e.clientY - rect.top) * canvas.height / rect.height);
+  if (!hit) { tip.style.display = 'none'; return; }
+  const [name, what] = describeSquare(hit);
+  tip.replaceChildren();
+  const b = document.createElement('b'); b.textContent = name;
+  tip.append(b, what);
+  const area = $('board-area').getBoundingClientRect();
+  tip.style.left = `${e.clientX - area.left + 14}px`;
+  tip.style.top  = `${e.clientY - area.top + 14}px`;
+  tip.style.display = 'block';
+});
+$('board-canvas').addEventListener('mouseleave', () => { $('board-tip').style.display = 'none'; });
 
 // ---- Socket events ----
 
@@ -1018,7 +1056,7 @@ function locNotation(loc) {
   if (loc.zone === 'base')   return 'base';
   if (loc.zone === 'center') return 'hub';
   if (loc.zone === 'home')   return `h${loc.slot}`;
-  if (loc.zone === 'track')  return String(loc.space);
+  if (loc.zone === 'track')  return spaceName(loc.space);   // e.g. B3, B★, W−2
   return '?';
 }
 

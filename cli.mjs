@@ -5,7 +5,7 @@
 import WebSocket  from 'ws';
 import * as rl_   from 'readline';
 import { fileURLToPath } from 'url';
-import { PLAYER_CONFIG, ARM_MAP, ARM_COLORS, ALL_STARS } from './public/js/constants.js';
+import { PLAYER_CONFIG, ARM_MAP, ARM_COLORS, ALL_STARS, spaceName } from './public/js/constants.js';
 
 // ===== SECTION 1: CONFIG & CONSTANTS =====
 
@@ -330,7 +330,7 @@ function drawBoardAscii(gameState) {
 
 function describeMarble(m) {
   if (m.zone === 'base')   return 'base';
-  if (m.zone === 'track')  return `space ${m.space}${m.starEligible ? '*' : ''}`;
+  if (m.zone === 'track')  return spaceName(m.space);
   if (m.zone === 'home')   return `home slot ${m.slot}`;
   if (m.zone === 'center') return 'center hub';
   return '?';
@@ -340,7 +340,7 @@ function locStr(loc) {
   if (loc.zone === 'base')   return 'base';
   if (loc.zone === 'center') return 'center hub';
   if (loc.zone === 'home')   return `home slot ${loc.slot}`;
-  if (loc.zone === 'track')  return `space ${loc.space}`;
+  if (loc.zone === 'track')  return spaceName(loc.space);
   return '?';
 }
 
@@ -353,14 +353,13 @@ export function describeMove(move, dice) {
   let dest;
   switch (move.type) {
     case 'exitBase':
-      dest = `Exit base → space ${move.toSpace} (start)`;
+      dest = `Exit base → ${spaceName(move.toSpace)} (start)`;
       break;
     case 'move':
       if (move.toZone === 'home') {
         dest = `Move → home slot ${move.toSlot}`;
       } else {
-        const starMark = ALL_STARS.has(move.toSpace) ? ' (star)' : '';
-        dest = `Move → space ${move.toSpace}${starMark}`;
+        dest = `Move → ${spaceName(move.toSpace)}`;
       }
       break;
     case 'moveHome':
@@ -368,24 +367,22 @@ export function describeMove(move, dice) {
       break;
     case 'enterCenter':
       if (move.starsPath && move.starsPath.length > 0) {
-        dest = `Star track (${move.starsPath.join('→')}) → center hub`;
+        dest = `Star track (${move.starsPath.map(spaceName).join('→')}) → center hub`;
       } else {
         dest = `Enter center hub`;
       }
       break;
     case 'exitCenter': {
-      const starMark = ALL_STARS.has(move.toSpace) ? ' (star)' : '';
-      dest = `Exit hub → space ${move.toSpace}${starMark}`;
+      dest = `Exit hub → ${spaceName(move.toSpace)}`;
       break;
     }
     case 'moveStar': {
-      const path = (move.starsPath ?? []).join('→');
+      const path = (move.starsPath ?? []).map(spaceName).join('→');
       const pathStr = path ? ` (${path})` : '';
       if (move.toZone === 'home') {
         dest = `Star track${pathStr} → home slot ${move.toSlot}`;
       } else {
-        const starMark = ALL_STARS.has(move.toSpace) ? ' (star)' : '';
-        dest = `Star track${pathStr} → space ${move.toSpace}${starMark}`;
+        dest = `Star track${pathStr} → ${spaceName(move.toSpace)}`;
       }
       break;
     }

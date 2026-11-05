@@ -109,22 +109,21 @@ describe('buildSpaceGrid — center hub is near grid center', () => {
 describe('describeMove — exitBase', () => {
   const m = describeMove({ type: 'exitBase', marbleId: 0, dieIndex: 0, toSpace: 1 }, [1, 3]);
   assert(m.includes('Exit base'), 'exitBase contains "Exit base"');
-  assert(m.includes('space 1'), 'exitBase contains target space');
+  assert(m.includes('Exit base → B↑1 (start)'), 'exitBase names the start square (B↑1)');
   assert(m.includes('[die 1=1]'), 'exitBase includes die tag');
 });
 
 describe('describeMove — move to track (non-star)', () => {
   const m = describeMove({ type: 'move', marbleId: 0, dieIndex: 1, toZone: 'track', toSpace: 5 }, [3, 4]);
-  assert(m.includes('Move → space 5'), 'move to track shows target space');
-  assert(!m.includes('(star)'), 'non-star space has no star marker');
+  assert(m.includes('Move → B↑5'), 'move to track names the square (space 5 = B↑5)');
+  assert(!m.includes('★'), 'non-star square has no star mark');
   assert(m.includes('[die 2=4]'), 'move includes die tag for dieIndex=1');
 });
 
 describe('describeMove — move to track (star space)', () => {
   const starSpace = [...ALL_STARS][0]; // e.g. 8
   const m = describeMove({ type: 'move', marbleId: 0, dieIndex: 0, toZone: 'track', toSpace: starSpace }, [6, 2]);
-  assert(m.includes(`space ${starSpace}`), 'move to star shows correct space');
-  assert(m.includes('(star)'), 'star space has "(star)" marker');
+  assert(m.includes('Move → B★'), `move to star names it with ★ (space ${starSpace} = B★)`);
 });
 
 describe('describeMove — move to home', () => {
@@ -140,7 +139,7 @@ describe('describeMove — moveHome', () => {
 
 describe('describeMove — enterCenter with starsPath', () => {
   const m = describeMove({ type: 'enterCenter', marbleId: 0, dieIndex: 0, starsPath: [8, 22] }, [1, 4]);
-  assert(m.includes('Star track (8→22) → center hub'), 'enterCenter with path shows star track');
+  assert(m.includes('Star track (B★→P★) → center hub'), 'enterCenter with path names the stars');
 });
 
 describe('describeMove — enterCenter without starsPath', () => {
@@ -151,8 +150,7 @@ describe('describeMove — enterCenter without starsPath', () => {
 describe('describeMove — exitCenter', () => {
   const starSpace = [...ALL_STARS][2]; // e.g. 36
   const m = describeMove({ type: 'exitCenter', marbleId: 0, dieIndex: 0, toSpace: starSpace }, [1, 3]);
-  assert(m.includes(`Exit hub → space ${starSpace}`), 'exitCenter shows target space');
-  assert(m.includes('(star)'), 'exitCenter to star has "(star)" marker');
+  assert(m.includes('Exit hub → O★'), `exitCenter names the star (space ${starSpace} = O★)`);
 });
 
 describe('describeMove — moveStar to track', () => {
@@ -161,8 +159,8 @@ describe('describeMove — moveStar to track', () => {
     [3, 5],
   );
   assert(m.includes('Star track'), 'moveStar to track includes "Star track"');
-  assert(m.includes('8→22'), 'moveStar shows stars path');
-  assert(m.includes('space 25'), 'moveStar shows target space');
+  assert(m.includes('B★→P★'), 'moveStar shows the stars path by name');
+  assert(m.includes('→ O↓3'), 'moveStar names the target square (space 25 = O↓3)');
 });
 
 describe('describeMove — moveStar to home', () => {
@@ -171,7 +169,7 @@ describe('describeMove — moveStar to home', () => {
     [3, 5],
   );
   assert(m.includes('home slot 1'), 'moveStar to home shows slot');
-  assert(m.includes('8→22→36'), 'moveStar to home shows full path');
+  assert(m.includes('B★→P★→O★'), 'moveStar to home shows the full path by name');
 });
 
 describe('describeMove — no dice argument (uses "?")', () => {

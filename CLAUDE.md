@@ -82,6 +82,14 @@ B1 - B4 is the Base
 - **Center hub**: Single zone in the middle of the board. Reached by moving exactly 1 step past any star. Exit costs die=1, can emerge on any unblocked star.
 - **Home**: 4 slots per player inside their arm's U corridor. Marbles can only move forward, cannot overshoot slot 4. Cannot be bumped once in home.
 
+### Square Names (move log, feedback, tools)
+Players see squares by colour, not by the internal numbers 1–84 (`spaceName` /
+`parseSpaceName` in `public/js/constants.js`). Each colour's U, in the
+direction of travel: `B↓5 … B↓1` down its right side, `B0` its home entry,
+`B↑1` its start, `B↑2 … B↑7` up its left side, `B★` its star. Letters:
+B P O Y G W. Home slots are `h1`–`h4`; also `hub` and `base`. Hovering a
+square on the board shows its name.
+
 ## Game Rules Summary
 - 2 dice per turn; each die moves one marble.
 - Die=1 or 6 to exit base.

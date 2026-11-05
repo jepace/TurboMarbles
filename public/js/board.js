@@ -680,6 +680,22 @@ export function hitTestMarble(gameState, cx, cy) {
   return null;
 }
 
+// What is drawn at canvas point (cx, cy): a track square, home slot, base
+// slot or the hub — or null. Used for the hover tooltip.
+//   { kind: 'track', space } | { kind: 'home', arm, slot } | { kind: 'base', arm }
+//   | { kind: 'hub' }
+export function spaceAt(cx, cy) {
+  const R = W * 0.026;
+  const near = p => p && (cx - p.x) ** 2 + (cy - p.y) ** 2 <= R * R;
+  for (let s = 1; s < trackPos.length; s++) if (near(trackPos[s])) return { kind: 'track', space: s };
+  for (let a = 0; a < ALL_ARMS; a++) {
+    for (let k = 1; k <= HOME_SLOTS; k++) if (near(homePos[a]?.[k])) return { kind: 'home', arm: a, slot: k };
+    for (const p of basePos[a] ?? []) if (near(p)) return { kind: 'base', arm: a };
+  }
+  if ((cx - centerPos.x) ** 2 + (cy - centerPos.y) ** 2 <= (W * 0.045) ** 2) return { kind: 'hub' };
+  return null;
+}
+
 export function highlightSpaces(spaces) {
   const R = W * 0.020;
   for (const sp of spaces) {

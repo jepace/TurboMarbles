@@ -306,3 +306,18 @@ button.secondary { background: #fff2; }
 
 /* Lobby slot: allow delete button to sit at far right */
 #lobby-slots li { justify-content: flex-start; }
+
+/* ---- Square-name tooltip (hover over the board) ---- */
+#board-tip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(10, 18, 40, 0.92);
+  border: 1px solid #c8920a;
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.82rem;
+  color: #fff;
+  white-space: nowrap;
+  z-index: 5;
+}
+#board-tip b { font-size: 0.95rem; margin-right: 4px; }

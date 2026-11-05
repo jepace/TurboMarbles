@@ -11,10 +11,11 @@
 import { allLegalMoves, applyMove, earnsExtraRoll, rollDice } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { lookup, expectedTurns } from './EndgameTable.js';
+import { spaceName } from '../public/js/constants.js';
 
 // ---- Positions and notation -------------------------------------------------
 
-const locStr = l => l.zone === 'track' ? String(l.space) : l.zone === 'home' ? `h${l.slot}`
+const locStr = l => l.zone === 'track' ? spaceName(l.space) : l.zone === 'home' ? `h${l.slot}`
   : l.zone === 'center' ? 'hub' : 'base';
 // One player's marbles, ignoring which same-coloured marble is which.
 export const positionKey = (game, pi) => game.players[pi].marbles.map(locStr).sort().join(' ');
