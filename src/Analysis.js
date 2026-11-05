@@ -28,11 +28,13 @@ export function notation(moves) {
   const parts = [];
   for (const m of moves) {
     const last = parts[parts.length - 1];
-    if (last && last.marbleId === m.marbleId && last.path[last.path.length - 1] === locStr(m.from)) {
-      last.path.push(locStr(m.to));
+    const to = locStr(m.to) + (m.bump ? '*' : '');   // * = bumped an opponent, as in the move log
+    if (last && last.marbleId === m.marbleId && last.end === locStr(m.from)) {
+      last.path.push(to);
     } else {
-      parts.push({ marbleId: m.marbleId, path: [locStr(m.from), locStr(m.to)] });
+      parts.push({ marbleId: m.marbleId, path: [locStr(m.from), to] });
     }
+    parts[parts.length - 1].end = locStr(m.to);
   }
   return parts.length ? parts.map(p => p.path.join('/')).join(' ') : '--';
 }
@@ -43,7 +45,10 @@ const fromOf = m => m.zone === 'track' ? { zone: 'track', space: m.space }
   : m.zone === 'home' ? { zone: 'home', slot: m.slot } : { zone: m.zone };
 
 function applyRecorded(game, pi, mv, record) {
-  record.push({ marbleId: mv.marbleId, from: fromOf(game.players[pi].marbles[mv.marbleId]), to: destOf(mv) });
+  const to = destOf(mv);
+  const bump = (to.zone === 'track' || to.zone === 'center') && game.players.some((p, o) => o !== pi &&
+    p.marbles.some(m => m.zone === to.zone && (to.zone === 'center' || m.space === to.space)));
+  record.push({ marbleId: mv.marbleId, from: fromOf(game.players[pi].marbles[mv.marbleId]), to, bump });
   applyMove(game, pi, mv);
 }
 

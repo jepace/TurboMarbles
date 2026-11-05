@@ -8,7 +8,7 @@ const WIN_SCORE = 10000;
 //   2. Moves into and within home, scored by home layout (see homeDebt)
 //   3. Positional moves (track, star track, hub, leaving base), ranked by how
 //      much they cut the marble's estimated distance to home — see distToHome —
-//      plus a bonus when the move bumps an opponent
+//      plus the progress an opponent loses when the move bumps it
 //   4. Shuffling a marble forward inside home (safe there; only when nothing
 //      else is useful)
 // A whole roll is planned: both dice, both orders (pickNextRobotMove).
@@ -79,7 +79,7 @@ function pickWithTable(game, playerIndex, threats) {
       p.marbles.forEach((m, id) => {
         if (m.zone !== 'base' && after.players[o].marbles[id].zone === 'base') {
           removed.add(`${o}:${id}`);
-          score += BUMP_BONUS;
+          score += bumpValue(game, o, m);
         }
       });
     });
@@ -259,13 +259,27 @@ function scoreMove(game, playerIndex, move) {
   // move's own positional value, not a flat override. A flat 800 made the
   // robot chase bumps into bad positions — with planning it lost in games of
   // 3+ players, where a bump sets back only one of several rivals.
-  const bump = move.toZone === 'track' && bumpsOpponent(game, playerIndex, move.toSpace, 'track');
-  return 200 + 5 * (before - after) + (bump ? BUMP_BONUS : 0);
+  let bump = 0;
+  if (move.toZone === 'track') {
+    game.players.forEach((p, o) => {
+      if (o !== playerIndex) for (const m of p.marbles) if (m.zone === 'track' && m.space === move.toSpace) bump += bumpValue(game, o, m);
+    });
+  }
+  return 200 + 5 * (before - after) + bump;
 }
 
-// Tuned by self-play (planning robot vs the previous robot): 50 wins in 2-,
-// 3-, 4- and 6-player games; 0 and ≥ 300 do worse with 3+ players.
-const BUMP_BONUS = 50;
+// What a bump is worth: the progress the victim loses (its trip from base to
+// where it stood), at BUMP_K of the robot's own per-pip value, shared out over
+// the opponents (setting back one of several rivals helps less). Sending a
+// marble that is one step from home back to base is worth far more than
+// hitting one that just came out. Self-play against the flat +50 it replaced:
+// 2 players 53.8%, 3 players 34.0%, 4 players 25.0% (even = 50 / 33.3 / 25).
+const BUMP_K = 0.75;
+function bumpValue(game, o, m) {
+  const cfg = game.players[o].config;
+  const lost = distToHome(cfg, { zone: 'base' }) - distToHome(cfg, m.zone === 'center' ? { zone: 'center' } : m);
+  return BUMP_K * 5 * Math.max(0, lost) / (game.players.length - 1);
+}
 
 // ---- Home layout ------------------------------------------------------------
 //
@@ -341,9 +355,3 @@ function moveDest(move) {
   return { zone: 'track', space: move.toSpace };
 }
 
-function bumpsOpponent(game, playerIndex, space, zone) {
-  return game.players.some((p, pi) =>
-    pi !== playerIndex &&
-    p.marbles.some(m => m.zone === zone && m.space === space)
-  );
-}
