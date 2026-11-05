@@ -363,10 +363,15 @@ Move scores (higher = preferred):
 | Move type | Score |
 |-----------|-------|
 | Win move (last marble to home, all others in home) | 10000 |
-| Enter home from the track | 550 + slot×40 |
-| Move within home | 230 + slot |
+| Enter home from the track | 200 + 5 × (distance to the entry) + 50 (150 with 5–6 players) − 60 × (home debt added) |
+| Move within home | 200 + 60 × (home debt paid off) |
 | Positional move (track, star track, hub, leaving base) | 200 + 5 × (reduction in estimated distance to home), +50 if it bumps an opponent |
 | No move left for a die (planning only) | 200 |
+
+Home debt: marbles in home can't pass each other, so they must end up filling
+slots 4, 3, 2, 1 from the deepest down; debt is the total number of slots they
+still have to climb, each needing an exact roll later. Entering home low under
+an empty slot 4 adds debt; moving up inside home pays it off.
 
 The distance estimate counts the star-track shortcut and adds penalties for
 positions that need a specific roll (exact star landing, a 1 to leave the hub,

@@ -5,7 +5,7 @@ const WIN_SCORE = 10000;
 
 // Move scores (highest first):
 //   1. Win move (place last marble in final home slot)
-//   2. Enter home from the track
+//   2. Moves into and within home, scored by home layout (see homeDebt)
 //   3. Positional moves (track, star track, hub, leaving base), ranked by how
 //      much they cut the marble's estimated distance to home — see distToHome —
 //      plus a bonus when the move bumps an opponent
@@ -184,15 +184,22 @@ function scoreMove(game, playerIndex, move) {
     // isLast: every OTHER marble is already in home — moving this one wins.
     const isLast = player.marbles.every((m, i) => i === move.marbleId || m.zone === 'home');
     if (move.toSlot === 4 && isLast) return WIN_SCORE;
-    // Worth about as much as a good 6-pip track move: below big shortcuts
-    // (leaving the hub onto the pre-home star scores ~255), but above any move
-    // that makes a marble's position worse. Self-play: scoring this below
-    // neutral (190) dropped the robot from ~62% to ~40% vs the old robot,
-    // because it then preferred harmful moves to a safe shuffle in home.
-    return 230 + move.toSlot;
+    // Paying off home debt (see homeDebt) is progress: each slot climbed now
+    // is an exact roll not needed later.
+    const debtBefore = homeDebt(homeSlots(player));
+    const debtAfter  = homeDebt(homeSlots(player, move.marbleId, move.toSlot));
+    return 200 + HOME_STEP * (debtBefore - debtAfter);
   }
 
-  if (move.toZone === 'home') return 550 + move.toSlot * 40; // entering home
+  if (move.toZone === 'home') {
+    // Entering home: progress to the entry, plus a bonus for reaching home,
+    // minus any debt the new layout adds. Entering slot 1 under an empty
+    // slot 4 leaves marbles that must climb one exact roll at a time.
+    const debtBefore = homeDebt(homeSlots(player));
+    const debtAfter  = homeDebt([...homeSlots(player), move.toSlot]);
+    const gain = distToHome(cfg, marbleLoc(marble)); // pips to the entry, all covered
+    return 200 + 5 * gain + homeEnterBonus(game.players.length) - HOME_STEP * (debtAfter - debtBefore);
+  }
 
   // Everything else is positional: reward how much the move shortens the
   // marble's estimated trip home. Shortcuts count; positions that need an
@@ -210,6 +217,30 @@ function scoreMove(game, playerIndex, move) {
 // Tuned by self-play (planning robot vs the previous robot): 50 wins in 2-,
 // 3-, 4- and 6-player games; 0 and ≥ 300 do worse with 3+ players.
 const BUMP_BONUS = 50;
+
+// ---- Home layout ------------------------------------------------------------
+//
+// Marbles in home can't pass each other and can't overshoot slot 4, so they
+// must end up filling slots 4, 3, 2, 1 from the deepest down. Every slot a
+// marble still has to climb to its final slot needs an exact roll later.
+// Debt = total of those climbs. E.g. h1 h2 h3 → final h2 h3 h4 → debt 3;
+// h2 h4 → final h3 h4 → debt 1.
+function homeDebt(slots) {
+  return [...slots].sort((a, b) => b - a).reduce((d, slot, i) => d + (4 - i - slot), 0);
+}
+// Home slots of a player's marbles, optionally with one marble moved to a new slot.
+function homeSlots(player, movedId = -1, toSlot = 0) {
+  return player.marbles.flatMap((m, i) =>
+    i === movedId ? [toSlot] : m.zone === 'home' ? [m.slot] : []);
+}
+// Value of one slot of home debt, and the bonus for getting a marble home.
+// Tuned by self-play against the robot without home debt (old scoring: flat
+// 550+ for entering home, ~234 for moving inside it): step 60 / bonus 50 won
+// 57.7% of 2-player, 38.5% of 3-player and 26.7% of 4-player games. With 5–6
+// players a bigger entry bonus is needed to break even (getting a marble home
+// also takes it out of reach of many opponents).
+const HOME_STEP = 60;
+const homeEnterBonus = players => (players >= 5 ? 150 : 50);
 
 // ---- Distance-to-home estimate --------------------------------------------
 //

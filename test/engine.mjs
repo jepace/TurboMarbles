@@ -989,17 +989,26 @@ describe('robot — between equal moves, avoids landing just in front of an oppo
   assert(pick && pick.toSpace === 73, `robot moves 70→73, not into danger at 33 (got ${pick?.toSpace})`);
 });
 
-describe('robot — spends a 1 leaving the hub, not shuffling inside home', () => {
-  // Turn 21: yellow has a marble in the hub and one in home slot 3, rolled
-  // 1-6. Old scoring spent the 1 on h3→h4 and left the marble stuck in the hub.
+describe('robot — fills home from the top instead of plugging slot 1', () => {
+  // Logged game, turn 21: yellow in h2 h3, on 42 (its home entry) and 37,
+  // rolled 3-1. Old scoring put the 42 marble into h1 (any entry beat a move
+  // inside home), leaving three marbles that each needed an exact 1 to climb:
+  // 12.19 expected rolls to finish. Moving h3→h4 instead leaves 8.47 (exact
+  // endgame solver, tools/endgame.mjs). The 3 plays 37→40 either way.
+  // (A previous test here required spending a 1 on leaving the hub rather
+  // than h3→h4; self-play showed those two choices win equally often.)
   const s = makeState(2);
-  setMarble(s, 1, 0, 'home', null, 3);
-  setMarble(s, 1, 1, 'center');
-  setMarble(s, 1, 2, 'track', 43);
-  setDice(s, 1, 6);
-  const pick = pickNextRobotMove(s, 1);
-  assert(pick && pick.type === 'exitCenter' && pick.toSpace === 36,
-    `hub + die 1 → exits to pre-home star 36 (got ${pick?.type} ${pick?.toSpace ?? ''})`);
+  setMarble(s, 1, 0, 'home', null, 2);
+  setMarble(s, 1, 1, 'home', null, 3);
+  setMarble(s, 1, 2, 'track', 42);
+  setMarble(s, 1, 3, 'track', 37);
+  setDice(s, 3, 1);
+  for (let k = 0; k < 2; k++) {
+    const mv = pickNextRobotMove(s, 1);
+    if (mv) applyMove(s, 1, mv); else s.diceUsed[s.diceUsed[0] ? 1 : 0] = true;
+  }
+  const where = s.players[1].marbles.map(m => m.zone === 'home' ? 'h' + m.slot : m.space).sort().join(' ');
+  assert(where === '40 42 h2 h4', `3-1 → 37→40 and h3→h4 (got ${where})`);
 });
 
 // ---- Summary ----------------------------------------------------------------
