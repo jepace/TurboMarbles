@@ -50,6 +50,7 @@ function applyRecorded(game, pi, mv, record) {
   const bump = (to.zone === 'track' || to.zone === 'center') && game.players.some((p, o) => o !== pi &&
     p.marbles.some(m => m.zone === to.zone && (to.zone === 'center' || m.space === to.space)));
   record.push({ marbleId: mv.marbleId, from: fromOf(game.players[pi].marbles[mv.marbleId]), to, bump, die: game.dice?.[mv.dieIndex] });
+  Object.defineProperty(record[record.length - 1], 'mv', { value: mv, enumerable: false }); // the engine move (not sent to clients)
   applyMove(game, pi, mv);
 }
 
@@ -173,7 +174,7 @@ function playout(g, pi, dice) {
 }
 
 // Outcomes (1 = pi won) of n playouts using seeds seed0 … seed0+n-1.
-function outcomes(g, pi, dice, n, seed0) {
+export function outcomes(g, pi, dice, n, seed0) {
   const out = new Uint8Array(n);
   const saved = Math.random;
   try {
@@ -186,7 +187,7 @@ function outcomes(g, pi, dice, n, seed0) {
 }
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
 // Standard error of mean(a − b) for paired samples.
-function pairedSE(a, b) {
+export function pairedSE(a, b) {
   const n = a.length; let s = 0, s2 = 0;
   for (let i = 0; i < n; i++) { const d = a[i] - b[i]; s += d; s2 += d * d; }
   const m = s / n;

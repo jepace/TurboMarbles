@@ -432,7 +432,6 @@ let analysisReport = null;
 let apSel = -1;          // selected roll index
 let apOpt = null;        // selected option index within the roll, or null = position before the roll
 const SEV_LABEL = { error: 'Error', blunder: 'Blunder' };
-const SEV_MARK = { error: '?', blunder: '??' };
 const pts = x => (100 * x).toFixed(1);
 const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${c})`;
@@ -478,12 +477,12 @@ function openAnalysis() {
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
     row('Rating', s => el('span', { class: 'rating' }, s.rating), 'From the error rate'),
-    row('Error rate', s => s.choices ? `${s.rate.toFixed(1)}% per choice` : '—', 'Average win chance given away per real choice (clear losses only)'),
-    row('Win chance given away', s => `${(100 * s.lost).toFixed(1)}%`, 'Total over the game of all clear losses'),
-    row('Rolls', s => `${s.rolls} (${s.forced} forced ✓)`, 'Forced = only one way to play, or no legal move: correct by definition'),
-    row('Agreed with robot', s => s.choices ? `${s.agree}/${s.choices}` : '—'),
-    row('Errors (?)', s => el('span', { class: s.error ? 'sev-error' : '' }, String(s.error)), 'Lost 3–10% win chance'),
-    row('Blunders (??)', s => el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder)), 'Lost 10% win chance or more'),
+    row('Error rate', s => s.choices ? `${s.rate.toFixed(1)}% per choice` : '—', 'Average equity lost per real choice (clear losses only)'),
+    row('Equity lost', s => `${(100 * s.lost).toFixed(1)}%`,
+      'Total over the game. Equity here is the chance to win (no doubling cube or gammons), so this is the sum of win chance lost by each clear error'),
+    row('Errors / Blunders', s => el('span', {},
+      el('span', { class: s.error ? 'sev-error' : '' }, String(s.error)), ' / ',
+      el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder))), 'Error: lost 3–10% equity. Blunder: lost 10% or more'),
   ));
   $('ap-summary').replaceChildren(table);
 
@@ -519,7 +518,7 @@ function badgeFor(r) {
   const a = r.analysis;
   if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${pts(a.loss)}% ± ${pts(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
   return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: win chance ${pts(a.loss)}% lower than the best play (± ${pts(1.96 * a.se)})` },
-    `${SEV_MARK[a.severity]} −${pts(a.loss)}%`);
+    `${SEV_LABEL[a.severity]} −${pts(a.loss)}%`);
 }
 
 function renderMoveList() {
@@ -620,7 +619,7 @@ function selectRoll(idx, opt = null) {
     });
     const verdict = a.severity === 'ok'
       ? (a.loss > 0 ? `✓ Within the noise (−${pts(a.loss)}% ± ${pts(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
-      : `${SEV_LABEL[a.severity]} ${SEV_MARK[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
+      : `${SEV_LABEL[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
     kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
   }
   if (r.analysis) {

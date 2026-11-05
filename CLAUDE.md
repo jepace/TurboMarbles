@@ -23,6 +23,7 @@ node test/engine.mjs      # GameEngine unit tests (no server needed)
 node test/manager.mjs     # GameManager unit tests (no server needed)
 node test/cli.mjs         # CLI helper unit tests (no server needed)
 node test/endgame.mjs     # endgame table + robot endgame play (no server needed)
+node test/thinker.mjs     # robot background thinking: deadline / fallback guarantees (no server needed)
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -34,6 +35,7 @@ node test/integration.mjs # integration tests (requires server running)
 - `src/RobotPlayer.js` — AI heuristics. Calls GameEngine's `allLegalMoves`, picks best move by score. Near home it switches to exact values from the endgame table.
 - `src/EndgameTable.js` + `src/endgame-table.json` — precomputed endgame table (exact expected turns and finish-time distributions for every position within 12 squares of home). Rebuild with `node tools/build-endgame-table.mjs` after any rules change that affects movement near home.
 - `src/DuelTable.js` + `src/duel-11.json.gz`, `src/duel-12.json.gz` — exact solutions of two-player endgames: both players down to their last marble (any home layout), and last marble vs two out (tidy homes). Used by the robot and the analysis page. Rebuild with `node tools/build-duel-table.mjs` (≈6 min for 11, longer for 12) after any rules change that affects movement; the build checks its move composition against the engine first.
+- `src/RobotRollout.js`, `src/RobotThinker.js`, `src/robotThinkWorker.js` — late-game robot thinking: rollouts of its options in one background worker; `think()` always settles by the deadline (`config.robotThinkMs`, default 1500; 0 = off) and the robot falls back to its normal move. It only overrides the normal move when a rollout winner is clearly better.
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.

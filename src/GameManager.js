@@ -7,6 +7,9 @@ import {
   MARBLES_PER_PLAYER,
 } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
+import { think } from './RobotThinker.js';
+import { worthThinking } from './RobotRollout.js';
+import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll } from './Analysis.js';
 import { availableParallelism } from 'os';
@@ -28,6 +31,9 @@ export const config = {
   // and up to maxDeep for a loss that is still unclear.
   analysis: { screen: 60, deep: 400, keep: 3, maxDeep: 1600 },
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
+  // Late in the game the robot plays its options out in a background thread
+  // before moving. The game never waits longer than this (ms); 0 turns it off.
+  robotThinkMs: 1500,
 };
 
 const rooms = new Map();    // roomId → Room
@@ -683,9 +689,35 @@ function doRobotTurn(room) {
     const dice = performRoll(game);
     broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
   }
+  room.robotPlan = null;
+
+  // Late in the game: think first (bounded by config.robotThinkMs; on a late
+  // or failed answer the robot just plays its normal move).
+  const pi = game.turnIndex;
+  if (config.robotThinkMs > 0 && game.phase === 'AWAITING_MOVE' && !isDuel(game) && worthThinking(game, pi)) {
+    const rollId = game._afterRoll;
+    think(snapshot(game), pi, config.robotThinkMs).then(result => {
+      if (!rooms.has(room.id) || room.game !== game || game._afterRoll !== rollId || game.phase !== 'AWAITING_MOVE'
+        || game.turnIndex !== pi || !room.slots[pi]?.isRobot) return;
+      room.robotPlan = result?.changed ? result.moves.slice() : null;
+      applyNextRobotMove(room);
+    });
+    return;
+  }
 
   // Apply each robot move with a delay so clients can animate them sequentially.
   applyNextRobotMove(room);
+}
+
+// The next move of the robot's thought-out plan, if it is still legal.
+function nextPlannedMove(room) {
+  const plan = room.robotPlan;
+  if (!plan?.length) return null;
+  const mv = plan.shift();
+  const legal = allLegalMoves(room.game, room.game.turnIndex)[mv.dieIndex] ?? [];
+  const same = legal.find(m => JSON.stringify(m) === JSON.stringify(mv));
+  if (!same) { room.robotPlan = null; return null; }
+  return same;
 }
 
 function applyNextRobotMove(room) {
@@ -698,7 +730,7 @@ function applyNextRobotMove(room) {
   room.robotTurnTimer = setTimeout(() => {
     room.robotTurnTimer = null;
     if (!rooms.has(room.id) || game.phase !== 'AWAITING_MOVE') return;
-    const chosen = pickNextRobotMove(game, game.turnIndex);
+    const chosen = nextPlannedMove(room) ?? pickNextRobotMove(game, game.turnIndex);
     if (chosen) {
       const events = applyMove(game, game.turnIndex, chosen);
       events.forEach(ev => broadcast(room, ev));
