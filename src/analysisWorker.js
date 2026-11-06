@@ -9,6 +9,9 @@ import { analyzeDecision } from './Analysis.js';
 
 const { decisions, options } = workerData;
 for (const d of decisions) {
-  parentPort.postMessage({ type: 'item', idx: d.idx, item: analyzeDecision(d, { ...options, seed: 1 + d.idx * 104729 }) });
+  // Each depth uses fresh dice streams (seed depends on the level), so a deeper
+  // answer is independent of the quick one.
+  const item = analyzeDecision(d, { ...options, seed: 1 + d.idx * 104729 + (options.level ?? 0) * 7_777_777 });
+  parentPort.postMessage({ type: 'item', idx: d.idx, item: { ...item, level: options.level ?? 0 } });
 }
 parentPort.postMessage({ type: 'end' });

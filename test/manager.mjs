@@ -5,7 +5,7 @@ import {
   createRoom, joinRoom, addRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
-  handleUndo, handleCommit, handleAnalyzeGame,
+  handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper,
   _reset, _getRoom,
 } from '../src/GameManager.js';
 import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
@@ -1036,6 +1036,20 @@ describe('analyzeGame — reports every roll of every player', () => {});
   host.sent = [];
   handleAnalyzeGame(host, roomId);
   assert(host.find('analysisResult').length === 1, 'asking again returns the cached report at once');
+  assert(an?.level === 0, 'whole-game pass is the quick level');
+
+  // Go deeper on that decision: level 1 replaces it for everyone.
+  gmConfig.analysisLevels = [gmConfig.analysis, { screen: 6, deep: 12, keep: 2, maxDeep: 12 }];
+  host.sent = []; guest.sent = [];
+  handleAnalyzeDeeper(host, roomId, 0);
+  const t1 = Date.now();
+  while (!guest.find('analysisUpdate').length && Date.now() - t1 < 30000) await new Promise(res => setTimeout(res, 50));
+  const up = guest.find('analysisUpdate')[0];
+  assert(host.find('analysisDeepening').length === 1, 'everyone is told it is going deeper');
+  assert(up?.idx === 0 && up.analysis?.level === 1 && up.analysis.options[0].n >= 12, `deeper answer arrives for everyone (level ${up?.analysis?.level})`);
+  host.sent = [];
+  handleAnalyzeDeeper(host, roomId, 0);
+  assert(!host.find('analysisDeepening').length, 'no level beyond the last one');
 }
 
 describe('addRobot — random names from the list, no duplicates', () => {

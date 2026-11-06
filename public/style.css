@@ -393,3 +393,6 @@ button.secondary { background: #fff2; }
 
 .opt-row { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; cursor: pointer; }
 .opt-row .muted { color: var(--muted); font-size: 0.85rem; }
+
+.badge.unclear { color: #b0b8c8; border: 1px dashed #b0b8c8; }
+.ap-depth { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; }

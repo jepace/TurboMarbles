@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch,
+  handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper,
 } from './GameManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -151,7 +151,7 @@ wss.on('connection', (ws, req) => {
 const KNOWN_ACTIONS = new Set([
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch',
+  'double', 'take', 'drop', 'rematch', 'analyzeDeeper',
 ]);
 
 function dispatch(ws, msg) {
@@ -262,6 +262,15 @@ function dispatch(ws, msg) {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
       handleCommit(ws, roomId);
+      break;
+    }
+
+    case 'analyzeDeeper': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      const idx = Number(msg.idx);
+      if (!Number.isInteger(idx) || idx < 0 || idx > 10000) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Bad decision index' });
+      handleAnalyzeDeeper(ws, roomId, idx);
       break;
     }
 

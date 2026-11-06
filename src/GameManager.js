@@ -30,7 +30,13 @@ export const config = {
   // Post-game analysis: playouts per option to screen all options, playouts
   // for the top `keep` options (plus the one played and the robot's) in depth,
   // and up to maxDeep for a loss that is still unclear.
-  analysis: { screen: 60, deep: 400, keep: 3, maxDeep: 1600 },
+  analysis: { screen: 16, deep: 100, keep: 3, maxDeep: 400 },
+  // "Go deeper" on one decision: level 1, then 2 (each replaces the last answer).
+  analysisLevels: [
+    { screen: 16, deep: 100, keep: 3, maxDeep: 400 },      // 0: quick (the whole-game pass)
+    { screen: 60, deep: 400, keep: 4, maxDeep: 1600 },     // 1: deep
+    { screen: 120, deep: 1200, keep: 5, maxDeep: 4800 },   // 2: deepest
+  ],
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
@@ -1107,7 +1113,7 @@ export function handleAnalyzeGame(ws, roomId) {
   };
   const workers = chunks.map(chunk => {
     const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
-      workerData: { decisions: chunk.map(({ r, idx }) => ({ idx, before: r.before, after: r.after, pi: r.pi })), options: config.analysis },
+      workerData: { decisions: chunk.map(({ r, idx }) => ({ idx, before: r.before, after: r.after, pi: r.pi })), options: { ...config.analysis, level: 0 } },
     });
     worker.on('message', msg => {
       if (failed) return;
@@ -1126,6 +1132,51 @@ export function handleAnalyzeGame(ws, roomId) {
     worker.on('exit', code => { if (code !== 0) fail(new Error(`worker exited ${code}`)); });
     return worker;
   });
+}
+
+// ---------- Go deeper on one decision ----------
+
+let deepensRunning = 0;
+const MAX_DEEPENS = 2;                 // at once, server-wide
+
+// A player asks for one analysed decision (report roll index) to be redone
+// at the next depth. The new answer replaces the old one in the room's
+// report and goes to everyone in the room.
+export function handleAnalyzeDeeper(ws, roomId, idx) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || sess.roomId !== roomId || room.analysis?.state !== 'done') return;
+  const report = room.analysis.result;
+  const roll = report.rolls?.[idx];
+  const raw = room.game?._rolls?.[idx];
+  if (!roll?.analysis || !raw?.after) return;
+  const level = (roll.analysis.level ?? 0) + 1;
+  const opts = config.analysisLevels[level];
+  if (!opts || roll._deepening) return;
+  if (deepensRunning >= MAX_DEEPENS) {
+    sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a moment.' });
+    return;
+  }
+  deepensRunning++;
+  Object.defineProperty(roll, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
+  broadcast(room, { event: 'analysisDeepening', idx, level });
+  const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
+    workerData: { decisions: [{ idx, before: raw.before, after: raw.after, pi: raw.pi }], options: { ...opts, level } },
+  });
+  let done = false;
+  const finish = (item) => {
+    if (done) return;
+    done = true; deepensRunning--; roll._deepening = false;
+    if (item && room.analysis?.result === report) {
+      roll.analysis = item;
+      broadcast(room, { event: 'analysisUpdate', idx, analysis: item });
+    } else if (!item) {
+      broadcast(room, { event: 'analysisUpdate', idx, analysis: roll.analysis, failed: true });
+    }
+  };
+  worker.on('message', msg => { if (msg.type === 'item') finish(msg.item); });
+  worker.on('error', err => { console.error('[analysis] deeper failed', err); finish(null); });
+  worker.on('exit', () => finish(null));
 }
 
 // For unit testing only — resets all module-level state between test cases.

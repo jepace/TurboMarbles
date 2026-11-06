@@ -494,7 +494,22 @@ function openAnalysis() {
   if (!rep) return;
   $('game-layout').classList.add('analysis-mode');
   $('analysis-panel').style.display = 'flex';
+  renderSummary();
 
+  const sel = $('ap-player');
+  sel.replaceChildren(el('option', { value: 'all', textContent: 'All players' }),
+    ...rep.players.map((p, i) => el('option', { value: String(i), textContent: p.name })));
+  // Default view: my own errors.
+  if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = 'errors'; }
+  else { sel.value = 'all'; $('ap-filter').value = 'all'; }
+  drawChart();
+  renderMoveList();
+  const firstErr = rep.rolls.findIndex(r => r.pi === myPlayerIndex && r.analysis && r.analysis.severity !== 'ok');
+  selectRoll(firstErr >= 0 ? firstErr : 0);
+}
+
+function renderSummary() {
+  const rep = analysisReport;
   // Summary table, one column per player.
   const stats = rep.players.map((_, i) => playerStats(rep, i));
   const head = el('tr', {}, el('th'), ...rep.players.map((p, i) =>
@@ -511,18 +526,31 @@ function openAnalysis() {
       el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder))), 'Error: lost 3–10% equity. Blunder: lost 10% or more'),
   ));
   $('ap-summary').replaceChildren(table);
-
-  const sel = $('ap-player');
-  sel.replaceChildren(el('option', { value: 'all', textContent: 'All players' }),
-    ...rep.players.map((p, i) => el('option', { value: String(i), textContent: p.name })));
-  // Default view: my own errors.
-  if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = 'errors'; }
-  else { sel.value = 'all'; $('ap-filter').value = 'all'; }
-  drawChart();
-  renderMoveList();
-  const firstErr = rep.rolls.findIndex(r => r.pi === myPlayerIndex && r.analysis && r.analysis.severity !== 'ok');
-  selectRoll(firstErr >= 0 ? firstErr : 0);
 }
+
+// ---- Go deeper on one decision ----
+const LEVEL_NAMES = ['quick', 'deep', 'deepest'];
+const deepening = new Set();       // roll indexes being redone
+function analyzeDeeper(idx) {
+  const a = analysisReport?.rolls[idx]?.analysis;
+  if (!a || (a.level ?? 0) >= LEVEL_NAMES.length - 1 || deepening.has(idx)) return;
+  send({ action: 'analyzeDeeper', idx });
+}
+on('analysisDeepening', ({ idx }) => {
+  deepening.add(idx);
+  if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
+});
+on('analysisUpdate', ({ idx, analysis, failed }) => {
+  deepening.delete(idx);
+  if (!analysisReport?.rolls[idx]) return;
+  analysisReport.rolls[idx].analysis = analysis;
+  if (!$('game-layout').classList.contains('analysis-mode')) return;
+  renderSummary();
+  renderMoveList();
+  if (idx === apSel) selectRoll(apSel, typeof apOpt === 'number' ? null : apOpt);
+  else drawChart();
+  if (failed) log('Deeper analysis failed — try again.');
+});
 
 function closeAnalysis() {
   $('game-layout').classList.remove('analysis-mode');
@@ -544,6 +572,9 @@ function visibleRolls() {
 function badgeFor(r) {
   if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
   const a = r.analysis;
+  if (a.severity === 'ok' && a.loss >= 0.03) {
+    return el('span', { class: 'badge unclear', title: `Maybe −${pts(a.loss)}%, but within the noise (± ${pts(1.96 * a.se)}). Go deeper (+) to settle it.` }, `−${pts(a.loss)}%?`);
+  }
   if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${pts(a.loss)}% ± ${pts(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
   return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: win chance ${pts(a.loss)}% lower than the best play (± ${pts(1.96 * a.se)})` },
     `${SEV_LABEL[a.severity]} −${pts(a.loss)}%`);
@@ -649,6 +680,17 @@ function selectRoll(idx, opt = null) {
       ? (a.loss > 0 ? `✓ Within the noise (−${pts(a.loss)}% ± ${pts(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
       : `${SEV_LABEL[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
     kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
+    const lvl = a.level ?? 0;
+    const games = Math.max(...a.options.map(o => o.n ?? 0));
+    const depth = el('div', { class: 'ap-depth' },
+      el('span', { class: 'muted' }, `Depth: ${LEVEL_NAMES[lvl] ?? lvl} · up to ${games} games per option`));
+    if (deepening.has(idx)) depth.append(el('span', { class: 'muted' }, ' · going deeper…'));
+    else if (lvl < LEVEL_NAMES.length - 1) {
+      const b = el('button', { class: 'secondary ap-view', title: 'Redo this decision with more games (+)' }, `Go deeper (+) → ${LEVEL_NAMES[lvl + 1]}`);
+      b.addEventListener('click', () => analyzeDeeper(idx));
+      depth.append(b);
+    }
+    kids.push(depth);
   }
   if (r.analysis) {
     const a = r.analysis;
@@ -735,6 +777,7 @@ document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.key === 'Escape') { closeAnalysis(); return; }
   if (e.key === 'b' || e.key === 'B') { selectRoll(apSel, 'before'); return; }
+  if (e.key === '+' || e.key === '=') { analyzeDeeper(apSel); return; }
   if (e.key === 'p' || e.key === 'P') { selectRoll(apSel, null); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   e.preventDefault();
