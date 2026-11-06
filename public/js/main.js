@@ -269,6 +269,17 @@ document.addEventListener('keydown', e => {
   doSkipDie();
 });
 
+// ---- In-game [u] key — Undo the last die ----
+document.addEventListener('keydown', e => {
+  if (e.key !== 'u' && e.key !== 'U') return;
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!$('screen-game').classList.contains('active')) return;
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+  if ($('btn-undo').style.display === 'none') return; // nothing to undo right now
+  e.preventDefault();
+  doUndo();
+});
+
 // ---- Lobby [+]/[-] keys — host adds/removes a robot ----
 document.addEventListener('keydown', e => {
   // "=" is an undocumented alias for "+" so adding robots doesn't require Shift.
