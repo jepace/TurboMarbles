@@ -16,6 +16,9 @@ let roomId = null;
 let gameState = null;
 let selectedMarble = null;      // { playerIndex, marbleId } currently selected
 let legalMovesCache = null;     // { 0: [...], 1: [...] } from server after roll
+let legalCombos = {};           // { marbleId: [{ toZone, toSpace, toSlot, first, second }] }: both dice on one marble
+let selectedComboMoves = [];    // the selected marble's two-dice destinations (not reachable with one die)
+let pendingSecond = null;       // second move of a two-dice destination the player clicked
 let selectedMarbleMoves = [];   // filtered moves for selectedMarble (for highlighting)
 let selectedDie = null;         // 0 or 1 — player-locked die; null means auto
 let commitPending = false;      // true when readyToCommit received, waiting for Commit click
@@ -171,10 +174,11 @@ for (let i = 0; i < 2; i++) {
     if (gameState?.diceUsed?.[i]) return;
     selectedDie = (selectedDie === i) ? null : i;
     selectedMarbleMoves = selectedMarble ? computeLegalDestinations(selectedMarble) : [];
+    selectedComboMoves = selectedMarble ? computeComboDestinations(selectedMarble) : [];
     renderDice(gameState.dice);
     if (selectedMarble) {
-      highlightSpaces(selectedMarbleMoves.map(moveToSpace).filter(Boolean));
       drawBoard(gameState);
+      showDestinations();
     }
   });
 }
@@ -209,12 +213,13 @@ function doCommit() {
 
 function doUndo() {
   send({ action: 'undo' });
+  pendingSecond = null;
   commitPending = false;
   $('btn-commit').style.display = 'none';
   $('btn-undo').style.display   = 'none';
   legalMovesCache = null;
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
 }
 
 // Undo available after any move; Commit only when both dice are used.
@@ -834,13 +839,15 @@ on('gameStarted', ({ gameState: gs }) => {
   renderCube();
 });
 
-on('rolled', ({ playerIndex, dice, moves }) => {
+on('rolled', ({ playerIndex, dice, moves, combos }) => {
   gameState.dice = dice;
   gameState.diceUsed = [false, false];
   gameState.phase = 'AWAITING_MOVE';
   legalMovesCache = moves ?? null;
+  legalCombos = combos ?? {};
+  pendingSecond = null;
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
   commitPending = false;
   setCommitVisible(false); setUndoVisible(false);
   renderDice(dice, gameState.players[playerIndex]?.color);
@@ -865,8 +872,17 @@ on('rolled', ({ playerIndex, dice, moves }) => {
 
 // Server sends updated legal moves after the player uses one die (so remaining
 // die destinations can be highlighted correctly).
-on('legalMoves', ({ moves, diceUsed }) => {
+on('legalMoves', ({ moves, diceUsed, combos }) => {
   legalMovesCache = moves;
+  legalCombos = combos ?? {};
+  // Second half of a two-dice destination the player clicked: play it now if
+  // it is still legal (the server checks it again anyway).
+  if (pendingSecond) {
+    const want = pendingSecond;
+    pendingSecond = null;
+    const ok = (moves?.[want.dieIndex] ?? []).find(m => JSON.stringify(m) === JSON.stringify(want));
+    if (ok && isMyTurn()) { if (diceUsed && gameState) gameState.diceUsed = diceUsed; submitMove(ok); return; }
+  }
   if (diceUsed && gameState) {
     gameState.diceUsed = diceUsed;
     renderDice(gameState.dice);
@@ -876,7 +892,7 @@ on('legalMoves', ({ moves, diceUsed }) => {
     }
   }
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
   drawBoard(gameState);
   if (isMyTurn()) setHint('Click a marble to choose your next move.');
   updateSkipButton();
@@ -896,7 +912,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
   Object.assign(marble, to);
   const chime = to.zone === 'home' && from.zone !== 'home';
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
 
   // Consume any bumps the server reported just before this move (this is the
   // attacker that caused them). They fly home after the attacker arrives.
@@ -985,7 +1001,7 @@ on('turnChanged', ({ playerIndex }) => {
   legalMovesCache = null;
   selectedDie = null;
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
   commitPending = false;
   turnLogPlayer = null;
   setCommitVisible(false); setUndoVisible(false);
@@ -1037,7 +1053,7 @@ on('readyToCommit', ({ playerIndex }) => {
 on('undone', ({ gameState: gs }) => {
   gameState = gs;
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
   commitPending = false;
   // Clear any in-flight animations and overrides — server state is authoritative
   resetAnimations();
@@ -1173,7 +1189,7 @@ on('reconnected', ({ gameState: gs }) => {
   commitPending = false;
   legalMovesCache = null;
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
   resetAnimations();
   renderSidebar();
   renderDice(gameState.dice, gameState.players[gameState.turnIndex]?.color);
@@ -1228,12 +1244,23 @@ function onCanvasClick(e) {
       return;
     }
   }
+  // A two-dice destination: play the first die now, the second when the
+  // server confirms it (see the legalMoves handler).
+  if (selectedComboMoves.length) {
+    const combo = hitTestDestination(cx, cy, selectedComboMoves);
+    if (combo) {
+      const second = combo.second;
+      submitMove(combo.first);
+      pendingSecond = second;
+      return;
+    }
+  }
 
   // Clicking a marble selects it — or deselects if clicking the already-selected marble.
   const hit = hitTestMarble(gameState, cx, cy);
   if (!hit || hit.playerIndex !== myPlayerIndex) {
     selectedMarble = null;
-    selectedMarbleMoves = [];
+    selectedMarbleMoves = []; selectedComboMoves = [];
     drawBoard(gameState);
     if (isMyTurn() && gameState.phase === 'AWAITING_MOVE') {
       setHint('Click one of your marbles to see where it can move.');
@@ -1244,7 +1271,7 @@ function onCanvasClick(e) {
   // Deselect if clicking the same marble again
   if (selectedMarble && selectedMarble.marbleId === hit.marbleId) {
     selectedMarble = null;
-    selectedMarbleMoves = [];
+    selectedMarbleMoves = []; selectedComboMoves = [];
     drawBoard(gameState);
     setHint('Click one of your marbles to see where it can move.');
     return;
@@ -1252,18 +1279,35 @@ function onCanvasClick(e) {
 
   selectedMarble = hit;
   selectedMarbleMoves = computeLegalDestinations(hit);
+  selectedComboMoves = computeComboDestinations(hit);
   drawBoard(gameState);
+  showDestinations();
 
-  const player = gameState.players[hit.playerIndex];
-  const marble = player.marbles[hit.marbleId];
-  highlightMarbleAt(marble, hit.playerIndex);
-  highlightSpaces(selectedMarbleMoves.map(moveToSpace).filter(Boolean));
-
-  if (selectedMarbleMoves.length === 0) {
+  const n1 = selectedMarbleMoves.length, n2 = selectedComboMoves.length;
+  if (n1 === 0 && n2 === 0) {
     setHint('That marble has no legal moves. Try another.');
   } else {
-    setHint(`${selectedMarbleMoves.length} move${selectedMarbleMoves.length > 1 ? 's' : ''} available — click a highlighted space.`);
+    setHint(`${n1} move${n1 === 1 ? '' : 's'} with one die` +
+      (n2 ? ` (green), ${n2} more with both dice (dashed blue)` : '') + ' — click a highlighted space.');
   }
+}
+
+// Highlight the selected marble and where it can go: green with one die,
+// dashed blue with both dice.
+function showDestinations() {
+  if (!selectedMarble) return;
+  const marble = gameState.players[selectedMarble.playerIndex]?.marbles[selectedMarble.marbleId];
+  highlightMarbleAt(marble, selectedMarble.playerIndex);
+  highlightSpaces(selectedComboMoves.map(moveToSpace).filter(Boolean), 'two');
+  highlightSpaces(selectedMarbleMoves.map(moveToSpace).filter(Boolean));
+}
+
+// Two-dice destinations for a marble (both dice unused, no die picked), minus
+// squares one die already reaches.
+function computeComboDestinations({ marbleId }) {
+  if (selectedDie !== null || gameState?.diceUsed?.[0] || gameState?.diceUsed?.[1]) return [];
+  const one = new Set(computeLegalDestinations({ marbleId }).map(m => JSON.stringify(moveToSpace(m))));
+  return (legalCombos[marbleId] ?? []).filter(c => !one.has(JSON.stringify(moveToSpace(c))));
 }
 
 // Returns all legal moves for the given marble across all unused dice.
@@ -1314,7 +1358,7 @@ function hitTestDestination(cx, cy, moves) {
 function submitMove(move) {
   send({ action: 'move', move });
   selectedMarble = null;
-  selectedMarbleMoves = [];
+  selectedMarbleMoves = []; selectedComboMoves = [];
   legalMovesCache = null; // will be refreshed by server via 'legalMoves' event if turn continues
   selectedDie = null;
 }

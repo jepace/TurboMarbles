@@ -601,6 +601,39 @@ export function applyMove(state, playerIndex, move) {
   return events;
 }
 
+// --- Two-dice destinations (move hints) ---
+//
+// Where each marble can get by using both dice on it, when neither die has
+// been used yet: { marbleId: [{ toZone, toSpace, toSlot, first, second }] }.
+// first/second are the two legal moves in order (one path per destination:
+// the first found, preferring a path that bumps more opponents). Only used to
+// show hints; every move is still validated when it is sent.
+export function twoDiceTargets(state, playerIndex) {
+  if (state.diceUsed[0] || state.diceUsed[1] || !state.dice) return {};
+  const out = {};
+  const legal = allLegalMoves(state, playerIndex);
+  for (const d of [0, 1]) {
+    for (const m1 of legal[d] ?? []) {
+      if (m1.optional) continue;
+      const g1 = structuredClone({ players: state.players, turnIndex: state.turnIndex, phase: state.phase,
+        dice: state.dice, diceUsed: state.diceUsed, winner: state.winner });
+      const bumps1 = applyMove(g1, playerIndex, m1).filter(e => e.event === 'marbleBumped').length;
+      if (g1.winner != null) continue;
+      for (const m2 of allLegalMoves(g1, playerIndex)[1 - d] ?? []) {
+        if (m2.marbleId !== m1.marbleId || m2.optional) continue;
+        const g2 = structuredClone(g1);
+        const bumps = bumps1 + applyMove(g2, playerIndex, m2).filter(e => e.event === 'marbleBumped').length;
+        const list = (out[m1.marbleId] ??= []);
+        const same = list.find(t => t.toZone === m2.toZone && t.toSpace === m2.toSpace && t.toSlot === m2.toSlot);
+        const entry = { toZone: m2.toZone, toSpace: m2.toSpace, toSlot: m2.toSlot, first: m1, second: m2, bumps };
+        if (!same) list.push(entry);
+        else if (bumps > same.bumps) Object.assign(same, entry);
+      }
+    }
+  }
+  return out;
+}
+
 // --- Dice ---
 
 // Dice are always reported highest first (6-1, never 1-6), so every display

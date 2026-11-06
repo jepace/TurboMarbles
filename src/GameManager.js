@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
-  MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble,
+  MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets,
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
@@ -401,7 +401,7 @@ export function handleRoll(ws, roomId) {
   const dice = performRoll(game);
   // Compute legal moves and include in the event so clients can highlight destinations.
   const moves = allLegalMoves(game, game.turnIndex);
-  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, moves });
+  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, moves, combos: twoDiceTargets(game, game.turnIndex) });
   // Auto-forfeit and advance turn if this roll leaves no legal moves (e.g. all marbles
   // in base with a 3+4 roll).  No-op when at least one die has available moves.
   advanceTurnIfDone(room);
@@ -579,7 +579,7 @@ export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
     if (game.diceUsed[0] && game.diceUsed[1]) {
       if (game._humanMadeMove) sendTo(ws, { event: 'readyToCommit', playerIndex: pi });
     } else {
-      sendTo(ws, { event: 'legalMoves', moves: allLegalMoves(game, pi), diceUsed: game.diceUsed });
+      sendTo(ws, { event: 'legalMoves', moves: allLegalMoves(game, pi), diceUsed: game.diceUsed, combos: twoDiceTargets(game, pi) });
     }
   }
   broadcast(room, { event: 'playerReconnected', playerIndex: pi }, ws);
@@ -989,7 +989,7 @@ export function handleUndo(ws, roomId) {
   // Re-broadcast full game state so all clients see the restored positions
   const legalMoves = allLegalMoves(game, game.turnIndex);
   broadcast(room, { event: 'undone', gameState: publicState(room) });
-  sendTo(ws, { event: 'legalMoves', moves: legalMoves, diceUsed: game.diceUsed });
+  sendTo(ws, { event: 'legalMoves', moves: legalMoves, diceUsed: game.diceUsed, combos: twoDiceTargets(game, game.turnIndex) });
 }
 
 // Explicit turn commit — advance turn after human player has used their dice.

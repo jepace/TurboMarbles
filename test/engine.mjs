@@ -5,7 +5,7 @@ import {
   createGame, legalMovesForDie, allLegalMoves, applyMove,
   PLAYER_CONFIG, ALL_STARS, advanceTrack, trackDistance,
   marbleOnTrack, marbleAtCenter, marbleInHome, marbleInBase,
-  earnsExtraRoll, MARBLES_PER_PLAYER, rollDice,
+  earnsExtraRoll, MARBLES_PER_PLAYER, rollDice, twoDiceTargets,
 } from '../src/GameEngine.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 
@@ -1012,6 +1012,20 @@ describe('robot — fills home from the top instead of plugging slot 1', () => {
 });
 
 // ---- Summary ----------------------------------------------------------------
+
+describe('twoDiceTargets — where one marble gets with both dice', () => {
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
+  Object.assign(g.players[0].marbles[0], { zone: 'track', space: 10 });
+  g.dice = [3, 2]; g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+  const t = twoDiceTargets(g, 0);
+  const dests = (t[0] ?? []).map(x => x.toSpace);
+  assert(dests.includes(15), `marble on 10 with 3-2 reaches 15 (got ${dests})`);
+  const e = t[0].find(x => x.toSpace === 15);
+  assert(e.first.marbleId === 0 && e.second.marbleId === 0 && e.first.dieIndex !== e.second.dieIndex, 'path is two legal moves of that marble, one per die');
+  assert(!t[1], 'marbles in base with 3-2 have no two-dice targets');
+  g.diceUsed = [true, false];
+  assert(Object.keys(twoDiceTargets(g, 0)).length === 0, 'nothing once a die is used');
+});
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

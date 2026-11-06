@@ -696,18 +696,23 @@ export function spaceAt(cx, cy) {
   return null;
 }
 
-export function highlightSpaces(spaces) {
+// style 'two' = reachable only by using both dice on the marble (dashed blue).
+export function highlightSpaces(spaces, style) {
   const R = W * 0.020;
+  const two = style === 'two';
   for (const sp of spaces) {
     const pos = getSpacePosition(sp);
     if (!pos) continue;
+    ctx.save();
     ctx.beginPath();
     ctx.arc(pos.x, pos.y, R * 1.5, 0, Math.PI * 2);
-    ctx.fillStyle   = '#00ff8844';
+    ctx.fillStyle   = two ? '#40a0ff33' : '#00ff8844';
     ctx.fill();
-    ctx.strokeStyle = '#00ff88ee';
+    ctx.strokeStyle = two ? '#60b8ffee' : '#00ff88ee';
     ctx.lineWidth   = 2;
+    if (two) ctx.setLineDash([5, 4]);
     ctx.stroke();
+    ctx.restore();
   }
 }
 
