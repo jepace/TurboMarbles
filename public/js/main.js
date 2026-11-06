@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -820,6 +820,7 @@ on('gameStarted', ({ gameState: gs }) => {
   analysisReport = null; apSel = -1;
   if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
   show('screen-game');
+  faceMyArm();
   $('win-overlay').style.display = 'none';         // a rematch starts from the game-over screen
   $('cube-offer').style.display = 'none';
   initBoard($('board-canvas'));
@@ -1194,6 +1195,7 @@ on('robotTookOver', ({ playerIndex }) => {
 on('reconnected', ({ gameState: gs }) => {
   gameState = gs;
   show('screen-game');
+  faceMyArm();
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
@@ -1628,6 +1630,13 @@ function setHint(msg) {
 
 function isMyTurn() {
   return gameState && gameState.turnIndex === myPlayerIndex;
+}
+
+// Rotate the board so my own arm is at the bottom of the screen.
+function faceMyArm() {
+  const color = gameState?.players?.[myPlayerIndex]?.color;
+  const arm = PLAYER_CONFIG.findIndex(c => c.color === color);
+  setViewArm(arm >= 0 ? arm : 0);
 }
 
 function playerName(index) {

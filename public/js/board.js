@@ -94,7 +94,17 @@ export function clearAnimatingMarble() {
   animatingMarble = null;
 }
 
-function armAngle(ai) { return ai * STEP + Math.PI / 2; }
+// The arm drawn at the bottom of the screen: each player sees their own arm
+// at the bottom (setViewArm). Purely a view rotation — every position,
+// hit-test and arrow comes from armAngle, so they all turn together.
+let viewArm = 0;
+function armAngle(ai) { return (ai - viewArm) * STEP + Math.PI / 2; }
+export function setViewArm(arm) {
+  const a = ((arm % ALL_ARMS) + ALL_ARMS) % ALL_ARMS;
+  if (!Number.isInteger(a) || a === viewArm) return;
+  viewArm = a;
+  if (W) computeLayout();
+}
 
 function computeLayout() {
   const STAR_RING = W * 0.18;                  // radius of the inner star-track ring
@@ -534,8 +544,8 @@ function drawCenter() {
   // Six colored wedge sections (one per arm color)
   const wedgeR = outerR * 0.82;
   for (let i = 0; i < 6; i++) {
-    const startAng = (i / 6) * Math.PI * 2 - Math.PI / 2;
-    const endAng   = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2;
+    const startAng = (i / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
+    const endAng   = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.arc(CX, CY, wedgeR, startAng, endAng);
@@ -546,7 +556,7 @@ function drawCenter() {
 
   // Brass dividers between wedges
   for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    const ang = (i / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.lineTo(CX + Math.cos(ang) * wedgeR, CY + Math.sin(ang) * wedgeR);
