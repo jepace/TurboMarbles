@@ -529,7 +529,7 @@ function renderSummary() {
 }
 
 // ---- Go deeper on one decision ----
-const LEVEL_NAMES = ['quick', 'deep', 'deepest'];
+const LEVEL_NAMES = ['instant', 'quick rollout', 'deep', 'deepest'];
 const deepening = new Set();       // roll indexes being redone
 function analyzeDeeper(idx) {
   const a = analysisReport?.rolls[idx]?.analysis;
@@ -676,14 +676,20 @@ function selectRoll(idx, opt = null) {
       line.addEventListener('click', () => selectRoll(idx, k));
       kids.push(line);
     });
-    const verdict = a.severity === 'ok'
+    const verdict = a.estimate
+      ? (a.severity === 'ok'
+        ? (a.loss > 0 ? `✓ Close to the best by the estimate (−${pts(a.loss)}%).` : '✓ Best play by the estimate.')
+        : `${SEV_LABEL[a.severity]} by the estimate: −${pts(a.loss)}% against the best. Go deeper to check it with played-out games.`)
+      : a.severity === 'ok'
       ? (a.loss > 0 ? `✓ Within the noise (−${pts(a.loss)}% ± ${pts(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
       : `${SEV_LABEL[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
     kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
     const lvl = a.level ?? 0;
     const games = Math.max(...a.options.map(o => o.n ?? 0));
     const depth = el('div', { class: 'ap-depth' },
-      el('span', { class: 'muted' }, `Depth: ${LEVEL_NAMES[lvl] ?? lvl} · up to ${games} games per option`));
+      el('span', { class: 'muted' }, a.estimate
+        ? 'Depth: instant estimate (a formula, no games played)'
+        : `Depth: ${LEVEL_NAMES[lvl] ?? lvl} · up to ${games} games per option`));
     if (deepening.has(idx)) depth.append(el('span', { class: 'muted' }, ' · going deeper…'));
     else if (lvl < LEVEL_NAMES.length - 1) {
       const b = el('button', { class: 'secondary ap-view', title: 'Redo this decision with more games (+)' }, `Go deeper (+) → ${LEVEL_NAMES[lvl + 1]}`);

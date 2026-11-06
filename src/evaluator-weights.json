@@ -1,0 +1,20 @@
+{
+ "note": "see tools/train-evaluator.mjs",
+ "features": [
+  "race",
+  "sqrtRace",
+  "base",
+  "home",
+  "danger",
+  "toMove"
+ ],
+ "weights": [
+  -0.229433,
+  -2.865762,
+  0.008672,
+  0.277008,
+  -0.793024,
+  0.164178
+ ],
+ "positions": 174557
+}

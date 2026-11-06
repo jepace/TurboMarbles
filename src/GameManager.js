@@ -30,12 +30,14 @@ export const config = {
   // Post-game analysis: playouts per option to screen all options, playouts
   // for the top `keep` options (plus the one played and the robot's) in depth,
   // and up to maxDeep for a loss that is still unclear.
-  analysis: { screen: 16, deep: 100, keep: 3, maxDeep: 400 },
-  // "Go deeper" on one decision: level 1, then 2 (each replaces the last answer).
+  // The whole-game pass uses the instant evaluator; "Go deeper" on one
+  // decision then plays it out at levels 1, 2, 3 (each replaces the last).
+  analysis: { mode: 'eval', keep: 3 },
   analysisLevels: [
-    { screen: 16, deep: 100, keep: 3, maxDeep: 400 },      // 0: quick (the whole-game pass)
-    { screen: 60, deep: 400, keep: 4, maxDeep: 1600 },     // 1: deep
-    { screen: 120, deep: 1200, keep: 5, maxDeep: 4800 },   // 2: deepest
+    { mode: 'eval', keep: 3 },                             // 0: instant (formula estimate)
+    { screen: 16, deep: 100, keep: 3, maxDeep: 400 },      // 1: quick rollout
+    { screen: 60, deep: 400, keep: 4, maxDeep: 1600 },     // 2: deep
+    { screen: 120, deep: 1200, keep: 5, maxDeep: 4800 },   // 3: deepest
   ],
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   // Late in the game the robot plays its options out in a background thread

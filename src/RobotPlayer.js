@@ -383,3 +383,22 @@ function moveDest(move) {
   return { zone: 'track', space: move.toSpace };
 }
 
+
+// ---- Features for the position evaluator (src/Evaluator.js) ----------------
+
+// A player's race length: the robot's distance-to-home estimate summed over
+// their marbles (star shortcuts and the hub included; base marbles count the
+// trip from base).
+export function racePips(game, playerIndex) {
+  const cfg = game.players[playerIndex].config;
+  let total = 0;
+  for (const m of game.players[playerIndex].marbles) total += distToHome(cfg, marbleLoc(m));
+  return total;
+}
+
+// Expected pips this player loses to being hit before their next turn (the
+// robot's single-die threat model: every opponent's next roll).
+export function dangerPips(game, playerIndex) {
+  const threats = threatMap(game, playerIndex);
+  return risk(game, playerIndex, marbleLocs(game, playerIndex), new Set(), threats) / (5 * RISK_WEIGHT);
+}
