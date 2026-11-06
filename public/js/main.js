@@ -576,7 +576,7 @@ function showPosition(marbles, movedFrom, mover, steps) {
   if (!gameState || !marbles) return;
   resizeBoard();
   const gs = { ...gameState, players: gameState.players.map((p, i) => ({ ...p, marbles: marbles[i] ?? p.marbles })) };
-  drawBoard(gs);
+  drawBoard(gs, { instantHub: true });
   if (movedFrom) {
     const moves = [];
     marbles.forEach((ms, pi) => ms.forEach((m, k) => {

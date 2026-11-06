@@ -32,6 +32,7 @@ const COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
 const DARK_C  = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
 
 const STAR_GOLD = '#f5c842';
+let hubInstant = false;
 const STEP = (2 * Math.PI) / ALL_ARMS;
 
 let canvas, ctx, W, CX, CY;
@@ -166,8 +167,60 @@ function computeLayout() {
   centerPos = { x: CX, y: CY };
 }
 
-export function drawBoard(gameState) {
+// ---- Hub occupant colour ----
+// The hub's six wedges take the colour of whoever sits in the hub, blending
+// over HUB_FADE_MS when someone arrives, leaves or is bumped out by another.
+// A marble counts once its move animation has finished (no override left).
+const HUB_FADE_MS = 500;
+let hubKey = 'none', hubFrom = null, hubTo = null, hubT0 = 0, hubLastState = null, hubTimer = false;
+const hexToRgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+// The occupant's arm, null when empty, or undefined while a marble is still
+// moving into the hub (keep the current colour until it lands — a bump goes
+// straight from the old occupant's colour to the new one's).
+function hubOccupantArm(gameState) {
+  for (const p of gameState?.players ?? []) {
+    for (const m of p.marbles) {
+      if (m.zone !== 'center') continue;
+      if (marbleOverrides[p.index]?.[m.id]) return undefined;
+      return playerToArm[p.index] ?? p.index;
+    }
+  }
+  return null;
+}
+function hubWedgeColors(instant) {
+  const arm = hubOccupantArm(hubLastState);
+  if (arm === undefined && hubTo && !instant) return currentHub(performance.now());
+  const key = arm == null ? 'none' : String(arm);
+  const target = Array.from({ length: 6 }, (_, i) => hexToRgb(COLORS[arm == null ? i : arm]));
+  const now = performance.now();
+  if (!hubTo) { hubFrom = hubTo = target; hubKey = key; }
+  if (key !== hubKey) {
+    hubFrom = currentHub(now);
+    hubTo = target; hubKey = key; hubT0 = now;
+    if (instant) hubFrom = target;
+    else if (!hubTimer) {
+      hubTimer = true;
+      const tick = () => {
+        if (performance.now() - hubT0 < HUB_FADE_MS) { drawBoard(hubLastState); requestAnimationFrame(tick); }
+        else { hubTimer = false; drawBoard(hubLastState); }
+      };
+      requestAnimationFrame(tick);
+    }
+  }
+  return currentHub(now);
+}
+function currentHub(now) {
+  const t = Math.min(1, Math.max(0, (now - hubT0) / HUB_FADE_MS));
+  const e = t * t * (3 - 2 * t);                // smoothstep
+  return hubTo.map((c, i) => c.map((v, k) => Math.round(hubFrom[i][k] + (v - hubFrom[i][k]) * e)));
+}
+
+// opts.instantHub: switch the hub colour without fading (analysis replay,
+// where the caller draws arrows on top afterwards).
+export function drawBoard(gameState, opts = {}) {
   if (!ctx || !W) return;
+  hubLastState = gameState;
+  hubInstant = !!opts.instantHub;
   const n = gameState?.players?.length ?? ALL_ARMS;
   playerToArm = ARM_MAP[n] ?? Array.from({ length: n }, (_, i) => i);
 
@@ -541,8 +594,10 @@ function drawCenter() {
   ctx.lineWidth   = 3;
   ctx.stroke();
 
-  // Six colored wedge sections (one per arm color)
+  // Six colored wedge sections (one per arm color; all the occupant's color
+  // while someone is in the hub)
   const wedgeR = outerR * 0.82;
+  const wedges = hubWedgeColors(hubInstant);
   for (let i = 0; i < 6; i++) {
     const startAng = (i / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
     const endAng   = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
@@ -550,7 +605,8 @@ function drawCenter() {
     ctx.moveTo(CX, CY);
     ctx.arc(CX, CY, wedgeR, startAng, endAng);
     ctx.closePath();
-    ctx.fillStyle = COLORS[i] + 'cc';
+    const [r, g, b] = wedges[i];
+    ctx.fillStyle = `rgba(${r},${g},${b},0.8)`;
     ctx.fill();
   }
 
