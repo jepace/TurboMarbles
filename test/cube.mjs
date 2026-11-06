@@ -2,7 +2,7 @@
 // session score and rematch. No server needed.
 import { createGame, canDouble, offerDouble, takeDouble, dropDouble, gameResult, applyMove } from '../src/GameEngine.js';
 import {
-  createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit,
+  createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove,
   handleDouble, handleTake, handleDrop, handleRematch,
   _reset, _getRoom, config as gmConfig,
 } from '../src/GameManager.js';
@@ -131,6 +131,22 @@ await describe('manager — robot answers a double, and doubles when far ahead',
   assert(host.find('rolled').some(e => e.playerIndex === 1), 'after the take the robot rolls (and does not double again)');
   assert(host.find('doubleOffered').length === 1, 'only one double that turn');
   await _stop();
+});
+
+describe('manager — two players without the cube still score 1 point a win', () => {
+  _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0;
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Alice', 2);
+  joinRoom(guest, code, 'Bob');
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  const g = room.game;
+  Object.assign(g.players[1].marbles[0], { zone: 'home', slot: 4 });          // Bob has one home: no aggro
+  g.players[0].marbles.forEach((m, i) => Object.assign(m, i < 3 ? { zone: 'home', slot: 4 - i } : { zone: 'track', space: 84 }));
+  g.dice = [1, 2]; g.diceUsed = [false, true]; g.phase = 'AWAITING_MOVE'; g._humanMadeMove = false; g._undoStack = [];
+  handleMove(host, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
+  const res = host.find('gameResult')[0];
+  assert(res?.result?.points === 1 && res.score.join() === '1,-1', `win scores 1 point (score ${res?.score})`);
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

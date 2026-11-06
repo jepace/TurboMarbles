@@ -1107,10 +1107,20 @@ function renderCube() {
       $('cube-offer').style.display = 'flex';
     } else if (!o) $('cube-offer').style.display = 'none';
   }
-  const sc = gameState?.score;
-  $('score-line').style.display = sc ? 'block' : 'none';
-  if (sc) $('score-line').textContent = 'Session: ' + gameState.players.map((p, i) =>
-    `${i === myPlayerIndex ? 'You' : p.name} ${sc[i] > 0 ? '+' : ''}${sc[i]}`).join(' · ');
+  const line = sessionLine(true);
+  $('score-line').style.display = line ? 'block' : 'none';
+  $('score-line').textContent = line;
+}
+
+// "Session: You +2 · Sloane −2" (money score, cube rooms) or
+// "Games won: You 1 · Sloane 2" once at least one game is finished.
+function sessionLine(you) {
+  const g = gameState;
+  if (!g) return '';
+  const who = i => (you && i === myPlayerIndex) ? 'You' : g.players[i].name;
+  if (g.score) return 'Session: ' + g.players.map((_, i) => `${who(i)} ${g.score[i] > 0 ? '+' : ''}${g.score[i]}`).join(' · ');
+  if (g.wins && g.wins.some(w => w > 0)) return 'Games won: ' + g.players.map((_, i) => `${who(i)} ${g.wins[i]}`).join(' · ');
+  return '';
 }
 function doDouble() {
   if (!canIDouble()) return;
@@ -1158,18 +1168,18 @@ on('doubleDropped', ({ playerIndex }) => {
   $('cube-offer').style.display = 'none';
   log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
 });
-on('gameResult', ({ winnerIndex, result, score }) => {
-  if (score && gameState) gameState.score = score;
+on('gameResult', ({ winnerIndex, result, score, wins }) => {
+  if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; }
   showGameOver(winnerIndex);
   if (result) {
     const how = result.dropped ? 'double dropped' : result.aggro ? 'an aggro!' : 'single game';
     $('winner-msg').textContent = `${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} (${how}) 🎉`;
     log(`${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} — ${how}`);
   }
-  if (score) {
-    $('score-msg').textContent = 'Session: ' + gameState.players.map((p, i) => `${p.name} ${score[i] > 0 ? '+' : ''}${score[i]}`).join(' · ');
-    $('score-msg').style.display = '';
-  }
+  // Cube rooms: the money score. Otherwise: games won in this room.
+  const line = sessionLine(false);
+  $('score-msg').textContent = line;
+  $('score-msg').style.display = line ? '' : 'none';
   renderCube();
 });
 

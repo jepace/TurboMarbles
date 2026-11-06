@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
-  MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets,
+  MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets, gameResult,
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
@@ -117,7 +117,8 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     skipTimer: null,
     analysis: null,     // post-game analysis: null | { state: 'running', waiting: Set<ws> } | { state: 'done', result }
     cube: !!cube && totalPlayers === 2,   // doubling cube (money play), two players only
-    score: Array(totalPlayers).fill(0),   // money-session points across rematches
+    score: Array(totalPlayers).fill(0),   // money-session points across rematches (cube rooms)
+    wins: Array(totalPlayers).fill(0),    // games won in this room
     gamesPlayed: 0,
   };
   rooms.set(roomId, room);
@@ -254,12 +255,16 @@ function finishGame(room) {
   if (game._finished) return;
   game._finished = true;
   room.gamesPlayed++;
-  const r = game.result;
+  if (game.winner != null) room.wins[game.winner]++;
+  // Two-player rooms keep a money score: a win is 1 point (2 for an aggro),
+  // times the cube's value when playing with the cube.
+  const r = game.result ?? (room.totalPlayers === 2 && game.winner != null ? gameResult(game, game.winner) : null);
   if (r) {
     room.score[r.winner] += r.points;
     room.score.forEach((_, i) => { if (i !== r.winner) room.score[i] -= r.points; });
   }
-  broadcast(room, { event: 'gameResult', winnerIndex: game.winner, result: r, score: room.score.slice(), gamesPlayed: room.gamesPlayed });
+  broadcast(room, { event: 'gameResult', winnerIndex: game.winner, result: r,
+    score: room.totalPlayers === 2 ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed });
 }
 
 // ---------- Doubling cube ----------
@@ -953,7 +958,8 @@ function publicState(room) {
     diceUsed: game.diceUsed,
     cube: game.cube,
     cubeOffer: game.cubeOffer,
-    score: room.cube ? room.score.slice() : null,
+    score: room.totalPlayers === 2 ? room.score.slice() : null,
+    wins: room.wins.slice(),
     gamesPlayed: room.gamesPlayed,
   };
 }

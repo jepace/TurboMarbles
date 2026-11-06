@@ -104,8 +104,8 @@ square on the board shows its name.
 - Optional doubling cube (2 players, money play; chosen when creating the room): double only at the
   start of your turn before rolling (not before an extra roll from a 6). Take → the cube doubles and
   is yours; only the owner redoubles. Drop → lose the cube's current value. A win scores the cube
-  value, double for an **aggro** (loser has no marbles home). The room keeps a session score across
-  Rematches. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
+  value, double for an **aggro** (loser has no marbles home). Every 2-player room keeps a money score
+  across Rematches (without the cube a win is 1 point, an aggro 2); 3+ players: games won. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
   Janowski money-play formulas).
 
 ## Do Not Change Without Asking
