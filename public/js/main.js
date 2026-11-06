@@ -899,8 +899,13 @@ on('legalMoves', ({ moves, diceUsed, combos }) => {
   updateSkipButton();
 });
 
-on('marbleMoved', ({ playerIndex, marbleId, from, to, path }) => {
+on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
+  // Grey out the die this move used — for everyone watching, not just the mover.
+  if ((dieIndex === 0 || dieIndex === 1) && gameState.diceUsed) {
+    gameState.diceUsed[dieIndex] = true;
+    renderDice(gameState.dice);
+  }
 
   // Capture from-position before updating state (for the tween start point).
   // A base has one slot per marble, so leaving base starts from this marble's

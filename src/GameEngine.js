@@ -585,6 +585,8 @@ export function applyMove(state, playerIndex, move) {
   }
 
   state.diceUsed[move.dieIndex] = true;
+  // Say which die moved, so every client (not just the mover) greys it out.
+  for (const e of events) if (e.event === 'marbleMoved') e.dieIndex = move.dieIndex;
 
   // Check win: all 4 marbles in the home zone.
   // Note: this checks zone only, not that every marble is in slot 4 (the final
