@@ -489,7 +489,9 @@ function openAnalysis() {
   const sel = $('ap-player');
   sel.replaceChildren(el('option', { value: 'all', textContent: 'All players' }),
     ...rep.players.map((p, i) => el('option', { value: String(i), textContent: p.name })));
-  if (myPlayerIndex != null) sel.value = 'all';
+  // Default view: my own errors.
+  if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = 'errors'; }
+  else { sel.value = 'all'; $('ap-filter').value = 'all'; }
   drawChart();
   renderMoveList();
   const firstErr = rep.rolls.findIndex(r => r.pi === myPlayerIndex && r.analysis && r.analysis.severity !== 'ok');
@@ -686,12 +688,13 @@ function drawChart() {
     const pl = add('polyline', { points: ptsArr.map(([i, v]) => `${x(i)},${y(v)}`).join(' '), fill: 'none', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' });
     pl.style.stroke = colorVar(rep.players[pi].color);
   }
-  const sevColor = { error: '#ff8a8a', blunder: '#ff2040' };
   rep.rolls.forEach((r, i) => {
     const a = r.analysis;
     if (!a || a.severity === 'ok') return;
     const v = two && r.pi !== 0 ? 1 - a.playedWin : a.playedWin;
-    const c = add('circle', { cx: x(i), cy: y(v), r: 4, fill: sevColor[a.severity], stroke: '#000', style: 'cursor:pointer' });
+    // In the colour of the player who made it; blunders bigger, with a red ring.
+    const big = a.severity === 'blunder';
+    const c = add('circle', { cx: x(i), cy: y(v), r: big ? 6 : 4, stroke: big ? '#ff2040' : '#000', 'stroke-width': big ? 2 : 1, style: `cursor:pointer;fill:${colorVar(rep.players[r.pi].color)}` });
     const t = document.createElementNS(ns, 'title');
     t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${pts(a.loss)}%`;
     c.append(t);
