@@ -8,7 +8,7 @@ import {
   handleUndo, handleCommit, handleAnalyzeGame,
   _reset, _getRoom,
 } from '../src/GameManager.js';
-import { config as gmConfig } from '../src/GameManager.js';
+import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
 
 // ---- Harness ----------------------------------------------------------------
 
@@ -1037,6 +1037,17 @@ describe('analyzeGame — reports every roll of every player', () => {});
   handleAnalyzeGame(host, roomId);
   assert(host.find('analysisResult').length === 1, 'asking again returns the cached report at once');
 }
+
+describe('addRobot — random names from the list, no duplicates', () => {
+  setup();
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 6);
+  for (let i = 0; i < 5; i++) addRobot(host, roomId);
+  const names = _getRoom(roomId).slots.filter(s => s.isRobot).map(s => s.name);
+  assert(names.length === 5 && names.every(n => ROBOT_NAMES.includes(n)), `robot names from the list (${names.join(', ')})`);
+  assert(new Set(names).size === 5, 'all different');
+  assert(!names.includes('Alice'), "never the host's name");
+});
 
 // ---- Summary ----------------------------------------------------------------
 

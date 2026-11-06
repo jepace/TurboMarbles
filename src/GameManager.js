@@ -161,6 +161,12 @@ export function joinRoom(ws, code, playerName) {
   return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room), reconnectToken: playerId };
 }
 
+// Robot names: 10 female, 10 male, picked at random when a robot is added.
+export const ROBOT_NAMES = [
+  'Alice', 'Beatrice', 'Clara', 'Daisy', 'Eleanor', 'Fiona', 'Grace', 'Hazel', 'Ivy', 'Maggie',
+  'Arthur', 'Benny', 'Charlie', 'Dexter', 'Felix', 'Gus', 'Hank', 'Oscar', 'Reggie', 'Walter',
+];
+
 export function addRobot(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
@@ -169,12 +175,11 @@ export function addRobot(ws, roomId) {
   const slot = room.slots.find(s => !s.playerId && !s.isRobot);
   if (!slot) return { error: 'No empty slots' };
 
-  const usedNumbers = new Set(room.slots.filter(s => s.isRobot).map(s => parseInt(s.name?.replace('Robot ', ''))));
-  let robotNumber = 1;
-  while (usedNumbers.has(robotNumber)) robotNumber++;
-
+  // A random name nobody in the room is using (robots still show 🤖).
+  const taken = new Set(room.slots.map(s => s.name?.toLowerCase()).filter(Boolean));
+  const free = ROBOT_NAMES.filter(n => !taken.has(n.toLowerCase()));
   slot.isRobot = true;
-  slot.name = `Robot ${robotNumber}`;
+  slot.name = free.length ? free[Math.floor(Math.random() * free.length)] : `Robot ${slot.index + 1}`;
   slot.playerId = 'robot-' + slot.index;
 
   broadcast(room, {
