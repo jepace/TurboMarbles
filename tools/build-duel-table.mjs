@@ -129,43 +129,73 @@ function verify(A, B, armB, samples = 1500) {
   return checked;
 }
 
+// Flatten a player space into typed arrays for the solver: for state s and
+// roll k, options optStart[s*R+k] … optStart[s*R+k+1]-1, each with a target
+// (−1 = win) and up to two landing squares (0 = none); bumpTo[s*L+loc] = the
+// state after the marble on `loc` is bumped (−1 if none there).
+function flatten(S) {
+  const R = DICE.length, n = S.keys.length;
+  const optStart = new Int32Array(n * R + 1);
+  const to = [], l1 = [], l2 = [];
+  for (let st = 0; st < n; st++) for (let k = 0; k < R; k++) {
+    optStart[st * R + k] = to.length;
+    for (const op of S.trans[st][k]) { to.push(op.to); l1.push(op.lands[0] ?? 0); l2.push(op.lands[1] ?? 0); }
+  }
+  optStart[n * R] = to.length;
+  const bumpTo = new Int32Array(n * 86).fill(-1);
+  S.bumps.forEach((m, st) => { for (const [loc, t] of m) bumpTo[st * 86 + loc] = t; });
+  return { n, optStart, to: Int32Array.from(to), l1: Int32Array.from(l1), l2: Int32Array.from(l2), bumpTo };
+}
+
 function solve(A, B) {
-  const nA = A.keys.length, nB = B.keys.length, N = nA * nB;
+  const FA = flatten(A), FB = flatten(B);
+  const nA = FA.n, nB = FB.n, N = nA * nB, R = DICE.length;
+  const W = Float64Array.from(DICE.map(x => x.w / 36));
+  const SIX = Uint8Array.from(DICE.map(x => earnsExtraRoll(x.d) ? 1 : 0));
   const V = new Float64Array(2 * N).fill(0.5);
-  const valueA = (a, b, k) => {        // A to move with roll k
-    const next = earnsExtraRoll(DICE[k].d) ? 0 : 1;
-    const opts = A.trans[a][k];
-    if (!opts.length) return V[next * N + a * nB + b];
-    let best = -1;
-    for (const op of opts) {
-      const v = op.to === -1 ? 1 : V[next * N + op.to * nB + applyLands(B, b, op.lands)];
-      if (v > best) best = v;
-    }
-    return best;
-  };
-  const valueB = (a, b, k) => {
-    const next = earnsExtraRoll(DICE[k].d) ? 1 : 0;
-    const opts = B.trans[b][k];
-    if (!opts.length) return V[next * N + a * nB + b];
-    let best = 2;
-    for (const op of opts) {
-      const v = op.to === -1 ? 0 : V[next * N + applyLands(A, a, op.lands) * nB + op.to];
-      if (v < best) best = v;
-    }
-    return best;
-  };
+  const land = (F, st, l) => { if (l > 0) { const t = F.bumpTo[st * 86 + l]; if (t >= 0) return t; } return st; };
   for (let it = 0; it < 5000; it++) {
     let delta = 0;
     for (let a = 0; a < nA; a++) for (let b = 0; b < nB; b++) {
-      for (const mover of [0, 1]) {
-        let v = 0;
-        for (let k = 0; k < DICE.length; k++) v += DICE[k].w * (mover === 0 ? valueA(a, b, k) : valueB(a, b, k));
-        v /= 36;
-        const i = mover * N + a * nB + b;
-        const dlt = Math.abs(v - V[i]);
-        if (dlt > delta) delta = dlt;
-        V[i] = v;
+      const cell = a * nB + b;
+      // A to move: maximise.
+      let v = 0;
+      for (let k = 0; k < R; k++) {
+        const base = SIX[k] ? 0 : N;
+        const s0 = FA.optStart[a * R + k], s1 = FA.optStart[a * R + k + 1];
+        let best;
+        if (s0 === s1) best = V[base + cell];
+        else {
+          best = -1;
+          for (let o = s0; o < s1; o++) {
+            const t = FA.to[o];
+            const val = t === -1 ? 1 : V[base + t * nB + land(FB, land(FB, b, FA.l1[o]), FA.l2[o])];
+            if (val > best) best = val;
+          }
+        }
+        v += W[k] * best;
       }
+      let d = Math.abs(v - V[cell]); if (d > delta) delta = d;
+      V[cell] = v;
+      // B to move: minimise.
+      v = 0;
+      for (let k = 0; k < R; k++) {
+        const base = SIX[k] ? N : 0;
+        const s0 = FB.optStart[b * R + k], s1 = FB.optStart[b * R + k + 1];
+        let best;
+        if (s0 === s1) best = V[base + cell];
+        else {
+          best = 2;
+          for (let o = s0; o < s1; o++) {
+            const t = FB.to[o];
+            const val = t === -1 ? 0 : V[base + land(FA, land(FA, a, FB.l1[o]), FB.l2[o]) * nB + t];
+            if (val < best) best = val;
+          }
+        }
+        v += W[k] * best;
+      }
+      d = Math.abs(v - V[N + cell]); if (d > delta) delta = d;
+      V[N + cell] = v;
     }
     if (delta < 1e-7) { console.error(`  converged after ${it + 1} sweeps`); break; }
   }
