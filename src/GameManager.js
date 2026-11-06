@@ -233,13 +233,24 @@ function beginGame(room, players) {
   scheduleCurrentTurn(room);
 }
 
-// After a finished game, either player starts the next game of the session in
-// the same room (same seats; robots stay robots). The money score carries over.
+// After a finished game, the next game of the session starts in the same room
+// (same seats; robots stay robots; the money score carries over) once every
+// human player has asked for it. Robots always agree.
 export function handleRematch(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'finished') return { error: 'No finished game' };
   const sess = sessions.get(ws._id);
   if (!sess || sess.roomId !== roomId) return { error: 'Not in this room' };
+  room.rematchVotes ??= new Set();
+  room.rematchVotes.add(sess.playerIndex);
+  const humans = room.slots.filter(s => !s.isRobot && s.playerId).map(s => s.index);
+  const waitingFor = humans.filter(i => !room.rematchVotes.has(i));
+  if (waitingFor.length) {
+    broadcast(room, { event: 'rematchRequested', playerIndex: sess.playerIndex,
+      agreed: [...room.rematchVotes], waitingFor });
+    return { ok: true, waiting: true };
+  }
+  room.rematchVotes = null;
   if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
   beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
   return { ok: true };
@@ -254,6 +265,7 @@ function finishGame(room) {
   room.state = 'finished';
   if (game._finished) return;
   game._finished = true;
+  room.rematchVotes = null;
   room.gamesPlayed++;
   if (game.winner != null) room.wins[game.winner]++;
   // Two-player rooms keep a money score: a win is 1 point (2 for an aggro),
@@ -522,6 +534,8 @@ function leaveRoom(ws) {
   }
 
   if (room.state === 'finished') {
+    // A rematch can't happen without them: tell whoever is still there.
+    broadcast(room, { event: 'opponentLeft', playerIndex: sess.playerIndex });
     // Nothing left to play; drop the room once nobody is looking at it.
     if (!room.slots.some(s => s.ws)) deleteRoom(room);
     return;

@@ -1084,6 +1084,9 @@ function showGameOver(winnerIndex) {
   $('score-msg').style.display = 'none';
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
   $('btn-rematch').style.display = gameState.players.length === 2 ? '' : 'none';
+  $('btn-rematch').disabled = false;
+  $('btn-rematch').textContent = 'Rematch';
+  $('rematch-msg').style.display = 'none';
   $('win-overlay').style.display = 'flex';
   $('cube-offer').style.display = 'none';
   renderCube();
@@ -1137,7 +1140,33 @@ function doDouble() {
 $('btn-double').addEventListener('click', doDouble);
 $('btn-take').addEventListener('click', () => { send({ action: 'take' }); $('cube-offer').style.display = 'none'; });
 $('btn-drop').addEventListener('click', () => { send({ action: 'drop' }); $('cube-offer').style.display = 'none'; });
-$('btn-rematch').addEventListener('click', () => { send({ action: 'rematch' }); $('btn-rematch').disabled = true; setTimeout(() => { $('btn-rematch').disabled = false; }, 2000); });
+$('btn-rematch').addEventListener('click', () => {
+  send({ action: 'rematch' });
+  $('btn-rematch').disabled = true;
+  $('btn-rematch').textContent = 'Waiting…';
+});
+// Someone asked for a rematch: it starts once every human player agrees.
+on('rematchRequested', ({ playerIndex, waitingFor }) => {
+  const names = waitingFor.map(i => i === myPlayerIndex ? 'you' : playerName(i)).join(', ');
+  if (waitingFor.includes(myPlayerIndex)) {
+    $('rematch-msg').textContent = `${playerName(playerIndex)} wants a rematch.`;
+    $('btn-rematch').textContent = 'Accept Rematch';
+    $('btn-rematch').disabled = false;
+  } else {
+    $('rematch-msg').textContent = `Waiting for ${names} to accept the rematch…`;
+    $('btn-rematch').textContent = 'Waiting…';
+    $('btn-rematch').disabled = true;
+  }
+  $('rematch-msg').style.display = '';
+  log(`${playerName(playerIndex)} wants a rematch`);
+});
+on('opponentLeft', ({ playerIndex }) => {
+  if (playerIndex === myPlayerIndex) return;
+  $('rematch-msg').textContent = `${playerName(playerIndex)} left the room — no rematch.`;
+  $('rematch-msg').style.display = '';
+  $('btn-rematch').disabled = true;
+  $('btn-rematch').textContent = 'Rematch';
+});
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (!$('screen-game').classList.contains('active')) return;

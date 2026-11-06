@@ -94,6 +94,11 @@ describe('manager — human double, take, drop; session score; rematch', () => {
   assert(res && res.winnerIndex === 1 && res.result.points === 2 && res.score[1] === 2 && res.score[0] === -2, `drop scores 2 for the guest (score ${res?.score})`);
   assert(room.state === 'finished', 'game over');
   handleRematch(guest, roomId);
+  assert(room.state === 'finished' && host.find('rematchRequested').some(e => e.playerIndex === 1 && e.waitingFor.join() === '0'),
+    'one player asking is only a request: the other is asked');
+  handleRematch(guest, roomId);
+  assert(room.state === 'finished', 'asking twice does not start it');
+  handleRematch(host, roomId);
   assert(room.state === 'playing' && room.game.cube.value === 1 && room.game.winner == null, 'rematch: new game, cube back to 1');
   assert(host.find('gameStarted').pop().gameState.score.join() === '-2,2', 'rematch keeps the money score');
 });
