@@ -390,3 +390,6 @@ button.secondary { background: #fff2; }
 #cube-offer { background: var(--card); border: 1px solid #c8920a; border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; text-align: center; font-weight: 600; }
 #score-line { font-size: 0.85rem; text-align: center; }
 #score-msg { text-align: center; }
+
+.opt-row { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; cursor: pointer; }
+.opt-row .muted { color: var(--muted); font-size: 0.85rem; }

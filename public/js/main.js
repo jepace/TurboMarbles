@@ -126,8 +126,17 @@ $('create-count').addEventListener('keydown', e => { if (e.key === 'Enter') $('b
 $('create-count').addEventListener('input', () => {
   const n = parseInt($('create-count').value, 10);
   if (n >= 2 && n <= 6) updateColorPicker(n);
-  $('create-cube-row').style.display = n === 2 ? 'flex' : 'none';   // the cube is for two players
+  updateCubeOption(n);
 });
+// The cube is for two-player games: always shown, enabled only for 2.
+function updateCubeOption(n) {
+  const ok = n === 2;
+  $('create-cube').disabled = !ok;
+  if (!ok) $('create-cube').checked = false;
+  $('create-cube-note').textContent = ok ? '' : '— 2 players only';
+  $('create-cube-row').style.opacity = ok ? '1' : '0.55';
+}
+updateCubeOption(parseInt($('create-count').value, 10));
 updateColorPicker(4); // initialize with default
 
 // ---- Join ----
