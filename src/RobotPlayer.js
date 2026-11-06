@@ -283,9 +283,14 @@ function scoreMove(game, playerIndex, move) {
   // robot chase bumps into bad positions — with planning it lost in games of
   // 3+ players, where a bump sets back only one of several rivals.
   let bump = 0;
-  if (move.toZone === 'track') {
+  // Landing on an opponent — on a track square or in the hub — bumps it.
+  if (move.toZone === 'track' || move.toZone === 'center') {
     game.players.forEach((p, o) => {
-      if (o !== playerIndex) for (const m of p.marbles) if (m.zone === 'track' && m.space === move.toSpace) bump += bumpValue(game, o, m);
+      if (o === playerIndex) return;
+      for (const m of p.marbles) {
+        const hit = move.toZone === 'center' ? m.zone === 'center' : m.zone === 'track' && m.space === move.toSpace;
+        if (hit) bump += bumpValue(game, o, m);
+      }
     });
   }
   return 200 + 5 * (before - after) + bump;

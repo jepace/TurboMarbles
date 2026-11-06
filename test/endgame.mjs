@@ -112,5 +112,17 @@ describe('robot — uses the table near home', () => {
   assert(at.zone === 'track' && spaceName(at.space) === 'P★', `robot waits on P★ (went to ${at.zone === 'track' ? spaceName(at.space) : at.zone})`);
 }
 
+// Hitting a marble in the hub counts as a hit (it was scored as a plain move).
+{
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 1);
+  const set = (pi, locs) => g.players[pi].marbles.forEach((m, i) => { m.space = null; m.slot = null; m.starEligible = false; Object.assign(m, locs[i]); });
+  set(0, [{ zone: 'home', slot: 4 }, { zone: 'home', slot: 3 }, { zone: 'center' }, { zone: 'base' }]);
+  set(1, [{ zone: 'track', space: parseSpaceName('G↑4') }, { zone: 'track', space: parseSpaceName('Y↑2') }, { zone: 'base' }, { zone: 'home', slot: 4 }]);
+  g.dice = [4, 1]; g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+  const moves = [];
+  for (let k = 0; k < 2 && !(g.diceUsed[0] && g.diceUsed[1]); k++) { const mv = pickNextRobotMove(g, 1); if (!mv) break; moves.push(mv); applyMove(g, 1, mv); }
+  assert(g.players[0].marbles[2].zone === 'base', `robot hits the marble in the hub (G↑4 + 4 → hub): ${moves.map(m => m.type).join(', ')}`);
+}
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);
