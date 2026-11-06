@@ -4,8 +4,9 @@ import { randomBytes } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
-  MARBLES_PER_PLAYER,
+  MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble,
 } from './GameEngine.js';
+import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
 import { worthThinking } from './RobotRollout.js';
@@ -70,7 +71,7 @@ function genId() {
 // the socket's current room. (Previously a socket could create several rooms
 // but was only tracked in the last, so the others leaked forever.)
 
-export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
+export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false } = {}) {
   if (sessions.has(hostWs._id)) leaveRoom(hostWs);
   sweepStaleLobbies();
   if (rooms.size >= MAX_TOTAL_ROOMS) return { error: 'Server is full' };
@@ -115,12 +116,15 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor) {
     robotTurnTimer: null,
     skipTimer: null,
     analysis: null,     // post-game analysis: null | { state: 'running', waiting: Set<ws> } | { state: 'done', result }
+    cube: !!cube && totalPlayers === 2,   // doubling cube (money play), two players only
+    score: Array(totalPlayers).fill(0),   // money-session points across rematches
+    gamesPlayed: 0,
   };
   rooms.set(roomId, room);
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
   // The client must store this and send it back in any 'reconnect' action.
-  return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers,
+  return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers, cube: room.cube,
     slots: slots.map(s => ({ index: s.index, name: s.name, color: s.color, isRobot: s.isRobot, filled: !!s.playerId })) };
 }
 
@@ -210,12 +214,124 @@ export function startGame(ws, roomId) {
     isRobot: s.isRobot,
   }));
 
-  room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex);
-  room.state = 'playing';
+  beginGame(room, players);
+  return { ok: true };
+}
 
+function beginGame(room, players) {
+  room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex, { cube: room.cube });
+  room.state = 'playing';
+  room.analysis = null;
+  room.robotPlan = null;
   broadcast(room, { event: 'gameStarted', gameState: publicState(room) });
   scheduleCurrentTurn(room);
+}
+
+// After a finished game, either player starts the next game of the session in
+// the same room (same seats; robots stay robots). The money score carries over.
+export function handleRematch(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'finished') return { error: 'No finished game' };
+  const sess = sessions.get(ws._id);
+  if (!sess || sess.roomId !== roomId) return { error: 'Not in this room' };
+  if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
+  beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
   return { ok: true };
+}
+
+// ---------- Game over and the money score ----------
+
+// Called once when a game ends: credit the money score (cube games) and tell
+// everyone the result.
+function finishGame(room) {
+  const { game } = room;
+  room.state = 'finished';
+  if (game._finished) return;
+  game._finished = true;
+  room.gamesPlayed++;
+  const r = game.result;
+  if (r) {
+    room.score[r.winner] += r.points;
+    room.score.forEach((_, i) => { if (i !== r.winner) room.score[i] -= r.points; });
+  }
+  broadcast(room, { event: 'gameResult', winnerIndex: game.winner, result: r, score: room.score.slice(), gamesPlayed: room.gamesPlayed });
+}
+
+// ---------- Doubling cube ----------
+
+const cubeOwnerFor = (game, pi) => game.cube.owner == null ? 'centre' : game.cube.owner === pi ? 'me' : 'opp';
+
+// Chances for player pi from the start of the current turn: exact when a duel
+// table applies, else played out in the robot's thinking thread (bounded by
+// config.robotThinkMs). Null when there is no estimate in time.
+async function cubeEstimate(game, pi) {
+  const exact = exactEstimate(game, pi);
+  if (exact) return exact;
+  if (!(config.robotThinkMs > 0)) return null;
+  return think(snapshot(game), pi, config.robotThinkMs, 'cube');
+}
+
+export function handleDouble(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'playing') return;
+  const sess = sessions.get(ws._id);
+  if (!sess || sess.playerIndex !== room.game.turnIndex) return;
+  doubleFor(room, sess.playerIndex);
+}
+
+function doubleFor(room, pi) {
+  const { game } = room;
+  if (!offerDouble(game, pi)) return false;
+  broadcast(room, { event: 'doubleOffered', playerIndex: pi, value: game.cubeOffer.value });
+  const to = game.cubeOffer.to;
+  if (room.slots[to]?.isRobot) robotAnswerDouble(room);
+  return true;
+}
+
+export function handleTake(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'playing') return;
+  const sess = sessions.get(ws._id);
+  if (!sess) return;
+  answerDouble(room, sess.playerIndex, true);
+}
+
+export function handleDrop(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'playing') return;
+  const sess = sessions.get(ws._id);
+  if (!sess) return;
+  answerDouble(room, sess.playerIndex, false);
+}
+
+function answerDouble(room, pi, take) {
+  const { game } = room;
+  if (take) {
+    if (!takeDouble(game, pi)) return;
+    broadcast(room, { event: 'doubleTaken', playerIndex: pi, value: game.cube.value, owner: pi });
+    scheduleCurrentTurn(room);         // the doubler (robot) rolls; a human doubler rolls themselves
+  } else {
+    if (!dropDouble(game, pi)) return;
+    broadcast(room, { event: 'doubleDropped', playerIndex: pi, winnerIndex: game.winner, result: game.result });
+    finishGame(room);
+  }
+}
+
+// A robot being doubled: take or drop after thinking (fallback: take).
+function robotAnswerDouble(room) {
+  const { game } = room;
+  const offer = game.cubeOffer;
+  if (!offer) return;
+  const pi = offer.to;
+  const started = Date.now();
+  cubeEstimate(game, pi).then(est => {
+    const wait = Math.max(0, ROBOT_TURN_DELAY_MS - (Date.now() - started));
+    room.robotTurnTimer = setTimeout(() => {
+      room.robotTurnTimer = null;
+      if (!rooms.has(room.id) || game.cubeOffer !== offer || !room.slots[pi]?.isRobot) return;
+      answerDouble(room, pi, est ? shouldTake(est).take : true);
+    }, wait);
+  }).catch(() => answerDouble(room, pi, true));
 }
 
 // ---------- Shared roll helper ----------
@@ -415,7 +531,7 @@ function leaveRoom(ws) {
     if (cleanupIfAbandoned(room)) return;
 
     // If it's currently this player's turn, schedule the robot to move.
-    if (room.game && room.game.turnIndex === sess.playerIndex) {
+    if (room.game && (room.game.turnIndex === sess.playerIndex || room.game.cubeOffer?.to === sess.playerIndex)) {
       scheduleCurrentTurn(room);
     }
   }, DISCONNECT_TIMEOUT_MS);
@@ -570,7 +686,7 @@ function tryApplyMove(room, playerIndex, move) {
   game._humanMadeMove = true;
 
   if (game.phase === 'GAME_OVER') {
-    room.state = 'finished';
+    finishGame(room);
     return { ok: true };
   }
 
@@ -670,6 +786,11 @@ function scheduleCurrentTurn(room) {
     room.robotTurnTimer = null;
   }
 
+  if (game.phase === 'CUBE_OFFERED') {
+    if (room.slots[game.cubeOffer.to]?.isRobot) robotAnswerDouble(room);
+    return;
+  }
+
   const slot = room.slots[game.turnIndex];
   if (slot.isRobot) {
     room.robotTurnTimer = setTimeout(() => {
@@ -683,6 +804,19 @@ function scheduleCurrentTurn(room) {
 function doRobotTurn(room) {
   const { game } = room;
   if (!rooms.has(room.id) || !game || game.phase === 'GAME_OVER') return;
+
+  // At the start of its turn (not before an extra roll), a robot with access
+  // to the cube decides whether to double first. Once per turn.
+  const me = game.turnIndex;
+  if (canDouble(game, me) && game._cubeChecked !== (game._turnNo ?? 1)) {
+    game._cubeChecked = game._turnNo ?? 1;
+    cubeEstimate(game, me).then(est => {
+      if (!rooms.has(room.id) || room.game !== game || game.phase !== 'IN_TURN' || game.turnIndex !== me || !room.slots[me]?.isRobot) return;
+      if (est && shouldDouble(est, cubeOwnerFor(game, me)).double && doubleFor(room, me)) return;
+      doRobotTurn(room);
+    }).catch(() => doRobotTurn(room));
+    return;
+  }
 
   // Roll using the shared helper (same logic path as a human roll)
   if (game.phase === 'IN_TURN' || game.phase === 'EXTRA_ROLL') {
@@ -722,7 +856,7 @@ function nextPlannedMove(room) {
 
 function applyNextRobotMove(room) {
   const { game } = room;
-  if (!game || game.phase === 'GAME_OVER') { room.state = 'finished'; return; }
+  if (!game || game.phase === 'GAME_OVER') { finishGame(room); return; }
   if (game.diceUsed[0] && game.diceUsed[1]) { advanceTurnIfDone(room); return; }
 
   // Tracked in robotTurnTimer so deleting the room cancels the chain
@@ -812,6 +946,10 @@ function publicState(room) {
     phase: game.phase,
     dice: game.dice,
     diceUsed: game.diceUsed,
+    cube: game.cube,
+    cubeOffer: game.cubeOffer,
+    score: room.cube ? room.score.slice() : null,
+    gamesPlayed: room.gamesPlayed,
   };
 }
 

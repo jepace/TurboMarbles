@@ -9,6 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
+  handleDouble, handleTake, handleDrop, handleRematch,
 } from './GameManager.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -150,6 +151,7 @@ wss.on('connection', (ws, req) => {
 const KNOWN_ACTIONS = new Set([
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
+  'double', 'take', 'drop', 'rematch',
 ]);
 
 function dispatch(ws, msg) {
@@ -165,7 +167,7 @@ function dispatch(ws, msg) {
       const n = Number(msg.totalPlayers);
       if (!Number.isInteger(n) || n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
       const hostColor = typeof msg.hostColor === 'string' ? msg.hostColor : undefined;
-      const result = createRoom(ws, name, n, hostColor);
+      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true });
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
       ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });
@@ -208,6 +210,23 @@ function dispatch(ws, msg) {
       if (!roomId) return;
       const result = startGame(ws, roomId);
       if (result.error) send(ws, { event: 'error', code: 'START_FAILED', message: result.error });
+      break;
+    }
+
+    case 'double':
+    case 'take':
+    case 'drop': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      ({ double: handleDouble, take: handleTake, drop: handleDrop })[msg.action](ws, roomId);
+      break;
+    }
+
+    case 'rematch': {
+      const roomId = getRoomByWs(ws);
+      if (!roomId) return;
+      const result = handleRematch(ws, roomId);
+      if (result?.error) send(ws, { event: 'error', code: 'REMATCH_FAILED', message: result.error });
       break;
     }
 

@@ -40,7 +40,7 @@ function getWorker() {
 
 // Ask for the robot's play; resolves to { moves, changed, n } or null, never
 // later than deadlineMs. The worker is given a little less time than that.
-export function think(game, pi, deadlineMs) {
+export function think(game, pi, deadlineMs, kind = 'move') {
   return new Promise(resolve => {
     if (busy) { resolve(null); return; }
     const w = getWorker();
@@ -53,7 +53,7 @@ export function think(game, pi, deadlineMs) {
     waiting.set(id, result => { clearTimeout(timer); resolve(result); });
     busy = true;
     try {
-      w.postMessage({ id, game, pi, budgetMs: Math.max(50, deadlineMs - 250), seed: 1 + Math.floor(Math.random() * 1e9) });
+      w.postMessage({ id, kind, game, pi, budgetMs: Math.max(50, deadlineMs - 250), seed: 1 + Math.floor(Math.random() * 1e9) });
     } catch (err) {
       console.error('[robot-think] post failed', err);
       busy = false; waiting.delete(id); clearTimeout(timer); resolve(null);

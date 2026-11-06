@@ -24,6 +24,7 @@ node test/manager.mjs     # GameManager unit tests (no server needed)
 node test/cli.mjs         # CLI helper unit tests (no server needed)
 node test/endgame.mjs     # endgame table + robot endgame play (no server needed)
 node test/thinker.mjs     # robot background thinking: deadline / fallback guarantees (no server needed)
+node test/cube.mjs        # doubling cube: rules, scoring, robot cube decisions, rematch (no server needed)
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -100,6 +101,12 @@ square on the board shows its name.
 - Landing on an opponent's marble bumps it back to base.
 - Own marbles block your own path.
 - First player with all 4 marbles in home wins.
+- Optional doubling cube (2 players, money play; chosen when creating the room): double only at the
+  start of your turn before rolling (not before an extra roll from a 6). Take → the cube doubles and
+  is yours; only the owner redoubles. Drop → lose the cube's current value. A win scores the cube
+  value, double for an **aggro** (loser has no marbles home). The room keeps a session score across
+  Rematches. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
+  Janowski money-play formulas).
 
 ## Do Not Change Without Asking
 - The board shape described above — it has been carefully specified and previous attempts to "improve" it broke the layout.

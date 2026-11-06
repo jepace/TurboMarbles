@@ -30,6 +30,9 @@
       <input id="create-count" type="number" min="2" max="6" value="4">
     </label>
     <div id="create-colors" class="color-picker-row"></div>
+    <label id="create-cube-row" style="display:none" title="Money play: double at the start of your turn; an aggro (loser has no marbles home) counts double">
+      <input type="checkbox" id="create-cube"> Doubling cube (money play)
+    </label>
     <div class="btn-row">
       <button id="btn-create-confirm" class="btn-go">Create</button>
       <button class="secondary" id="btn-create-back">Back</button>
@@ -71,9 +74,11 @@
         <div class="card" id="win-card">
           <h2>Game Over</h2>
           <p id="winner-msg"></p>
+          <p id="score-msg" class="muted" style="display:none"></p>
           <div class="btn-row">
             <button id="btn-analyze" class="secondary">Analyze Game</button>
             <button id="btn-copy-log" class="secondary">Copy Log</button>
+            <button id="btn-rematch" class="btn-go" title="Next game in this room (the score carries over)">Rematch</button>
             <button id="btn-play-again">Play Again</button>
           </div>
           <div id="analysis" style="display:none"></div>
@@ -105,6 +110,19 @@
         <div class="die" id="die-1">–</div>
         <button id="btn-roll" disabled>Roll</button>
       </div>
+      <div id="cube-area" style="display:none">
+        <div id="cube" title="Doubling cube">1</div>
+        <span id="cube-owner"></span>
+        <button id="btn-double" class="secondary" style="display:none" title="Offer a double before rolling (D)">Double (D)</button>
+      </div>
+      <div id="cube-offer" style="display:none">
+        <div id="cube-offer-msg"></div>
+        <div class="btn-row">
+          <button id="btn-take" class="btn-go" title="Take (T)">Take (T)</button>
+          <button id="btn-drop" class="secondary">Drop</button>
+        </div>
+      </div>
+      <div id="score-line" style="display:none"></div>
       <div id="commit-area">
         <button id="btn-commit" style="display:none">Commit Turn</button>
         <button id="btn-skip" class="secondary" style="display:none" title="Skip this die (−)">Skip Die (−)</button>

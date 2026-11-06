@@ -118,7 +118,7 @@ $('btn-create-confirm').addEventListener('click', () => {
   const n = parseInt($('create-count').value, 10);
   if (n < 2 || n > 6) return;
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor });
+  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && $('create-cube').checked });
 });
 $('btn-create-back').addEventListener('click', () => show('screen-landing'));
 // Enter on player-count field → confirm create
@@ -126,6 +126,7 @@ $('create-count').addEventListener('keydown', e => { if (e.key === 'Enter') $('b
 $('create-count').addEventListener('input', () => {
   const n = parseInt($('create-count').value, 10);
   if (n >= 2 && n <= 6) updateColorPicker(n);
+  $('create-cube-row').style.display = n === 2 ? 'flex' : 'none';   // the cube is for two players
 });
 updateColorPicker(4); // initialize with default
 
@@ -740,12 +741,12 @@ $('opt-analysis').addEventListener('change', e => {
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
 });
 
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube }) => {
   roomId = rid;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
-  $('lobby-size').textContent = `${totalPlayers} players`;
+  $('lobby-size').textContent = `${totalPlayers} players` + (cube ? ' · doubling cube' : '');
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
   renderLobbySlots(slots ?? [{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
@@ -805,6 +806,8 @@ on('gameStarted', ({ gameState: gs }) => {
   analysisReport = null; apSel = -1;
   if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
   show('screen-game');
+  $('win-overlay').style.display = 'none';         // a rematch starts from the game-over screen
+  $('cube-offer').style.display = 'none';
   initBoard($('board-canvas'));
   setCommitVisible(false); setUndoVisible(false);
   commitPending = false;
@@ -819,6 +822,7 @@ on('gameStarted', ({ gameState: gs }) => {
   renderDice(null, gameState.players[gameState.turnIndex]?.color);
   drawBoard(gameState);
   if (isMyTurn()) enableRoll();
+  renderCube();
 });
 
 on('rolled', ({ playerIndex, dice, moves }) => {
@@ -985,6 +989,7 @@ on('turnChanged', ({ playerIndex }) => {
   } else {
     $('btn-roll').disabled = true;
   }
+  renderCube();
 });
 
 on('extraRoll', ({ playerIndex }) => {
@@ -997,6 +1002,7 @@ on('extraRoll', ({ playerIndex }) => {
   if (playerIndex === myPlayerIndex) {
     enableRoll();
   }
+  renderCube();
 });
 
 on('dieForfeit', ({ dieIndex }) => {
@@ -1035,16 +1041,111 @@ on('undone', ({ gameState: gs }) => {
   updateSkipButton();
 });
 
-on('gameOver', ({ winnerIndex }) => {
+on('gameOver', ({ winnerIndex }) => showGameOver(winnerIndex));
+
+function showGameOver(winnerIndex) {
+  if (gameState.phase === 'GAME_OVER' && $('win-overlay').style.display === 'flex') return;
   flushTurnLog();
   turnLogPlayer = null;
   gameState.phase = 'GAME_OVER';
   const name = playerName(winnerIndex);
   $('winner-msg').textContent = `${name} wins! 🎉`;
+  $('score-msg').style.display = 'none';
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
+  $('btn-rematch').style.display = gameState.players.length === 2 ? '' : 'none';
   $('win-overlay').style.display = 'flex';
+  $('cube-offer').style.display = 'none';
+  renderCube();
   // Board stays visible — no screen switch
   log(`🏆 ${name} wins the game!`);
+}
+
+// ---- Doubling cube (money play) ----
+const cubeOwnerText = c => c.owner == null ? 'centred'
+  : c.owner === myPlayerIndex ? 'your cube' : `${playerName(c.owner)}'s cube`;
+function canIDouble() {
+  const g = gameState, c = g?.cube;
+  return !!c && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
+    (c.owner == null || c.owner === myPlayerIndex);
+}
+function renderCube() {
+  const c = gameState?.cube;
+  $('cube-area').style.display = c ? 'flex' : 'none';
+  if (c) {
+    $('cube').textContent = String(c.value);
+    $('cube-owner').textContent = cubeOwnerText(c);
+    $('btn-double').style.display = canIDouble() ? '' : 'none';
+    // A double waiting for my answer (also after a reconnect).
+    const o = gameState.cubeOffer;
+    if (o && o.to === myPlayerIndex && gameState.phase === 'CUBE_OFFERED') {
+      $('cube-offer-msg').textContent = `${playerName(o.from)} doubles to ${o.value}. Take, and play on for ${o.value}? Or drop, and lose ${c.value}?`;
+      $('cube-offer').style.display = 'flex';
+    } else if (!o) $('cube-offer').style.display = 'none';
+  }
+  const sc = gameState?.score;
+  $('score-line').style.display = sc ? 'block' : 'none';
+  if (sc) $('score-line').textContent = 'Session: ' + gameState.players.map((p, i) =>
+    `${i === myPlayerIndex ? 'You' : p.name} ${sc[i] > 0 ? '+' : ''}${sc[i]}`).join(' · ');
+}
+function doDouble() {
+  if (!canIDouble()) return;
+  send({ action: 'double' });
+  $('btn-double').style.display = 'none';
+  $('btn-roll').disabled = true;
+}
+$('btn-double').addEventListener('click', doDouble);
+$('btn-take').addEventListener('click', () => { send({ action: 'take' }); $('cube-offer').style.display = 'none'; });
+$('btn-drop').addEventListener('click', () => { send({ action: 'drop' }); $('cube-offer').style.display = 'none'; });
+$('btn-rematch').addEventListener('click', () => { send({ action: 'rematch' }); $('btn-rematch').disabled = true; setTimeout(() => { $('btn-rematch').disabled = false; }, 2000); });
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (!$('screen-game').classList.contains('active')) return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if ((e.key === 'd' || e.key === 'D') && canIDouble()) { e.preventDefault(); doDouble(); }
+  if ((e.key === 't' || e.key === 'T') && $('cube-offer').style.display !== 'none') { e.preventDefault(); $('btn-take').click(); }
+});
+
+on('doubleOffered', ({ playerIndex, value }) => {
+  gameState.cubeOffer = { from: playerIndex, to: 1 - playerIndex, value };
+  gameState.phase = 'CUBE_OFFERED';
+  log(`${playerName(playerIndex)} doubles to ${value}`, gameState.players[playerIndex]?.color);
+  $('btn-roll').disabled = true;
+  if (playerIndex !== myPlayerIndex) {
+    $('cube-offer-msg').textContent = `${playerName(playerIndex)} doubles to ${value}. Take, and play on for ${value}? Or drop, and lose ${gameState.cube.value}?`;
+    $('cube-offer').style.display = 'flex';
+    $('turn-banner').textContent = 'Take or drop?';
+  } else {
+    $('turn-banner').textContent = `Waiting for ${playerName(1 - playerIndex)} to take or drop…`;
+  }
+  renderCube();
+});
+on('doubleTaken', ({ playerIndex, value, owner }) => {
+  gameState.cube = { value, owner };
+  gameState.cubeOffer = null;
+  gameState.phase = 'IN_TURN';
+  $('cube-offer').style.display = 'none';
+  log(`${playerName(playerIndex)} takes — cube at ${value}`, gameState.players[playerIndex]?.color);
+  if (isMyTurn()) enableRoll(); else $('turn-banner').textContent = `${playerName(gameState.turnIndex)}'s turn`;
+  renderCube();
+});
+on('doubleDropped', ({ playerIndex }) => {
+  gameState.cubeOffer = null;
+  $('cube-offer').style.display = 'none';
+  log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
+});
+on('gameResult', ({ winnerIndex, result, score }) => {
+  if (score && gameState) gameState.score = score;
+  showGameOver(winnerIndex);
+  if (result) {
+    const how = result.dropped ? 'double dropped' : result.aggro ? 'an aggro!' : 'single game';
+    $('winner-msg').textContent = `${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} (${how}) 🎉`;
+    log(`${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} — ${how}`);
+  }
+  if (score) {
+    $('score-msg').textContent = 'Session: ' + gameState.players.map((p, i) => `${p.name} ${score[i] > 0 ? '+' : ''}${score[i]}`).join(' · ');
+    $('score-msg').style.display = '';
+  }
+  renderCube();
 });
 
 on('playerDisconnected', ({ playerIndex, timeoutMs }) => {
@@ -1074,6 +1175,7 @@ on('reconnected', ({ gameState: gs }) => {
   if (canRoll) enableRoll(); else $('btn-roll').disabled = true;
   updateSkipButton();
   drawBoard(gameState);
+  renderCube();
 });
 
 on('hostChanged', ({ playerIndex }) => {

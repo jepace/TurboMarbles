@@ -30,7 +30,7 @@ export function trackDistance(from, to) {
 
 // --- State factory ---
 
-export function createGame(players, armIndices, initialTurnIndex) {
+export function createGame(players, armIndices, initialTurnIndex, { cube = false } = {}) {
   // players: array of { id, name, color, isRobot }
   // armIndices: optional explicit arm index per player (overrides ARM_MAP default)
   // Assign player indices and configs; use ARM_MAP so each player occupies the
@@ -62,7 +62,60 @@ export function createGame(players, armIndices, initialTurnIndex) {
     dice: null,           // [die0, die1] after roll; null at start of turn
     diceUsed: [false, false],
     winner: null,         // playerIndex of the winner, or null
+    // Doubling cube (two-player games only, when enabled): value, and owner
+    // (null = centred). cubeOffer is set while a double awaits an answer.
+    cube: cube && gamePlayers.length === 2 ? { value: 1, owner: null } : null,
+    cubeOffer: null,
+    // With a cube: { winner, points, aggro, dropped } once the game is over.
+    result: null,
   };
+}
+
+// --- Doubling cube (money play) ---
+//
+// A player may double only at the start of their turn, before rolling — not
+// before an extra roll earned with a 6 (phase EXTRA_ROLL). The cube starts in
+// the middle; whoever takes a double owns it and alone may redouble. Dropping
+// a double loses the cube's current value. Winning scores the cube's value,
+// twice that for an aggro (the loser has no marbles home).
+export function canDouble(state, playerIndex) {
+  const c = state.cube;
+  return !!c && state.phase === 'IN_TURN' && state.turnIndex === playerIndex && !state.dice &&
+    state.winner == null && !state.cubeOffer && (c.owner == null || c.owner === playerIndex);
+}
+
+export function offerDouble(state, playerIndex) {
+  if (!canDouble(state, playerIndex)) return false;
+  state.cubeOffer = { from: playerIndex, to: 1 - playerIndex, value: state.cube.value * 2 };
+  state.phase = 'CUBE_OFFERED';
+  return true;
+}
+
+export function takeDouble(state, playerIndex) {
+  const o = state.cubeOffer;
+  if (!o || state.phase !== 'CUBE_OFFERED' || o.to !== playerIndex) return false;
+  state.cube = { value: o.value, owner: playerIndex };
+  state.cubeOffer = null;
+  state.phase = 'IN_TURN';            // the doubler now rolls
+  return true;
+}
+
+export function dropDouble(state, playerIndex) {
+  const o = state.cubeOffer;
+  if (!o || state.phase !== 'CUBE_OFFERED' || o.to !== playerIndex) return false;
+  state.cubeOffer = null;
+  state.phase = 'GAME_OVER';
+  state.winner = o.from;
+  state.result = { winner: o.from, points: state.cube.value, aggro: false, dropped: true };
+  return true;
+}
+
+// Points for a game won by `winner` (cube games): the cube's value, doubled
+// for an aggro — the loser has no marbles home.
+export function gameResult(state, winner) {
+  const loser = state.players.find((_, i) => i !== winner);
+  const aggro = !!loser && loser.marbles.every(m => m.zone !== 'home');
+  return { winner, points: (state.cube?.value ?? 1) * (aggro ? 2 : 1), aggro, dropped: false };
 }
 
 // --- Legal move computation ---
@@ -541,7 +594,8 @@ export function applyMove(state, playerIndex, move) {
   if (player.marbles.every(m => m.zone === 'home')) {
     state.phase = 'GAME_OVER';
     state.winner = playerIndex;
-    events.push({ event: 'gameOver', winnerIndex: playerIndex });
+    if (state.cube) state.result = gameResult(state, playerIndex);
+    events.push({ event: 'gameOver', winnerIndex: playerIndex, ...(state.result ? { result: state.result } : {}) });
   }
 
   return events;
