@@ -16,7 +16,7 @@
 // wins; A maximises it on A's rolls, B minimises it on B's; 6s roll again.
 // Positions are rotated so A is on arm 0; one solution per offset of B's arm.
 // Rebuild after any rule change that affects movement.
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
 import { gzipSync } from 'zlib';
 import { createGame, allLegalMoves, applyMove, earnsExtraRoll } from '../src/GameEngine.js';
 import { allPlays } from '../src/Analysis.js';
@@ -191,11 +191,18 @@ for (const name of which) {
   const t0 = Date.now();
   const A = playerSpace(0, 3, spec.seedsA);
   const out = { version: 2, note: 'see tools/build-duel-table.mjs', statesA: A.keys, offsets: {} };
+  // Each offset is saved as soon as it is solved (DUEL_CACHE, default
+  // ./.duel-cache), so an interrupted build resumes where it stopped.
+  const cacheDir = process.env.DUEL_CACHE ?? '.duel-cache';
+  mkdirSync(cacheDir, { recursive: true });
   for (let k = 1; k <= 5; k++) {
+    const cached = `${cacheDir}/duel-${name}-${k}.json`;
+    if (existsSync(cached)) { out.offsets[k] = JSON.parse(readFileSync(cached, 'utf8')); console.error(`table ${name}, offset ${k}: from cache`); continue; }
     const B = playerSpace(k, 0, spec.seedsB);
     const n = verify(A, B, k);
     console.error(`table ${name}, offset ${k}: ${A.keys.length} × ${B.keys.length} positions; composition matches the engine on ${n} random positions`);
     out.offsets[k] = { statesB: B.keys, values: solve(A, B) };
+    writeFileSync(cached, JSON.stringify(out.offsets[k]));
   }
   const file = new URL(`../src/duel-${name}.json.gz`, import.meta.url);
   writeFileSync(file, gzipSync(JSON.stringify(out)));
