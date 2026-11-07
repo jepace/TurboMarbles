@@ -23,7 +23,9 @@ import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { createGame, allLegalMoves, applyMove, earnsExtraRoll } from '../src/GameEngine.js';
-import { spaceName, parseSpaceName } from '../public/js/constants.js';
+import { locName, parseLocName, armOf } from '../public/js/constants.js';
+// Squares in a log are in the MOVER's numbers (countdown to their home).
+let curArm = 0;
 import { lookup, expectedTurns, finishedBy, raceWinProbability } from '../src/EndgameTable.js';
 
 const args = process.argv.slice(2);
@@ -64,12 +66,7 @@ const issues = [];
 const notes = [];
 
 function parseLoc(tok) {
-  tok = tok.replace('*', '');
-  if (tok === 'base') return { zone: 'base' };
-  if (tok === 'hub') return { zone: 'center' };
-  const h = tok.match(/^h(\d)$/);
-  if (h) return { zone: 'home', slot: +h[1] };
-  return { zone: 'track', space: /^\d+$/.test(tok) ? +tok : parseSpaceName(tok) };
+  return parseLocName(tok, curArm) ?? { zone: 'track', space: -1 };
 }
 function at(m, loc) {
   if (m.zone !== loc.zone) return false;
@@ -82,8 +79,8 @@ function dest(mv) {
   if (mv.toZone === 'center') return { zone: 'center' };
   return { zone: 'track', space: mv.toSpace };
 }
-const locStr = l => l.zone === 'track' ? spaceName(l.space) : l.zone === 'home' ? `h${l.slot}` : l.zone === 'center' ? 'hub' : 'base';
-const marbleStr = m => m.zone === 'track' ? spaceName(m.space) : m.zone === 'home' ? `h${m.slot}` : m.zone === 'center' ? 'hub' : 'base';
+const locStr = l => locName(l, curArm);
+const marbleStr = m => locName(m, curArm);
 function describe(mv, pi) {
   const m = game.players[pi].marbles[mv.marbleId];
   return `${marbleStr(m)}→${locStr(dest(mv))} (die ${game.dice[mv.dieIndex]}${mv.optional ? ', optional' : ''})`;
@@ -168,6 +165,7 @@ for (const t of turns) {
   game.dice = t.dice;
   game.diceUsed = [false, false];
   game.phase = 'AWAITING_MOVE';
+  curArm = Math.max(0, armOf(game.players[t.who].config));
 
   const segs = t.moves === '--' ? [] : t.moves.split(/\s+/).flatMap(p => {
     const toks = p.split('/');

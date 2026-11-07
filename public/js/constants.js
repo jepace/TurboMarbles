@@ -106,3 +106,41 @@ export function pipCount(arm, marbles) {
   for (let s = 1; s <= HOME_SLOTS; s++) if (!filled.has(s)) pips += s;
   return pips;
 }
+
+// ---- Countdown numbering (what players see) -----------------------------------
+//
+// Like backgammon, every player numbers the track from their own side: a
+// square's number is how far it is from that player's home entry, walking
+// (0 = the home entry, 83 = the start square). Each player sees their own
+// numbers on the board; the move log uses the mover's numbers. Home slots
+// are h1–h4; also 'hub' and 'base'. (spaceName above is the old colour-based
+// name, kept for internal tools and tests.)
+export const armOf = playerConfigOrColor => {
+  const c = typeof playerConfigOrColor === 'string' ? playerConfigOrColor : playerConfigOrColor?.color;
+  return PLAYER_CONFIG.findIndex(p => p.color === c);
+};
+export function countdown(arm, space) {
+  return (PLAYER_CONFIG[arm].homeEntry - space + TRACK_SIZE) % TRACK_SIZE;
+}
+export function fromCountdown(arm, n) {
+  if (!Number.isInteger(n) || n < 0 || n >= TRACK_SIZE) return null;
+  return ((PLAYER_CONFIG[arm].homeEntry - n - 1 + TRACK_SIZE) % TRACK_SIZE) + 1;
+}
+// A location in `arm`'s numbers: "30", "h2", "hub", "base".
+export function locName(loc, arm) {
+  if (!loc) return '?';
+  if (loc.zone === 'track') return String(countdown(arm, loc.space));
+  if (loc.zone === 'home') return `h${loc.slot}`;
+  if (loc.zone === 'center') return 'hub';
+  return 'base';
+}
+export function parseLocName(tok, arm) {
+  tok = String(tok).replace('*', '').trim();
+  if (tok === 'base') return { zone: 'base' };
+  if (tok === 'hub') return { zone: 'center' };
+  const h = tok.match(/^h([1-4])$/);
+  if (h) return { zone: 'home', slot: +h[1] };
+  if (/^\d+$/.test(tok)) { const s = fromCountdown(arm, +tok); return s ? { zone: 'track', space: s } : null; }
+  const s = parseSpaceName(tok);                     // old colour names still accepted
+  return s ? { zone: 'track', space: s } : null;
+}

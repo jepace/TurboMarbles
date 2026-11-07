@@ -5,7 +5,7 @@
 import WebSocket  from 'ws';
 import * as rl_   from 'readline';
 import { fileURLToPath } from 'url';
-import { PLAYER_CONFIG, ARM_MAP, ARM_COLORS, ALL_STARS, spaceName } from './public/js/constants.js';
+import { PLAYER_CONFIG, ARM_MAP, ARM_COLORS, ALL_STARS, countdown, armOf } from './public/js/constants.js';
 
 // ===== SECTION 1: CONFIG & CONSTANTS =====
 
@@ -328,25 +328,29 @@ function drawBoardAscii(gameState) {
 
 // ---- Simple text helpers (for event log lines) ----
 
-function describeMarble(m) {
+// Squares are shown in a player's own numbers: the countdown to their home
+// entry (backgammon style). arm = that player's arm (default: blue).
+const sq = (space, arm = 0) => String(countdown(arm, space));
+function describeMarble(m, arm = 0) {
   if (m.zone === 'base')   return 'base';
-  if (m.zone === 'track')  return spaceName(m.space);
+  if (m.zone === 'track')  return sq(m.space, arm);
   if (m.zone === 'home')   return `home slot ${m.slot}`;
   if (m.zone === 'center') return 'center hub';
   return '?';
 }
-function locStr(loc) {
+function locStr(loc, arm = 0) {
   if (!loc) return '?';
   if (loc.zone === 'base')   return 'base';
   if (loc.zone === 'center') return 'center hub';
   if (loc.zone === 'home')   return `home slot ${loc.slot}`;
-  if (loc.zone === 'track')  return spaceName(loc.space);
+  if (loc.zone === 'track')  return sq(loc.space, arm);
   return '?';
 }
 
 // ===== SECTION 5: MOVE DESCRIPTION FORMATTING =====
 
-export function describeMove(move, dice) {
+export function describeMove(move, dice, arm = 0) {
+  const spaceName = s => sq(s, arm);
   const dieVal = dice ? dice[move.dieIndex] : '?';
   const dieTag = `[die ${move.dieIndex + 1}=${dieVal}]`;
 
@@ -397,6 +401,7 @@ export function describeMove(move, dice) {
 
 let gameState      = null;
 let myPlayerIndex  = null;
+const myArm = () => Math.max(0, armOf(gameState?.players?.[myPlayerIndex]?.color ?? ''));
 let reconnectInfo  = null;
 
 function nameOf(index) {
@@ -419,7 +424,8 @@ function registerSpectatorEvents() {
     print(`  ${nameOf(playerIndex)} rolled a 6 — extra roll!`);
   });
   on('marbleMoved', ({ playerIndex, marbleId, from, to }) => {
-    print(`  ${nameOf(playerIndex)} moved marble #${marbleId + 1}: ${locStr(from)} → ${locStr(to)}`);
+    const mArm = armOf(gameState?.players?.[playerIndex]?.color ?? '');
+    print(`  ${nameOf(playerIndex)} moved marble #${marbleId + 1}: ${locStr(from, mArm)} → ${locStr(to, mArm)}`);
   });
   on('marbleBumped', ({ ownerIndex, marbleId }) => {
     print(`  ** ${nameOf(ownerIndex)}'s marble #${marbleId + 1} was bumped back to base! **`);
@@ -727,7 +733,7 @@ async function pickAndSendMove(legalMoves) {
   for (let i = 0; i < marblesWithMoves.length; i++) {
     const { marbleId } = marblesWithMoves[i];
     const marble       = myPlayer.marbles[marbleId];
-    console.log(`  ${i + 1}) Marble #${marbleId + 1} at ${describeMarble(marble)}`);
+    console.log(`  ${i + 1}) Marble #${marbleId + 1} at ${describeMarble(marble, myArm())}`);
   }
   console.log('  u) Undo last move');
   console.log('  q) Quit');
@@ -745,9 +751,9 @@ async function pickAndSendMove(legalMoves) {
   // --- Pick destination ---
   const { marbleId, moves } = chosen;
   const marble = myPlayer.marbles[marbleId];
-  console.log(`\nMarble #${marbleId + 1} (at ${describeMarble(marble)}) destinations:`);
+  console.log(`\nMarble #${marbleId + 1} (at ${describeMarble(marble, myArm())}) destinations:`);
   for (let i = 0; i < moves.length; i++) {
-    console.log(`  ${i + 1}) ${describeMove(moves[i], gameState.dice)}`);
+    console.log(`  ${i + 1}) ${describeMove(moves[i], gameState.dice, myArm())}`);
   }
   console.log('  b) Back');
 

@@ -1029,6 +1029,12 @@ describe('star track — passing your own home is optional, never forced', () =>
   const d2 = allLegalMoves(g, 0)[0].find(m => m.type === 'moveStar' && m.toSpace === 8);
   assert(d1 && !d1.optional, 'G★ → W★ (lands on the approach star) is a normal move');
   assert(d2 && d2.optional, 'G★ → B★ (past the approach star) is optional');
+  // A copied game (analysis, tables and the robot work on copies) gives the same moves.
+  const yg = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 1);
+  yg.players[1].marbles.forEach((m, i) => Object.assign(m, i === 0 ? { zone: 'track', space: 50, starEligible: true } : { zone: 'base' }));
+  yg.dice = [5, 1]; yg.diceUsed = [false, false]; yg.phase = 'AWAITING_MOVE';
+  const flags = st => JSON.stringify(allLegalMoves(st, 1)[0].map(m => [m.toSpace, !!m.optional]));
+  assert(flags(yg) === flags(structuredClone(yg)), 'a cloned game gives the same optional flags (Yellow from Y★ with a 5)');
 });
 
 describe('twoDiceTargets — where one marble gets with both dice', () => {

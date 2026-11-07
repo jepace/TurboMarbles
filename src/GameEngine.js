@@ -269,8 +269,8 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
   // your approach star (the star just before your arm, from which the walk
   // down leads home) takes the marble round again, so it is optional — like
   // walking past the home entry on the main track.
-  const approach = PLAYER_CONFIG[(PLAYER_CONFIG.indexOf(player.config) + 5) % 6]?.star
-    ?? STAR_TRACK[(STAR_TRACK.indexOf(player.config.star) + 5) % 6];
+  // (By the player's own star, not object identity: game states get cloned.)
+  const approach = STAR_TRACK[(STAR_TRACK.indexOf(player.config.star) + 5) % 6];
   const passesHome = k => marble.space === approach ||
     Array.from({ length: k - 1 }, (_, i) => STAR_TRACK[(startIdx + i + 1) % 6]).includes(approach);
 

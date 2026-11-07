@@ -5,8 +5,8 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm } from './board.js';
-import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount } from './constants.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels } from './board.js';
+import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
 // ---- State ----
@@ -33,11 +33,12 @@ let pendingFeedback = null; // { text, cls } — robot comparison for my roll, l
 // ---- Player options (remembered in this browser) ----
 // Move feedback: after committing a roll, show how the robot would have played it.
 // Post-game analysis: offer the "Analyze Game" button when a game ends.
-const settings = { feedback: true, analysis: true };
+const settings = { feedback: true, analysis: true, numbers: true };
 try {
   const saved = JSON.parse(localStorage.getItem('tm.settings') ?? '{}');
   if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
   if (typeof saved.analysis === 'boolean') settings.analysis = saved.analysis;
+  if (typeof saved.numbers === 'boolean') settings.numbers = saved.numbers;
 } catch { /* storage unavailable: use defaults */ }
 function saveSettings() {
   try { localStorage.setItem('tm.settings', JSON.stringify(settings)); } catch { /* ignore */ }
@@ -389,19 +390,19 @@ function describeSquare(hit) {
   if (hit.kind === 'hub')  return ['hub', 'centre hub — leave with a 1'];
   if (hit.kind === 'base') return ['base', `${armName(hit.arm)}'s base`];
   if (hit.kind === 'home') return [`h${hit.slot}`, `${armName(hit.arm)}'s home, slot ${hit.slot}`];
-  const name = spaceName(hit.space);
+  // Each player's number for this square: mine first ("30 for you · 54 for Sloane").
+  const players = gameState?.players ?? [];
+  const me = myPlayerIndex ?? 0;
+  const mine = String(countdown(playerArm(me), hit.space));
+  const others = players.filter(p => p.index !== me).slice(0, 5)
+    .map(p => `${countdown(playerArm(p.index), hit.space)} for ${p.name}`);
   const arm = PLAYER_CONFIG.findIndex(c => c.start === hit.space || c.homeEntry === hit.space || c.star === hit.space);
+  let what = '';
   if (arm !== -1) {
     const c = PLAYER_CONFIG[arm];
-    if (c.start === hit.space)     return [name, `${armName(arm)}'s start`];
-    if (c.homeEntry === hit.space) return [name, `${armName(arm)}'s home entry`];
-    return [name, `${armName(arm)}'s star — star track`];
+    what = c.start === hit.space ? `${armName(arm)}'s start` : c.homeEntry === hit.space ? `${armName(arm)}'s home entry` : `${armName(arm)}'s star`;
   }
-  const owner = 'BPOYGW'.indexOf(name[0]);
-  const n = Number(name.slice(2));
-  return name[1] === '\u2193'
-    ? [name, `${n} before ${armName(owner)}'s home entry`]
-    : [name, `${n} after ${armName(owner)}'s start`];
+  return [mine, [players.length ? 'for you' : '', ...others, what].filter(Boolean).join(' · ')];
 }
 $('board-canvas').addEventListener('mousemove', e => {
   const canvas = e.currentTarget, tip = $('board-tip');
@@ -1126,6 +1127,12 @@ document.addEventListener('keydown', e => {
 // ---- Options checkboxes ----
 $('opt-feedback').checked = settings.feedback;
 $('opt-analysis').checked = settings.analysis;
+$('opt-numbers').checked = settings.numbers;
+$('opt-numbers').addEventListener('change', e => {
+  settings.numbers = e.target.checked; saveSettings();
+  applySquareNumbers();
+  if (gameState) drawBoard(gameState);
+});
 $('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; saveSettings(); });
 $('opt-analysis').addEventListener('change', e => {
   settings.analysis = e.target.checked; saveSettings();
@@ -1307,9 +1314,10 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
   // Accumulate move for backgammon notation; merge consecutive same-marble moves.
   // Bump spaces are marked with * inline (e.g. "28/29*/30") using the victim's
   // zone location so the asterisk lands on the right space, not the final one.
-  const bumpLocs = new Set(victims.map(v => locNotation(v.loc)));
-  const fromStr = locNotation(from);
-  const toStr   = locNotation(to) + (bumpLocs.has(locNotation(to)) ? '*' : '');
+  // All in the mover's numbers (backgammon style: the countdown to their home).
+  const bumpLocs = new Set(victims.map(v => locNotation(v.loc, playerIndex)));
+  const fromStr = locNotation(from, playerIndex);
+  const toStr   = locNotation(to, playerIndex) + (bumpLocs.has(locNotation(to, playerIndex)) ? '*' : '');
   const last    = turnLogMoves[turnLogMoves.length - 1];
   if (last && last.marbleId === marbleId) {
     // Strip any trailing * from the previous segment's last entry to compare cleanly
@@ -1927,13 +1935,18 @@ function runNextAnimation() {
 // ---- Backgammon-style notation helpers ----
 
 // Convert a zone-descriptor { zone, space?, slot? } to a notation string.
-function locNotation(loc) {
+// A location in player pi's numbers (their countdown to home): "30", "h2", "hub".
+function locNotation(loc, pi) {
   if (!loc) return '?';
   if (loc.zone === 'base')   return 'base';
   if (loc.zone === 'center') return 'hub';
   if (loc.zone === 'home')   return `h${loc.slot}`;
-  if (loc.zone === 'track')  return spaceName(loc.space);   // e.g. B3, B★, W−2
+  if (loc.zone === 'track')  return String(countdown(playerArm(pi), loc.space));
   return '?';
+}
+function playerArm(pi) {
+  const a = armOf(gameState?.players?.[pi]?.color ?? '');
+  return a >= 0 ? a : 0;
 }
 
 // Remove the most recent move from this turn's notation (used by undo).
@@ -2067,6 +2080,12 @@ function faceMyArm() {
   const color = gameState?.players?.[myPlayerIndex]?.color;
   const arm = PLAYER_CONFIG.findIndex(c => c.color === color);
   setViewArm(arm >= 0 ? arm : 0);
+  applySquareNumbers();
+}
+// My countdown numbers on the board (if the option is on).
+function applySquareNumbers() {
+  const arm = playerArm(myPlayerIndex ?? 0);
+  setSquareLabels(settings.numbers ? s => countdown(arm, s) : null);
 }
 
 function playerName(index) {

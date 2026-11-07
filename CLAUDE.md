@@ -91,13 +91,15 @@ B1 - B4 is the Base
 - **Center hub**: Single zone in the middle of the board. Reached by moving exactly 1 step past any star. Exit costs die=1, can emerge on any unblocked star.
 - **Home**: 4 slots per player inside their arm's U corridor. Marbles can only move forward, cannot overshoot slot 4. Cannot be bumped once in home.
 
-### Square Names (move log, feedback, tools)
-Players see squares by colour, not by the internal numbers 1–84 (`spaceName` /
-`parseSpaceName` in `public/js/constants.js`). Each colour's U, in the
-direction of travel: `B↓5 … B↓1` down its right side, `B↓0` its home entry,
-`B↑0` its start, `B↑1 … B↑6` up its left side (every number is a distance), `B★` its star. Letters:
-B P O Y G W. Home slots are `h1`–`h4`; also `hub` and `base`. Hovering a
-square on the board shows its name.
+### Square Numbers (board, move log, feedback, tools)
+Like backgammon, every player numbers the track from their own side: a
+square's number is its walking distance to that player's home entry (0 = home
+entry, 83 = start square) — `countdown` / `fromCountdown` / `locName` /
+`parseLocName` in `public/js/constants.js`. Each player sees their own numbers
+on the board (option "Numbers on board"); the move log, feedback and analysis
+use the **mover's** numbers ("30/25 12/9"). Home slots are `h1`–`h4`; also
+`hub` and `base`. Hovering a square shows every player's number for it. (The
+old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.)
 
 ## Game Rules Summary
 - 2 dice per turn; each die moves one marble.

@@ -11,13 +11,14 @@
 import { allLegalMoves, applyMove, earnsExtraRoll, rollDice } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { lookup, expectedTurns, finishedBy } from './EndgameTable.js';
-import { spaceName } from '../public/js/constants.js';
+import { locName, armOf } from '../public/js/constants.js';
 import { duelWinChance } from './DuelTable.js';
 import { evaluate1 } from './Evaluator.js';
 
 // ---- Positions and notation -------------------------------------------------
 
-const locStr = l => l.zone === 'track' ? spaceName(l.space) : l.zone === 'home' ? `h${l.slot}`
+// Internal key for a location (not shown to players).
+const locStr = l => l.zone === 'track' ? `t${l.space}` : l.zone === 'home' ? `h${l.slot}`
   : l.zone === 'center' ? 'hub' : 'base';
 // One player's marbles, ignoring which same-coloured marble is which.
 export const positionKey = (game, pi) => game.players[pi].marbles.map(locStr).sort().join(' ');
@@ -26,15 +27,21 @@ const boardKey = (game, pi) => positionKey(game, pi) + '|' + game.players.map((_
 
 // Moves in the move-log notation: "79/84 65/70", consecutive moves of one
 // marble joined ("8/39/h1"). Each entry: { marbleId, from, to } (locations).
-export function notation(moves) {
+// The player's arm (their numbering: countdown to their home entry).
+const armOfPlayer = (game, pi) => armOf(game.players[pi].config);
+
+// Moves in the move-log notation, in the mover's numbers (see constants.js
+// countdown): "30/25 12/9", consecutive moves of one marble joined ("8/5/1").
+export function notation(moves, arm = 0) {
+  const nm = l => locName(l, arm);
   const parts = [];
   for (const m of moves) {
     const last = parts[parts.length - 1];
-    const to = locStr(m.to) + (m.bump ? '*' : '');   // * = bumped an opponent, as in the move log
+    const to = nm(m.to) + (m.bump ? '*' : '');   // * = bumped an opponent, as in the move log
     if (last && last.marbleId === m.marbleId && last.end === locStr(m.from)) {
       last.path.push(to);
     } else {
-      parts.push({ marbleId: m.marbleId, path: [locStr(m.from), to] });
+      parts.push({ marbleId: m.marbleId, path: [nm(m.from), to] });
     }
     parts[parts.length - 1].end = locStr(m.to);
   }
@@ -112,7 +119,7 @@ export function moveFeedback(before, after, pi) {
   if (plays.length < 2) return { forced: true };
   const playedKey = boardKey(after, pi);
   const robot = robotPlay(before, pi);
-  const result = { forced: false, robotAgrees: robot.key === playedKey, robotMoves: notation(robot.moves), endgame: null };
+  const result = { forced: false, robotAgrees: robot.key === playedKey, robotMoves: notation(robot.moves, armOfPlayer(before, pi)), endgame: null };
   if (lookup(before.players[pi])) {
     const six = before.dice.includes(6);
     const scored = plays.map(p => ({ p, t: raceTurns(p.game, pi, six) })).filter(x => x.t != null);
@@ -120,7 +127,7 @@ export function moveFeedback(before, after, pi) {
     if (mine && scored.length > 1) {
       const best = scored.reduce((a, b) => (b.t < a.t ? b : a));
       const cost = mine.t - best.t;
-      result.endgame = { best: cost < 0.005, cost: Math.round(cost * 100) / 100, bestMoves: notation(best.p.moves) };
+      result.endgame = { best: cost < 0.005, cost: Math.round(cost * 100) / 100, bestMoves: notation(best.p.moves, armOfPlayer(before, pi)) };
     }
   }
   return result;
@@ -135,7 +142,7 @@ export function describeRoll(before, after, pi) {
   const plays = allPlays(before, pi);
   const key = boardKey(after, pi);
   const mine = plays.find(p => p.key === key);
-  return { forced: plays.length < 2, played: mine ? notation(mine.moves) : '?', options: plays.length, steps: mine ? mine.moves : [] };
+  return { forced: plays.length < 2, played: mine ? notation(mine.moves, armOfPlayer(before, pi)) : '?', options: plays.length, steps: mine ? mine.moves : [] };
 }
 
 // ---- Post-game rollouts -------------------------------------------------------
@@ -232,9 +239,9 @@ export function evaluateDecision({ before, after, pi }, { keep = 3 } = {}) {
   const loss = mine ? Math.max(0, best.win - mine.win) : 0;
   const severity = severityOf(loss, !!mine && mine !== best);
   return {
-    played: mine ? notation(mine.p.moves) : '?',
+    played: mine ? notation(mine.p.moves, armOfPlayer(before, pi)) : '?',
     playedWin: mine ? mine.win : null,
-    best: notation(best.p.moves),
+    best: notation(best.p.moves, armOfPlayer(before, pi)),
     bestWin: best.win,
     loss: Math.round(loss * 1000) / 1000,
     se: 0,
@@ -243,7 +250,7 @@ export function evaluateDecision({ before, after, pi }, { keep = 3 } = {}) {
     robotAgrees: playedKey === robotKey,
     estimate: true,
     options: shown.map(c => ({
-      moves: notation(c.p.moves), win: c.win, n: 0, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
+      moves: notation(c.p.moves, armOfPlayer(before, pi)), win: c.win, n: 0, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
       played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game), steps: c.p.moves,
       facts: positionFacts(c.p.game, pi),
     })),
@@ -301,7 +308,7 @@ export function positionFacts(game, pi) {
   });
   const hits = exposed.map(({ m, id }) => {
     const pm = perMarble.get(id);
-    return { id, at: locStr(m), p: 1 - pm.miss, rolls: pm.rolls.join('; ') };
+    return { id, at: locName(m, armOfPlayer(game, pi)), p: 1 - pm.miss, rolls: pm.rolls.join('; ') };
   }).filter(h => h.p > 0);
   const race = [];
   game.players.forEach((p, i) => {
@@ -367,9 +374,9 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
   const significant = !!mine && mine !== best && loss > 1.96 * se;
   const severity = severityOf(loss, significant);
   return {
-    played: mine ? notation(mine.p.moves) : '?',
+    played: mine ? notation(mine.p.moves, armOfPlayer(before, pi)) : '?',
     playedWin: mine ? mine.win : null,
-    best: notation(best.p.moves),
+    best: notation(best.p.moves, armOfPlayer(before, pi)),
     bestWin: best.win,
     loss: Math.round(loss * 1000) / 1000,
     se: Math.round(se * 1000) / 1000,
@@ -377,7 +384,7 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
     mistake: severity !== 'ok',
     robotAgrees: playedKey === robotKey,
     options: finalists.map(c => ({
-      moves: notation(c.p.moves), win: c.win, n: c.res.length, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
+      moves: notation(c.p.moves, armOfPlayer(before, pi)), win: c.win, n: c.res.length, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
       played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game), steps: c.p.moves,
       facts: positionFacts(c.p.game, pi),
     })),

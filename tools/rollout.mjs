@@ -17,7 +17,8 @@
 // and ignores bumps). Differences smaller than the ± are noise.
 import { readFileSync } from 'fs';
 import { createGame, allLegalMoves, applyMove, earnsExtraRoll, rollDice } from '../src/GameEngine.js';
-import { spaceName, parseSpaceName } from '../public/js/constants.js';
+import { locName, parseLocName, armOf } from '../public/js/constants.js';
+let curArm = 0;     // squares in the log are in the mover's numbers
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 
 const args = process.argv.slice(2);
@@ -37,12 +38,10 @@ const turns = [...text.matchAll(/^(\d+)\. (.+?): (\d)-(\d): (.+)$/gm)].map(m => 
   n: +m[1], who: names.indexOf(m[2]), dice: [+m[3], +m[4]], moves: m[5].trim() }));
 
 // --- log parsing / replay helpers (as in tools/replay.mjs) ---
-const parseLoc = tok => { tok = tok.replace('*', '');
-  if (tok === 'base') return { zone: 'base' }; if (tok === 'hub') return { zone: 'center' };
-  const h = tok.match(/^h(\d)$/); return h ? { zone: 'home', slot: +h[1] } : { zone: 'track', space: /^\d+$/.test(tok) ? +tok : parseSpaceName(tok) }; };
+const parseLoc = tok => parseLocName(tok, curArm) ?? { zone: 'track', space: -1 };
 const at = (m, l) => m.zone === l.zone && (l.zone === 'track' ? m.space === l.space : l.zone === 'home' ? m.slot === l.slot : true);
 const dest = mv => mv.toZone === 'home' ? { zone: 'home', slot: mv.toSlot } : mv.toZone === 'center' ? { zone: 'center' } : { zone: 'track', space: mv.toSpace };
-const str = m => m.zone === 'track' ? spaceName(m.space) : m.zone === 'home' ? `h${m.slot}` : m.zone === 'center' ? 'hub' : 'base';
+const str = m => locName(m, curArm);
 const keyOf = (g, pi) => g.players[pi].marbles.map(str).sort().join(' ');
 // The whole position, ignoring which same-coloured marble is which: the
 // player's marbles first, then every player's (bumps show up here).
@@ -98,6 +97,7 @@ console.log(`Rollouts: ${N} games per option, robot strategy for everyone afterw
 const summary = new Map();
 for (const t of turns) {
   game.turnIndex = t.who; game.dice = t.dice; game.diceUsed = [false, false]; game.phase = 'AWAITING_MOVE';
+  curArm = Math.max(0, armOf(game.players[t.who].config));
   const segs = t.moves === '--' ? [] : t.moves.split(/\s+/).flatMap(p => { const k = p.split('/');
     return k.slice(1).map((tok, i) => ({ from: parseLoc(k[i]), to: parseLoc(tok) })); });
   const before = structuredClone(game);

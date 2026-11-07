@@ -167,6 +167,27 @@ function computeLayout() {
   centerPos = { x: CX, y: CY };
 }
 
+// ---- Square numbers ----
+// Optional small numbers in the track holes and on the stars (each player's
+// own countdown to home; see constants.js). fn(space) → text, or null = off.
+let labelFn = null;
+export function setSquareLabels(fn) { labelFn = fn; }
+function drawSquareLabels() {
+  if (!labelFn) return;
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  for (let s = 1; s <= TRACK_SIZE; s++) {
+    const p = trackPos[s];
+    if (!p) continue;
+    const star = STAR_SPACES.has(s);
+    ctx.font = `600 ${Math.round(W * (star ? 0.015 : 0.0165))}px system-ui, sans-serif`;
+    ctx.fillStyle = star ? 'rgba(70,40,0,0.85)' : 'rgba(255,255,255,0.55)';
+    ctx.fillText(String(labelFn(s)), p.x, p.y + (star ? W * 0.001 : 1));
+  }
+  ctx.restore();
+}
+
 // ---- Hub occupant colour ----
 // The hub's six wedges take the colour of whoever sits in the hub, blending
 // over HUB_FADE_MS when someone arrives, leaves or is bumped out by another.
@@ -232,6 +253,7 @@ export function drawBoard(gameState, opts = {}) {
   drawTrack(n);
   drawHome(n);
   drawCenter();
+  drawSquareLabels();  // under the marbles, so a marble hides its square's number
   if (gameState) drawMarbles(gameState);
   drawRimOverlay();  // repaint rim on top so base panel corners don't poke through
 }
