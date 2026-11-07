@@ -13,7 +13,8 @@
 // (src/evaluator-weights.json). Two-player positions an exact duel table
 // covers use the exact value instead.
 import { readFileSync, existsSync } from 'fs';
-import { racePips, dangerPips } from './RobotPlayer.js';
+import { racePips, dangerPips, pickNextRobotMove } from './RobotPlayer.js';
+import { applyMove, earnsExtraRoll } from './GameEngine.js';
 import { duelWinChance } from './DuelTable.js';
 
 export const FEATURES = ['race', 'sqrtRace', 'base', 'home', 'danger', 'toMove'];
@@ -60,4 +61,28 @@ export function evaluate(game, mover) {
     const f = playerFeatures(game, i, mover);
     return f.reduce((s, x, k) => s + x * w[k], 0);
   }));
+}
+
+// 1-ply: average the evaluation over every roll `mover` can make (21 outcomes,
+// doubles weighted 1/36, others 2/36), with `mover` playing the robot's reply.
+// Slower than evaluate() (~21 robot plays) but sees the next roll's threats
+// and races.
+const ROLLS = [];
+for (let a = 6; a >= 1; a--) for (let b = a; b >= 1; b--) ROLLS.push({ d: [a, b], w: a === b ? 1 / 36 : 2 / 36 });
+export function evaluate1(game, mover) {
+  if (game.winner != null) return evaluate(game, mover);
+  const n = game.players.length;
+  const acc = new Array(n).fill(0);
+  for (const { d, w } of ROLLS) {
+    const g = structuredClone(game);
+    g.turnIndex = mover; g.dice = d.slice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+    while (!(g.diceUsed[0] && g.diceUsed[1]) && g.winner == null) {
+      const mv = pickNextRobotMove(g, mover);
+      if (mv) applyMove(g, mover, mv); else g.diceUsed[g.diceUsed[0] ? 1 : 0] = true;
+    }
+    const next = earnsExtraRoll(d) ? mover : (mover + 1) % n;
+    const p = evaluate(g, next) ?? new Array(n).fill(1 / n);
+    for (let i = 0; i < n; i++) acc[i] += w * p[i];
+  }
+  return acc;
 }
