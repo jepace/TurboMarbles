@@ -529,7 +529,7 @@ function renderSummary() {
 }
 
 // ---- Go deeper on one decision ----
-const LEVEL_NAMES = ['instant', 'quick rollout', 'deep', 'deepest'];
+const LEVEL_NAMES = ['instant', 'checked', 'deep', 'deepest'];
 const deepening = new Set();       // roll indexes being redone
 function analyzeDeeper(idx) {
   const a = analysisReport?.rolls[idx]?.analysis;
@@ -538,6 +538,7 @@ function analyzeDeeper(idx) {
 }
 on('analysisDeepening', ({ idx }) => {
   deepening.add(idx);
+  if ($('game-layout').classList.contains('analysis-mode')) renderMoveList();
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
 on('analysisUpdate', ({ idx, analysis, failed }) => {
@@ -569,7 +570,8 @@ function visibleRolls() {
     (f === 'all' || (f === 'choices' && r.analysis) || (f === 'errors' && r.analysis && r.analysis.severity !== 'ok')));
 }
 
-function badgeFor(r) {
+function badgeFor(r, idx) {
+  if (deepening.has(idx)) return el('span', { class: 'badge unclear', title: 'Being played out to check the estimate' }, 'checking…');
   if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
   const a = r.analysis;
   if (a.severity === 'ok' && a.loss >= 0.03) {
@@ -591,7 +593,7 @@ function renderMoveList() {
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
       el('span', {}, r.dice.join('-')),
       el('span', { class: 'play' }, r.played),
-      badgeFor(r));
+      badgeFor(r, idx));
     rowEl.dataset.idx = idx;
     rowEl.addEventListener('click', () => selectRoll(idx));
     return rowEl;

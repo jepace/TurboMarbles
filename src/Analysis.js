@@ -13,7 +13,7 @@ import { pickNextRobotMove } from './RobotPlayer.js';
 import { lookup, expectedTurns, finishedBy } from './EndgameTable.js';
 import { spaceName } from '../public/js/constants.js';
 import { duelWinChance } from './DuelTable.js';
-import { evaluate } from './Evaluator.js';
+import { evaluate1 } from './Evaluator.js';
 
 // ---- Positions and notation -------------------------------------------------
 
@@ -210,8 +210,9 @@ const marblesOf = g => g.players.map(p => p.marbles.map(m => ({ ...m })));
 
 // ---- Instant analysis (the position evaluator) -------------------------------
 //
-// Every way to play the roll is scored by the evaluator (src/Evaluator.js):
-// the chance to win from the resulting position, the next player to roll.
+// Every way to play the roll is scored by the evaluator at 1-ply
+// (src/Evaluator.js evaluate1): the formula averaged over the next player's
+// rolls, with the robot's reply.
 // No dice are rolled, so there is no noise (se = 0) — but it is a formula's
 // estimate, not a played-out result; "Go deeper" checks it with rollouts.
 export function evaluateDecision({ before, after, pi }, { keep = 3 } = {}) {
@@ -219,7 +220,7 @@ export function evaluateDecision({ before, after, pi }, { keep = 3 } = {}) {
   const playedKey = boardKey(after, pi);
   const robotKey = robotPlay(before, pi).key;
   const next = earnsExtraRoll(before.dice) ? pi : (pi + 1) % before.players.length;
-  const cands = plays.map(p => ({ p, win: evaluate(p.game, next)?.[pi] ?? 0 }));
+  const cands = plays.map(p => ({ p, win: evaluate1(p.game, next)?.[pi] ?? 0 }));
   cands.sort((a, b) => b.win - a.win);
   const best = cands[0];
   const mine = cands.find(c => c.p.key === playedKey) ?? null;
@@ -319,15 +320,23 @@ export function positionFacts(game, pi) {
 //   decision: { before (game after the roll), after (game after the play), pi }
 // Returns { played, playedWin, best, bestWin, loss, se, severity, mistake,
 //           robotAgrees, options: [{ moves, win, loss, played, robot, marbles }] }.
-export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400, keep = 3, maxDeep = 1600, seed = 1, mode = 'rollout' } = {}) {
+export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400, keep = 3, maxDeep = 1600, seed = 1, mode = 'rollout', screenBy = 'rollout' } = {}) {
   if (mode === 'eval') return evaluateDecision({ before, after, pi }, { keep });
   const plays = allPlays(before, pi);
   const playedKey = boardKey(after, pi);
   const robotKey = robotPlay(before, pi).key;
   const dice = before.dice;
-  const nScreen = plays.length > 12 ? Math.ceil(screen / 2) : screen;   // many options: cheaper screen
-  let cands = plays.map(p => ({ p, res: outcomes(p.game, pi, dice, nScreen, seed) }));
-  for (const c of cands) c.win = mean(c.res);
+  // Screen every option: with a few playouts each, or (screenBy 'eval') by
+  // the 1-ply evaluator, which costs no playouts at all.
+  let cands;
+  if (screenBy === 'eval') {
+    const next = earnsExtraRoll(dice) ? pi : (pi + 1) % before.players.length;
+    cands = plays.map(p => ({ p, res: new Uint8Array(0), win: evaluate1(p.game, next)?.[pi] ?? 0 }));
+  } else {
+    const nScreen = plays.length > 12 ? Math.ceil(screen / 2) : screen;   // many options: cheaper screen
+    cands = plays.map(p => ({ p, res: outcomes(p.game, pi, dice, nScreen, seed) }));
+    for (const c of cands) c.win = mean(c.res);
+  }
   cands.sort((a, b) => b.win - a.win);
   const finalists = cands.slice(0, keep);
   for (const k of [playedKey, robotKey]) {

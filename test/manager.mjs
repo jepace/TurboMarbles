@@ -1017,6 +1017,7 @@ describe('analyzeGame — reports every roll of every player', () => {});
   room.game.phase = 'GAME_OVER'; room.game.winner = 0; room.state = 'finished';
   room.game.diceUsed = [true, true];
   gmConfig.analysis = { screen: 4, deep: 8, keep: 2, maxDeep: 8 };
+  gmConfig.analysisLevels = [gmConfig.analysis, { screen: 4, deep: 8, keep: 2, maxDeep: 8 }];
   host.sent = []; guest.sent = [];
   handleAnalyzeGame(host, roomId);
   handleAnalyzeGame(guest, roomId);                            // joins the running analysis
@@ -1038,15 +1039,20 @@ describe('analyzeGame — reports every roll of every player', () => {});
   assert(host.find('analysisResult').length === 1, 'asking again returns the cached report at once');
   assert(an?.level === 0, 'whole-game pass is the quick level');
 
-  // Go deeper on that decision: level 1 replaces it for everyone.
-  gmConfig.analysisLevels = [gmConfig.analysis, { screen: 6, deep: 12, keep: 2, maxDeep: 12 }];
+  // An automatic check may already be playing this decision out (the play
+  // differed from the robot's): wait for it, then go one level deeper.
+  const t0b = Date.now();
+  while (Date.now() - t0b < 30000 && room.analysis.result.rolls[0]._deepening) await new Promise(res => setTimeout(res, 50));
+  const cur = room.analysis.result.rolls[0].analysis.level ?? 0;
+  gmConfig.analysisLevels = [gmConfig.analysis, gmConfig.analysis, { screen: 6, deep: 12, keep: 2, maxDeep: 12 }].slice(0, cur + 2);
+  gmConfig.analysisLevels[cur + 1] = { screen: 6, deep: 12, keep: 2, maxDeep: 12 };
   host.sent = []; guest.sent = [];
   handleAnalyzeDeeper(host, roomId, 0);
   const t1 = Date.now();
   while (!guest.find('analysisUpdate').length && Date.now() - t1 < 30000) await new Promise(res => setTimeout(res, 50));
   const up = guest.find('analysisUpdate')[0];
   assert(host.find('analysisDeepening').length === 1, 'everyone is told it is going deeper');
-  assert(up?.idx === 0 && up.analysis?.level === 1 && up.analysis.options[0].n >= 12, `deeper answer arrives for everyone (level ${up?.analysis?.level})`);
+  assert(up?.idx === 0 && up.analysis?.level === cur + 1 && up.analysis.options[0].n >= 12, `deeper answer arrives for everyone (level ${cur} → ${up?.analysis?.level})`);
   host.sent = [];
   handleAnalyzeDeeper(host, roomId, 0);
   assert(!host.find('analysisDeepening').length, 'no level beyond the last one');

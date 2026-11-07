@@ -34,8 +34,8 @@ export const config = {
   // decision then plays it out at levels 1, 2, 3 (each replaces the last).
   analysis: { mode: 'eval', keep: 3 },
   analysisLevels: [
-    { mode: 'eval', keep: 3 },                             // 0: instant (formula estimate)
-    { screen: 16, deep: 100, keep: 3, maxDeep: 400 },      // 1: quick rollout
+    { mode: 'eval', keep: 3 },                             // 0: instant (1-ply estimate)
+    { screenBy: 'eval', deep: 150, keep: 3, maxDeep: 300 },// 1: checked — the best few by the estimate, yours and the robot's, played out
     { screen: 60, deep: 400, keep: 4, maxDeep: 1600 },     // 2: deep
     { screen: 120, deep: 1200, keep: 5, maxDeep: 4800 },   // 3: deepest
   ],
@@ -1127,13 +1127,50 @@ export function handleAnalyzeGame(ws, roomId) {
       if (msg.type === 'end' && --live === 0) {
         base.rolls.forEach((r, idx) => { if (results.has(idx)) r.analysis = results.get(idx); });
         finish(base);
-        end();
+        autoCheck(room, base, end);
       }
     });
     worker.on('error', fail);
     worker.on('exit', code => { if (code !== 0) fail(new Error(`worker exited ${code}`)); });
     return worker;
   });
+}
+
+// ---------- Automatic check of the questionable decisions ----------
+//
+// After the instant pass, every decision where the play differs from the
+// robot's choice, or the estimate calls it an error, is played out at level 1
+// in the background; each answer replaces the estimate as it arrives.
+function autoCheck(room, report, end) {
+  const level = 1, opts = config.analysisLevels[level];
+  const todo = report.rolls.map((r, idx) => ({ r, idx })).filter(({ r, idx }) =>
+    r.analysis && (!r.analysis.robotAgrees || r.analysis.severity !== 'ok') && room.game?._rolls?.[idx]?.after);
+  if (!opts || !todo.length) { end(); return; }
+  for (const { r, idx } of todo) {
+    Object.defineProperty(r, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
+    broadcast(room, { event: 'analysisDeepening', idx, level, auto: true });
+  }
+  const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, todo.length));
+  let live = nWorkers, ended = false;
+  const stop = () => { if (!ended) { ended = true; for (const { r } of todo) r._deepening = false; end(); } };
+  for (let w = 0; w < nWorkers; w++) {
+    const chunk = todo.filter((_, k) => k % nWorkers === w);
+    const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
+      workerData: { decisions: chunk.map(({ idx }) => { const raw = room.game._rolls[idx]; return { idx, before: raw.before, after: raw.after, pi: raw.pi }; }),
+        options: { ...opts, level } },
+    });
+    worker.on('message', msg => {
+      if (msg.type === 'item') {
+        const roll = report.rolls[msg.idx];
+        roll._deepening = false;
+        if (room.analysis?.result !== report) return;      // a rematch replaced the report
+        roll.analysis = msg.item;
+        broadcast(room, { event: 'analysisUpdate', idx: msg.idx, analysis: msg.item });
+      }
+      if (msg.type === 'end' && --live === 0) stop();
+    });
+    worker.on('error', err => { console.error('[analysis] auto-check failed', err); worker.terminate(); if (--live === 0) stop(); });
+  }
 }
 
 // ---------- Go deeper on one decision ----------
