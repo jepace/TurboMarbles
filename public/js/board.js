@@ -172,17 +172,19 @@ function computeLayout() {
 // own countdown to home; see constants.js). fn(space) → text, or null = off.
 let labelFn = null;
 export function setSquareLabels(fn) { labelFn = fn; }
-function drawSquareLabels() {
+function drawSquareLabels(n) {
   if (!labelFn) return;
+  const activeSet = new Set(playerToArm.slice(0, n));   // arms in play draw arrows
   ctx.save();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   for (let s = 1; s <= TRACK_SIZE; s++) {
     const p = trackPos[s];
     if (!p) continue;
-    // Start and home-entry squares keep their direction arrows instead of a
-    // number (always 83 and 0 for that colour; hover shows them).
-    if (START_SPACES.has(s) || HOME_ENTRY_SPACES.has(s)) continue;
+    // Start and home-entry squares of the colours in play keep their
+    // direction arrows instead of a number (always 83 and 0 for that colour;
+    // hover shows them). Unused colours have no arrows, so they get numbers.
+    if (activeSet.has(START_SPACES.get(s)) || activeSet.has(HOME_ENTRY_SPACES.get(s))) continue;
     const star = STAR_SPACES.has(s);
     ctx.font = `600 ${Math.round(W * (star ? 0.015 : 0.0165))}px system-ui, sans-serif`;
     ctx.fillStyle = star ? 'rgba(70,40,0,0.85)' : 'rgba(255,255,255,0.55)';
@@ -256,7 +258,7 @@ export function drawBoard(gameState, opts = {}) {
   drawTrack(n);
   drawHome(n);
   drawCenter();
-  drawSquareLabels();  // under the marbles, so a marble hides its square's number
+  drawSquareLabels(n);  // under the marbles, so a marble hides its square's number
   if (gameState) drawMarbles(gameState);
   drawRimOverlay();  // repaint rim on top so base panel corners don't poke through
 }
