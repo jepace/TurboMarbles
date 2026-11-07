@@ -6,7 +6,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm } from './board.js';
-import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName } from './constants.js';
+import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
 // ---- State ----
@@ -965,6 +965,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
 
   // Update game state immediately — render is always driven by authoritative state
   Object.assign(marble, to);
+  updatePips();
   const chime = to.zone === 'home' && from.zone !== 'home';
   selectedMarble = null;
   selectedMarbleMoves = []; selectedComboMoves = [];
@@ -1044,6 +1045,7 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   if (fromPos) setMarbleOverride(ownerIndex, marbleId, fromPos);
   else         clearMarbleOverride(ownerIndex, marbleId);
   bumpHandoff.push({ ownerIndex, marbleId, fromPos, loc: from });
+  updatePips();
 });
 
 on('turnChanged', ({ playerIndex }) => {
@@ -1119,6 +1121,7 @@ on('undone', ({ gameState: gs }) => {
   drawBoard(gameState);
   if (isMyTurn()) setHint('Undone. Click a marble to make your moves.');
   updateSkipButton();
+  updatePips();
 });
 
 on('gameOver', ({ winnerIndex }) => showGameOver(winnerIndex));
@@ -1680,13 +1683,29 @@ function renderSidebar() {
     dot.style.background = COLOR_MAP[p.color] ?? '#888';
     const label = document.createElement('span');
     label.textContent = p.name + (p.isRobot ? ' 🤖' : '');
+    const pips = document.createElement('span');
+    pips.className = 'pips';
+    pips.dataset.player = p.index;
+    pips.title = 'Pip count: squares still to travel by the shortest route (stars and hub included), plus the empty home slots';
     row.appendChild(dot);
     row.appendChild(label);
+    row.appendChild(pips);
     list.appendChild(row);
   }
+  updatePips();
   const banner = $('turn-banner');
   banner.textContent = isMyTurn() ? 'Your turn' : `${playerName(gameState.turnIndex)}'s turn`;
   banner.style.color = isMyTurn() ? '#f0c040' : '#aaa';
+}
+
+// Refresh the pip counts in the player list (after every move or bump).
+function updatePips() {
+  if (!gameState) return;
+  for (const el of document.querySelectorAll('#player-list .pips')) {
+    const p = gameState.players[Number(el.dataset.player)];
+    const arm = PLAYER_CONFIG.findIndex(c => c.color === p?.color);
+    el.textContent = arm >= 0 ? `${pipCount(arm, p.marbles)} pips` : '';
+  }
 }
 
 function renderDice(dice, color) {
