@@ -265,6 +265,15 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
   const startIdx = STAR_TRACK.indexOf(marble.space);
   if (startIdx === -1) return moves; // safety: marble not on a star
 
+  // Passing your own home is never forced: a hop that leaves or goes past
+  // your approach star (the star just before your arm, from which the walk
+  // down leads home) takes the marble round again, so it is optional — like
+  // walking past the home entry on the main track.
+  const approach = PLAYER_CONFIG[(PLAYER_CONFIG.indexOf(player.config) + 5) % 6]?.star
+    ?? STAR_TRACK[(STAR_TRACK.indexOf(player.config.star) + 5) % 6];
+  const passesHome = k => marble.space === approach ||
+    Array.from({ length: k - 1 }, (_, i) => STAR_TRACK[(startIdx + i + 1) % 6]).includes(approach);
+
   // k = 6 (die of 6 only) is a full lap back to the starting star.
   for (let k = 1; k <= Math.min(dieVal, 6); k++) {
     const exitStar = STAR_TRACK[(startIdx + k) % 6];
@@ -279,22 +288,23 @@ function legalMovesViaStarTrack(state, player, marble, dieIndex, marbleId) {
     const starsPath = [];
     for (let i = 1; i <= k; i++) starsPath.push(STAR_TRACK[(startIdx + i) % 6]);
 
+    const opt = passesHome(k) ? { optional: true } : {};
     if (remaining === 0) {
       // Stop on this star
-      moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar, starsPath });
+      moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: 'track', toSpace: exitStar, starsPath, ...opt });
     } else if (remaining === 1) {
       // Enter center from this star (center is exactly 1 step from any star)
       if (!ownMarbleAtCenter(player))
-        moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: exitStar, starsPath: [...starsPath] });
+        moves.push({ type: 'enterCenter', dieIndex, marbleId, toZone: 'center', viaStarSpace: exitStar, starsPath: [...starsPath], ...opt });
       // OR continue 1 step on main track from this star
       const tempMarble = { zone: 'track', space: exitStar };
       const dest = computeTrackMove(state, player, tempMarble, 1);
-      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot, starsPath });
+      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot, starsPath, ...opt });
     } else {
       // Continue on main track with remaining steps from exitStar
       const tempMarble = { zone: 'track', space: exitStar };
       const dest = computeTrackMove(state, player, tempMarble, remaining);
-      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot, starsPath });
+      if (dest) moves.push({ type: 'moveStar', dieIndex, marbleId, toZone: dest.toZone, toSpace: dest.toSpace, toSlot: dest.toSlot, starsPath, ...opt });
     }
   }
   return moves;

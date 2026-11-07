@@ -3,7 +3,7 @@
 import { createGame, applyMove } from '../src/GameEngine.js';
 import { lookup, expectedTurns, finishedBy, raceWinProbability, REGION } from '../src/EndgameTable.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
-import { positionFacts } from '../src/Analysis.js';
+import { positionFacts, allPlays, notation } from '../src/Analysis.js';
 import { parseSpaceName, spaceName } from '../public/js/constants.js';
 import { isDuel, duelWinChance } from '../src/DuelTable.js';
 
@@ -92,8 +92,9 @@ describe('robot — uses the table near home', () => {
 }
 
 // The duel table: same race, Yellow's last marble in the hub, Yellow rolls 3-1.
-// Exact best is to wait on a far star (hub/G★/P★, 65.6%) rather than run in
-// to Y↓4 (61.6%) in front of Blue's marble.
+// The robot must play the exact best play by the table. (Under the original
+// rules that was waiting on a far star; since passing your home became
+// optional on the star track too, it is hub/P★/Y↓4.)
 {
   const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 1);
   g.players.forEach((p, pi) => p.marbles.forEach((m, i) => {
@@ -103,13 +104,15 @@ describe('robot — uses the table near home', () => {
   g.dice = [3, 1]; g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
   assert(isDuel(g), 'two last marbles with h2–h4 filled is a duel');
   const v = duelWinChance(g, 1, 1);
-  assert(v > 0.4 && v < 0.7, `duel value is a probability (${v.toFixed(3)})`);
+  assert(v > 0.3 && v < 0.7, `duel value is a probability (${v.toFixed(3)})`);
+  const plays = allPlays(g, 1).map(p => ({ p, v: duelWinChance(p.game, 1, 0) }));
+  const best = plays.reduce((a, b) => (b.v > a.v ? b : a));
   const mv1 = pickNextRobotMove(g, 1);
   applyMove(g, 1, mv1);
   const mv2 = pickNextRobotMove(g, 1);
   applyMove(g, 1, mv2);
-  const at = g.players[1].marbles[3];
-  assert(at.zone === 'track' && spaceName(at.space) === 'P★', `robot waits on P★ (went to ${at.zone === 'track' ? spaceName(at.space) : at.zone})`);
+  const got = duelWinChance(g, 1, 0);
+  assert(Math.abs(got - best.v) < 1e-9, `robot plays the table's best (${notation(best.p.moves)}, ${(100 * best.v).toFixed(1)}%; robot got ${(100 * got).toFixed(1)}%)`);
 }
 
 // Hitting a marble in the hub counts as a hit (it was scored as a plain move).

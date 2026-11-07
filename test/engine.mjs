@@ -1013,6 +1013,24 @@ describe('robot — fills home from the top instead of plugging slot 1', () => {
 
 // ---- Summary ----------------------------------------------------------------
 
+describe('star track — passing your own home is optional, never forced', () => {
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
+  const set = locs => g.players[0].marbles.forEach((m, i) => { m.space = null; m.slot = null; Object.assign(m, locs[i]); m.starEligible = m.zone === 'track' && ALL_STARS.has(m.space); });
+  // Blue on W★ (its approach star) and B↓1; 5-5: every hop round the ring passes home.
+  set([{ zone: 'track', space: 78 }, { zone: 'track', space: 83 }, { zone: 'home', slot: 3 }, { zone: 'home', slot: 4 }]);
+  g.dice = [5, 5]; g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+  const fromW = allLegalMoves(g, 0)[0].filter(m => m.marbleId === 0);
+  assert(fromW.length > 0 && fromW.every(m => m.optional), `all ${fromW.length} hops away from W★ are optional`);
+  assert(allLegalMoves(g, 0)[0].every(m => m.optional), 'so the 5 can be skipped');
+  // From G★: hopping onto W★ (and down) is a normal move; hopping past it to B★ is optional.
+  set([{ zone: 'track', space: 64 }, { zone: 'home', slot: 1 }, { zone: 'home', slot: 3 }, { zone: 'home', slot: 4 }]);
+  g.dice = [2, 1];
+  const d1 = allLegalMoves(g, 0)[1].find(m => m.type === 'moveStar' && m.toSpace === 78);
+  const d2 = allLegalMoves(g, 0)[0].find(m => m.type === 'moveStar' && m.toSpace === 8);
+  assert(d1 && !d1.optional, 'G★ → W★ (lands on the approach star) is a normal move');
+  assert(d2 && d2.optional, 'G★ → B★ (past the approach star) is optional');
+});
+
 describe('twoDiceTargets — where one marble gets with both dice', () => {
   const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
   Object.assign(g.players[0].marbles[0], { zone: 'track', space: 10 });

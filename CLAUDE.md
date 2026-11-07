@@ -105,6 +105,9 @@ square on the board shows its name.
 - Rolling a 6 earns an extra roll after the turn.
 - Landing on an opponent's marble bumps it back to base.
 - Own marbles block your own path.
+- Passing your own home is never forced: walking past your home entry, or hopping along the star
+  track off/past your approach star (the star just before your arm), is an optional move. A die
+  whose only moves are optional can be skipped (Skip Die).
 - First player with all 4 marbles in home wins.
 - Optional doubling cube (2 players, money play; chosen when creating the room): double only at the
   start of your turn before rolling (not before an extra roll from a 6). Take → the cube doubles and
