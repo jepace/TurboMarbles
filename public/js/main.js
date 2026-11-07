@@ -527,6 +527,7 @@ function renderProfile() {
     stat(rating, 'rating', 'From the error rate in analysed games'),
     stat(rate == null ? '—' : `${rate.toFixed(1)}%`, 'error rate per choice', 'Average equity lost per real choice, clear errors only'),
     stat(`${s.errors} / ${s.blunders}`, 'errors / blunders'),
+    stat(`${s.cube_errors} / ${s.cube_blunders}`, 'cube errors / blunders', `${s.cube_decisions} analysed cube decisions; ${(+s.cube_eq_lost).toFixed(2)} points lost`),
     stat(`${s.analysed} of ${s.games}`, 'games analysed'),
   ));
   // Error-rate trend (analysed games, this tab).
@@ -677,7 +678,15 @@ function playerStats(rep, pi) {
     agree: choices.filter(r => r.analysis.robotAgrees).length,
     error: sev('error'), blunder: sev('blunder'),
     lost, rate, rating: choices.length ? RATINGS.find(([max]) => rate < max)[1] : '—',
+    ...cubeStats(rep, pi),
   };
+}
+function cubeStats(rep, pi) {
+  const mine = (rep.cube ?? []).filter(c => c.pi === pi && c.analysis && !c.analysis.skip);
+  const bad = mine.filter(c => c.analysis.severity !== 'ok');
+  return { cubeN: mine.length, cubeError: bad.filter(c => c.analysis.severity === 'error').length,
+    cubeBlunder: bad.filter(c => c.analysis.severity === 'blunder').length,
+    cubeLost: bad.reduce((x, c) => x + c.analysis.loss, 0), cubePending: (rep.cube ?? []).some(c => c.pi === pi && c.pending) };
 }
 
 function el(tag, props = {}, ...kids) {
@@ -725,6 +734,13 @@ function renderSummary() {
     row('Errors / Blunders', s => el('span', {},
       el('span', { class: s.error ? 'sev-error' : '' }, String(s.error)), ' / ',
       el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder))), 'Error: lost 3–10% equity. Blunder: lost 10% or more'),
+    ...((analysisReport.cube ?? []).length ? [
+      row('Cube errors / blunders', s => s.cubePending && !s.cubeN ? 'checking…' : el('span', {},
+        el('span', { class: s.cubeError ? 'sev-error' : '' }, String(s.cubeError)), ' / ',
+        el('span', { class: s.cubeBlunder ? 'sev-blunder' : '' }, String(s.cubeBlunder))),
+        'Cube decisions (double / take / drop). Error: lost 0.05–0.15 points per point of cube. Blunder: 0.15 or more'),
+      row('Cube equity lost', s => `${s.cubeLost.toFixed(2)} pts`, 'Points lost by clear cube errors, at the cube value of each decision'),
+    ] : []),
   ));
   $('ap-summary').replaceChildren(table);
 }
@@ -742,6 +758,20 @@ on('analysisDeepening', ({ idx }) => {
   if ($('game-layout').classList.contains('analysis-mode')) renderMoveList();
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
+on('cubeUpdate', ({ i, analysis }) => {
+  const c = analysisReport?.cube?.[i];
+  if (!c) return;
+  c.analysis = analysis; c.pending = false;
+  if (!$('game-layout').classList.contains('analysis-mode')) return;
+  renderSummary();
+  renderMoveList();
+  if (apCube === i) selectCube(i); else drawChart();
+});
+on('cubeFeedback', ({ playerIndex, text, agrees }) => {
+  if (playerIndex !== myPlayerIndex || !settings.feedback) return;
+  log(`↳ cube: ${text}`, null, `log-feedback ${agrees ? 'agree' : 'differ'}`);
+});
+
 on('analysisUpdate', ({ idx, analysis, failed }) => {
   deepening.delete(idx);
   if (!analysisReport?.rolls[idx]) return;
@@ -769,6 +799,25 @@ $('btn-close-analysis').addEventListener('click', closeAnalysis);
 $('ap-filter').addEventListener('change', renderMoveList);
 $('ap-player').addEventListener('change', renderMoveList);
 
+// The move list: rolls, with each cube decision just before the roll it
+// preceded. Items: { type: 'roll', r, idx } | { type: 'cube', c }.
+function visibleItems() {
+  const f = $('ap-filter').value, who = $('ap-player').value;
+  const cubeOk = c => c.analysis?.skip !== true && (who === 'all' || c.pi === Number(who)) &&
+    (f === 'all' || f === 'choices' || (f === 'errors' && c.analysis && c.analysis.severity !== 'ok'));
+  const cubes = (analysisReport.cube ?? []).filter(cubeOk);
+  const out = [];
+  let k = 0;
+  for (const it of visibleRolls()) {
+    while (k < cubes.length && cubes[k].rollIdx <= it.idx) out.push({ type: 'cube', c: cubes[k++] });
+    out.push({ type: 'roll', ...it });
+  }
+  while (k < cubes.length) out.push({ type: 'cube', c: cubes[k++] });
+  return out;
+}
+const itemKey = it => (it.type === 'cube' ? 'c' + it.c.i : 'r' + it.idx);
+let apCube = null;                 // selected cube decision (index into report.cube), or null
+
 function visibleRolls() {
   const f = $('ap-filter').value, who = $('ap-player').value;
   return analysisReport.rolls.map((r, idx) => ({ r, idx })).filter(({ r }) =>
@@ -791,16 +840,19 @@ function badgeFor(r, idx) {
 function renderMoveList() {
   const rep = analysisReport;
   const box = $('ap-moves');
-  const list = visibleRolls();
-  box.replaceChildren(...list.map(({ r, idx }) => {
+  const list = visibleItems();
+  box.replaceChildren(...list.map(it => {
+    if (it.type === 'cube') return cubeRow(it.c);
+    const { r, idx } = it;
     const p = rep.players[r.pi];
-    const rowEl = el('div', { class: 'ap-row' + (idx === apSel ? ' sel' : ''), title: p.name },
+    const rowEl = el('div', { class: 'ap-row' + (idx === apSel && apCube == null ? ' sel' : ''), title: p.name },
       el('span', { class: 'turn' }, `${r.turn}.`),
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
       el('span', {}, r.dice.join('-')),
       el('span', { class: 'play' }, r.played),
       badgeFor(r, idx));
     rowEl.dataset.idx = idx;
+    rowEl.dataset.key = 'r' + idx;
     rowEl.addEventListener('click', () => selectRoll(idx));
     return rowEl;
   }));
@@ -839,12 +891,79 @@ function diceEl(dice, color) {
     el('span', { class: 'die small', style: `--die-color:${colorVar(color)}` }, String(d))));
 }
 
+// ---- Cube decisions on the analysis page ----
+const CUBE_ACTION = { double: a => (a ? 'Doubles' : 'No double'), take: a => (a ? 'Takes' : 'Drops') };
+function cubeBadge(c) {
+  const a = c.analysis;
+  if (!a) return el('span', { class: 'badge unclear' }, 'checking…');
+  if (a.severity === 'ok') return el('span', { class: a.close ? 'badge unclear' : 'badge ok', title: a.close ? "Close call: within the estimate's noise" : 'Right decision' }, a.close ? 'close ✓' : '✓');
+  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${a.loss.toFixed(2)} points` }, `${SEV_LABEL[a.severity]} −${a.loss.toFixed(2)}`);
+}
+function cubeRow(c) {
+  const p = analysisReport.players[c.pi];
+  const label = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` → ${c.v * 2}` : '');
+  const rowEl = el('div', { class: 'ap-row cube-row' + (apCube === c.i ? ' sel' : ''), title: `${p.name}: cube decision` },
+    el('span', { class: 'turn' }, `${c.turn}.`),
+    el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
+    el('span', { class: 'cube-ico', title: `Cube at ${c.v}` }, String(c.v)),
+    el('span', { class: 'play' }, label),
+    cubeBadge(c));
+  rowEl.dataset.key = 'c' + c.i;
+  rowEl.addEventListener('click', () => selectCube(c.i));
+  return rowEl;
+}
+function markSelected(key) {
+  for (const rowEl of $('ap-moves').children) rowEl.classList.toggle('sel', rowEl.dataset.key === key);
+  $('ap-moves').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
+}
+function selectCube(i) {
+  const rep = analysisReport;
+  const c = rep?.cube?.[i];
+  if (!c) return;
+  apCube = i; apSel = Math.min(c.rollIdx, rep.rolls.length - 1); apOpt = null;
+  markSelected('c' + i);
+  drawChart();
+  const p = rep.players[c.pi];
+  const a = c.analysis;
+  const kids = [el('div', { class: 'ap-title' }, el('span', { class: 'cube-ico big' }, String(c.v)),
+    el('b', {}, `Turn ${c.turn} · ${p.name}`), el('span', { class: 'muted' }, ` ${CUBE_ACTION[c.kind](c.action).toLowerCase()} (cube at ${c.v})`))];
+  if (!a) kids.push(el('div', { class: 'muted' }, 'Being worked out…'));
+  else if (a.skip) kids.push(el('div', { class: 'muted' }, 'Nowhere near a double — not analysed.'));
+  else {
+    const isDouble = c.kind === 'double';
+    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num' }, 'Equity'), el('span')));
+    for (const o of a.options) {
+      // The double's own equity is the lower of take and drop (the opponent's best answer).
+      const bestHere = isDouble ? (o.key === 'nd' ? a.best === 'no double' : false) : o.key === a.best;
+      const playedHere = isDouble ? (o.key === 'nd' ? a.played === 'no double' : false) : o.key === a.played;
+      const tag = [bestHere ? 'best' : '', playedHere ? 'played' : ''].filter(Boolean).join(' · ');
+      kids.push(el('div', { class: 'ap-opt' }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
+        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + o.eq.toFixed(2)), el('span')));
+    }
+    if (isDouble) {
+      const dbl = Math.min(a.options[1].eq, a.options[2].eq);
+      kids.push(el('div', { class: 'ap-opt' }, el('span', {}, 'Double (opponent answers best)',
+        el('span', { class: 'tags' }, [a.best === 'double' ? 'best' : '', a.played === 'double' ? 'played' : ''].filter(Boolean).join(' · '))),
+        el('span'), el('span', { class: 'num' }, (dbl > 0 ? '+' : '') + dbl.toFixed(2)), el('span')));
+    }
+    kids.push(el('div', { class: 'fact' }, `${p.name} wins ${(100 * a.p).toFixed(1)}%` +
+      (a.aggroWin || a.aggroLoss ? ` (aggro wins ${(100 * a.aggroWin).toFixed(1)}%, aggro losses ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
+      (a.exact ? ' — exact (duel table)' : ` — from ${a.n} played-out games`)));
+    const verdict = a.severity !== 'ok' ? `${SEV_LABEL[a.severity]}: the right decision was “${a.best}”; this cost ${a.loss.toFixed(2)} points at cube ${c.v}.`
+      : a.close ? "Close call — the estimate can't separate the options; counts as correct."
+      : `✓ Right decision (${a.best}).`;
+    kids.push(el('div', { class: 'muted' }, verdict + ` Equities in points at cube ${c.v}, from ${p.name}'s side. The cube formulas are an approximation (cube efficiency 0.68).`));
+  }
+  $('ap-detail').replaceChildren(...kids);
+  showPosition(c.marbles);
+}
+
 function selectRoll(idx, opt = null) {
   const rep = analysisReport;
   if (!rep || idx < 0 || idx >= rep.rolls.length) return;
-  apSel = idx; apOpt = opt;
+  apSel = idx; apOpt = opt; apCube = null;
   const r = rep.rolls[idx];
-  for (const rowEl of $('ap-moves').children) rowEl.classList.toggle('sel', Number(rowEl.dataset.idx) === idx);
+  markSelected('r' + idx);
   $('ap-moves').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
   drawChart();
 
@@ -995,12 +1114,13 @@ document.addEventListener('keydown', e => {
   if (e.key === 'p' || e.key === 'P') { selectRoll(apSel, null); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   e.preventDefault();
-  const list = visibleRolls().map(v => v.idx);
+  const list = visibleItems();
   if (!list.length) return;
-  const pos = list.indexOf(apSel);
+  const cur = apCube != null ? 'c' + apCube : 'r' + apSel;
+  const pos = list.findIndex(it => itemKey(it) === cur);
   const step = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : -1;
   const next = pos < 0 ? list[0] : list[Math.max(0, Math.min(list.length - 1, pos + step))];
-  selectRoll(next);
+  if (next.type === 'cube') selectCube(next.c.i); else selectRoll(next.idx);
 });
 
 // ---- Options checkboxes ----

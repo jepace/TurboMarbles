@@ -111,7 +111,8 @@ square on the board shows its name.
   is yours; only the owner redoubles. Drop → lose the cube's current value. A win scores the cube
   value, double for an **aggro** (loser has no marbles home). Every 2-player room keeps a money score
   across Rematches (without the cube a win is 1 point, an aggro 2); 3+ players: games won. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
-  Janowski money-play formulas).
+  Janowski money-play formulas). Cube decisions are analysed too (`src/CubeAnalysis.js`): in-game feedback
+  (`cubeFeedback`) and post-game rows with no double / double-take / double-drop equities.
 
 ## Do Not Change Without Asking
 - The board shape described above — it has been carefully specified and previous attempts to "improve" it broke the layout.

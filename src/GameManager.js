@@ -8,6 +8,7 @@ import {
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { recordGame, saveAnalysis, storeEnabled } from './Store.js';
+import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
 import { worthThinking } from './RobotRollout.js';
@@ -41,6 +42,7 @@ export const config = {
     { screen: 120, deep: 1200, keep: 5, maxDeep: 4800 },   // 3: deepest
   ],
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
+  cubeAnalysisGames: 400, // played-out games per cube decision (when no exact table applies)
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   robotThinkMs: 1500,
@@ -327,8 +329,16 @@ function seatAnalysis(report) {
     const bad = mine.filter(x => x.analysis.severity !== 'ok');
     return { choices: mine.length, errors: bad.filter(x => x.analysis.severity === 'error').length,
       blunders: bad.filter(x => x.analysis.severity === 'blunder').length,
-      eqLost: bad.reduce((sum, x) => sum + x.analysis.loss, 0) };
+      eqLost: bad.reduce((sum, x) => sum + x.analysis.loss, 0),
+      ...cubeSeat(report, pi) };
   });
+}
+function cubeSeat(report, pi) {
+  const mine = (report.cube ?? []).filter(c => c.pi === pi && c.analysis && !c.analysis.skip);
+  const bad = mine.filter(c => c.analysis.severity !== 'ok');
+  return { cubeDecisions: mine.length, cubeErrors: bad.filter(c => c.analysis.severity === 'error').length,
+    cubeBlunders: bad.filter(c => c.analysis.severity === 'blunder').length,
+    cubeEqLost: bad.reduce((sum, c) => sum + c.analysis.loss, 0) };
 }
 function saveRoomAnalysis(room, report) {
   if (!room.storedGameId || !storeEnabled()) return;
@@ -346,6 +356,58 @@ export function storedGameReport(g) {
     rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
       ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
   };
+}
+
+// ---------- Cube decisions: recording and feedback ----------
+
+// The position at the start of a turn, with the cube as it stands.
+function cubeSnapshot(game) {
+  return { ...snapshot(game), phase: 'IN_TURN', dice: null, diceUsed: [false, false], cube: structuredClone(game.cube) };
+}
+
+// Keep a cube decision for the post-game analysis, and give a human the
+// robot's view of it (in-game feedback; the client shows it if move feedback
+// is on). A no-double is only commented on when the robot would have doubled.
+function recordCube(room, entry) {
+  const { game } = room;
+  game._cubeLog ??= [];
+  if (game._cubeLog.length >= 400) return;
+  const rollIdx = (game._rolls?.length ?? 0) + (game._pendingRoll ? 1 : 0);
+  game._cubeLog.push({ ...entry, turn: game._turnNo ?? 1, rollIdx });
+  const slot = room.slots[entry.pi];
+  if (!slot || slot.isRobot || !slot.ws) return;
+  const d = entry.kind === 'double' ? entry.pi : entry.doubler;
+  // A double to a robot: the robot works out the same chances to answer it,
+  // so the feedback waits for that (one estimate, and the robot's thinking
+  // thread stays free for its own decision).
+  if (entry.kind === 'double' && entry.action && room.slots[1 - entry.pi]?.isRobot) { game._feedbackWait = entry; return; }
+  cubeEstimate(entry.state, d).then(est => { if (est) sendCubeFeedback(slot.ws, entry, est); }).catch(() => {});
+}
+
+// est: chances from the doubler's side.
+function sendCubeFeedback(ws, entry, est) {
+  {
+    const d = entry.kind === 'double' ? entry.pi : entry.doubler;
+    const owner = entry.state.cube.owner == null ? 'centre' : entry.state.cube.owner === d ? 'me' : 'opp';
+    const sd = shouldDouble(est, owner);
+    const v = entry.state.cube.value;
+    const f = x => (v * x).toFixed(2);
+    let agrees, text;
+    if (entry.kind === 'double') {
+      agrees = sd.double === entry.action;
+      if (agrees && !entry.action) return;              // a quiet no-double: nothing to say
+      text = agrees ? '✓ Robot agrees: double'
+        : (entry.action ? 'Robot would not double' : 'Robot would have doubled here')
+          + ` (no double ${f(sd.nd)} · double/take ${f(sd.dt)} · double/drop ${f(sd.dp)})`;
+    } else {
+      const takeEq = -sd.dt, dropEq = -sd.dp;
+      const shouldTakeIt = takeEq > dropEq;
+      agrees = shouldTakeIt === entry.action;
+      text = agrees ? `✓ Robot agrees: ${entry.action ? 'take' : 'drop'}`
+        : `Robot would ${shouldTakeIt ? 'take' : 'drop'} (take ${f(takeEq)} · drop ${f(dropEq)})`;
+    }
+    sendTo(ws, { event: 'cubeFeedback', playerIndex: entry.pi, kind: entry.kind, agrees, text, exact: !!est.exact });
+  }
 }
 
 // ---------- Doubling cube ----------
@@ -373,7 +435,10 @@ export function handleDouble(ws, roomId) {
 
 function doubleFor(room, pi) {
   const { game } = room;
+  const before = cubeSnapshot(game);
   if (!offerDouble(game, pi)) return false;
+  game._offerSnap = before;
+  recordCube(room, { kind: 'double', pi, action: true, state: before });
   cubeStat(game, pi).doubles++;
   broadcast(room, { event: 'doubleOffered', playerIndex: pi, value: game.cubeOffer.value });
   const to = game.cubeOffer.to;
@@ -399,6 +464,10 @@ export function handleDrop(ws, roomId) {
 
 function answerDouble(room, pi, take) {
   const { game } = room;
+  const offer = game.cubeOffer;
+  if (offer && offer.to === pi && game._offerSnap) {
+    recordCube(room, { kind: 'take', pi, action: !!take, doubler: offer.from, state: game._offerSnap });
+  }
   if (take) {
     if (!takeDouble(game, pi)) return;
     cubeStat(game, pi).takes++;
@@ -420,6 +489,13 @@ function robotAnswerDouble(room) {
   const pi = offer.to;
   const started = Date.now();
   cubeEstimate(game, pi).then(est => {
+    // Feedback for the human who doubled, from the same estimate.
+    const fw = game._feedbackWait;
+    if (fw && est && fw.pi === offer.from) {
+      game._feedbackWait = null;
+      const w = room.slots[fw.pi]?.ws;
+      if (w) sendCubeFeedback(w, fw, { ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin });
+    }
     const wait = Math.max(0, ROBOT_TURN_DELAY_MS - (Date.now() - started));
     room.robotTurnTimer = setTimeout(() => {
       room.robotTurnTimer = null;
@@ -492,6 +568,9 @@ export function handleRoll(ws, roomId) {
   // Guard: if dice are already set the player has already rolled this turn.
   // Without this check a client could re-roll to fish for a better result.
   if (game.dice) return;
+
+  // Rolling at the start of a turn with the cube available = choosing not to double.
+  if (canDouble(game, game.turnIndex)) recordCube(room, { kind: 'double', pi: game.turnIndex, action: false, state: cubeSnapshot(game) });
 
   const dice = performRoll(game);
   // Compute legal moves and include in the event so clients can highlight destinations.
@@ -911,6 +990,7 @@ function doRobotTurn(room) {
     cubeEstimate(game, me).then(est => {
       if (!rooms.has(room.id) || room.game !== game || game.phase !== 'IN_TURN' || game.turnIndex !== me || !room.slots[me]?.isRobot) return;
       if (est && shouldDouble(est, cubeOwnerFor(game, me)).double && doubleFor(room, me)) return;
+      recordCube(room, { kind: 'double', pi: me, action: false, state: cubeSnapshot(game) });
       doRobotTurn(room);
     }).catch(() => doRobotTurn(room));
     return;
@@ -1150,6 +1230,9 @@ export function handleAnalyzeGame(ws, roomId) {
     winner: game.winner,
     rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
       ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
+    // Cube decisions, worked out in the background (see autoCheck).
+    cube: (game._cubeLog ?? []).map((c, i) => ({ i, turn: c.turn, pi: c.pi, kind: c.kind, action: c.action, doubler: c.doubler,
+      rollIdx: c.rollIdx, v: c.state.cube?.value ?? 1, marbles: c.state.players.map(p => p.marbles), analysis: null, pending: true })),
   };
   const finish = report => {
     room.analysis = { state: 'done', result: report };
@@ -1157,7 +1240,11 @@ export function handleAnalyzeGame(ws, roomId) {
     for (const w of waiting) sendTo(w, { event: 'analysisResult', report });
   };
   const waiting = new Set([ws]);
-  if (!decisions.length) { finish(base); return; }
+  if (!decisions.length) {
+    finish(base);
+    if (base.cube.length) { analysesRunning++; autoCheck(room, base, () => { analysesRunning--; }); }
+    return;
+  }
   if (analysesRunning >= MAX_ANALYSES) {
     sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing another game. Try again in a minute.' });
     return;
@@ -1212,18 +1299,22 @@ function autoCheck(room, report, end) {
   const level = 1, opts = config.analysisLevels[level];
   const todo = report.rolls.map((r, idx) => ({ r, idx })).filter(({ r, idx }) =>
     r.analysis && (!r.analysis.robotAgrees || r.analysis.severity !== 'ok') && room.game?._rolls?.[idx]?.after);
-  if (!opts || !todo.length) { end(); return; }
+  const cubeLog = room.game?._cubeLog ?? [];
+  const cubeTodo = (report.cube ?? []).map(c => c.i).filter(i => cubeLog[i]);
+  if (!opts || (!todo.length && !cubeTodo.length)) { end(); return; }
   for (const { r, idx } of todo) {
     Object.defineProperty(r, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
     broadcast(room, { event: 'analysisDeepening', idx, level, auto: true });
   }
-  const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, todo.length));
+  const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, todo.length + cubeTodo.length));
   let live = nWorkers, ended = false;
   const stop = () => { if (!ended) { ended = true; for (const { r } of todo) r._deepening = false; end(); } };
   for (let w = 0; w < nWorkers; w++) {
     const chunk = todo.filter((_, k) => k % nWorkers === w);
     const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
       workerData: { decisions: chunk.map(({ idx }) => { const raw = room.game._rolls[idx]; return { idx, before: raw.before, after: raw.after, pi: raw.pi }; }),
+        cube: cubeTodo.filter((_, k) => k % nWorkers === w).map(i => ({ i, entry: cubeLog[i] })),
+        cubeGames: config.cubeAnalysisGames,
         options: { ...opts, level } },
     });
     worker.on('message', msg => {
@@ -1233,6 +1324,13 @@ function autoCheck(room, report, end) {
         if (room.analysis?.result !== report) return;      // a rematch replaced the report
         roll.analysis = msg.item;
         broadcast(room, { event: 'analysisUpdate', idx: msg.idx, analysis: msg.item });
+        saveRoomAnalysis(room, report);
+      }
+      if (msg.type === 'cube') {
+        const c = report.cube?.[msg.i];
+        if (!c || room.analysis?.result !== report) return;
+        c.analysis = msg.item; c.pending = false;
+        broadcast(room, { event: 'cubeUpdate', i: msg.i, analysis: msg.item });
         saveRoomAnalysis(room, report);
       }
       if (msg.type === 'end' && --live === 0) stop();

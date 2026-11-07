@@ -108,7 +108,12 @@ function migrate() {
     );
     CREATE INDEX IF NOT EXISTS seats_player ON seats(player_id);
   `);
-  db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema', '1')").run();
+  // Added later: cube-decision numbers per seat.
+  const cols = new Set(db.prepare('PRAGMA table_info(seats)').all().map(c => c.name));
+  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL']]) {
+    if (!cols.has(c)) db.exec(`ALTER TABLE seats ADD COLUMN ${c} ${t}`);
+  }
+  db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema', '2')").run();
 }
 
 const now = () => Date.now();
@@ -227,8 +232,10 @@ export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, se
 export function saveAnalysis(gameId, report, perSeat) {
   if (!db || !gameId) return;
   db.prepare('UPDATE games SET report_gz = ? WHERE id = ?').run(gzipSync(JSON.stringify(report)), gameId);
-  const up = db.prepare('UPDATE seats SET choices = ?, errors = ?, blunders = ?, eq_lost = ? WHERE game_id = ? AND seat = ?');
-  perSeat.forEach((s, seat) => up.run(s.choices, s.errors, s.blunders, s.eqLost, gameId, seat));
+  const up = db.prepare(`UPDATE seats SET choices = ?, errors = ?, blunders = ?, eq_lost = ?,
+    cube_decisions = ?, cube_errors = ?, cube_blunders = ?, cube_eq_lost = ? WHERE game_id = ? AND seat = ?`);
+  perSeat.forEach((s, seat) => up.run(s.choices, s.errors, s.blunders, s.eqLost,
+    s.cubeDecisions ?? null, s.cubeErrors ?? null, s.cubeBlunders ?? null, s.cubeEqLost ?? null, gameId, seat));
 }
 
 export function getGame(gameId) {
@@ -256,7 +263,9 @@ export function playerStats(playerId) {
            COALESCE(SUM(s.doubles),0) doubles, COALESCE(SUM(s.takes),0) takes, COALESCE(SUM(s.drops),0) drops,
            COALESCE(SUM(CASE WHEN g.n_players = 2 THEN 1 ELSE 0 END),0) two_player,
            COALESCE(SUM(s.choices),0) choices, COALESCE(SUM(s.errors),0) errors, COALESCE(SUM(s.blunders),0) blunders,
-           COALESCE(SUM(s.eq_lost),0) eq_lost, COALESCE(SUM(CASE WHEN s.choices IS NOT NULL THEN 1 ELSE 0 END),0) analysed
+           COALESCE(SUM(s.eq_lost),0) eq_lost, COALESCE(SUM(CASE WHEN s.choices IS NOT NULL THEN 1 ELSE 0 END),0) analysed,
+           COALESCE(SUM(s.cube_decisions),0) cube_decisions, COALESCE(SUM(s.cube_errors),0) cube_errors,
+           COALESCE(SUM(s.cube_blunders),0) cube_blunders, COALESCE(SUM(s.cube_eq_lost),0) cube_eq_lost
     FROM seats s JOIN games g ON g.id = s.game_id
     WHERE s.player_id = ? AND g.vs_robot = ?`).get(playerId, vsRobot ? 1 : 0);
   // Opponents: per person (people games) — head to head.

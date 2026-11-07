@@ -2,7 +2,7 @@
 // session score and rematch. No server needed.
 import { createGame, canDouble, offerDouble, takeDouble, dropDouble, gameResult, applyMove } from '../src/GameEngine.js';
 import {
-  createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove,
+  createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove, handleAnalyzeGame,
   handleDouble, handleTake, handleDrop, handleRematch,
   _reset, _getRoom, config as gmConfig,
 } from '../src/GameManager.js';
@@ -152,6 +152,44 @@ describe('manager — two players without the cube still score 1 point a win', (
   handleMove(host, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
   const res = host.find('gameResult')[0];
   assert(res?.result?.points === 1 && res.score.join() === '1,-1', `win scores 1 point (score ${res?.score})`);
+});
+
+await describe('cube analysis — feedback in the game, decisions in the report', async () => {
+  _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 400; gmConfig.cubeAnalysisGames = 60;
+  gmConfig.analysis = { mode: 'eval', keep: 2 };
+  gmConfig.analysisLevels = [gmConfig.analysis, { screenBy: 'eval', deep: 8, keep: 2, maxDeep: 8 }];
+  const host = mockWs();
+  const { roomId } = createRoom(host, 'Alice', 2, undefined, { cube: true });
+  addRobot(host, roomId);
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  const g = room.game;
+  // Exact duel: Alice (to move) 31% — doubling is a blunder; the robot takes.
+  for (const p of g.players) p.marbles.forEach((m, i) => { if (i < 3) Object.assign(m, { zone: 'home', slot: 4 - i, space: null }); });
+  Object.assign(g.players[0].marbles[3], { zone: 'track', space: 30, slot: null });
+  Object.assign(g.players[1].marbles[3], { zone: 'track', space: 60, slot: null });
+  host.sent = [];
+  handleDouble(host, roomId);
+  for (let t = 0; t < 60 && !host.find('cubeFeedback').length; t++) await sleep(50);
+  const fb = host.find('cubeFeedback')[0];
+  assert(fb && fb.kind === 'double' && fb.agrees === false && /would not double/.test(fb.text), `feedback on a bad double (${fb?.text})`);
+  for (let t = 0; t < 60 && !host.find('doubleTaken').length; t++) await sleep(50);
+  // End the game quickly: Alice wins.
+  g.players[0].marbles[3] = Object.assign(g.players[0].marbles[3], { zone: 'track', space: 84 });
+  g.phase = 'AWAITING_MOVE'; g.dice = [1, 2]; g.diceUsed = [false, true]; g._humanMadeMove = false; g._undoStack = [];
+  handleMove(host, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
+  host.sent = [];
+  handleAnalyzeGame(host, roomId);
+  for (let t = 0; t < 200 && !host.find('cubeUpdate').length; t++) await sleep(50);
+  const rep = host.find('analysisResult')[0]?.report;
+  assert(rep?.cube?.some(c => c.kind === 'double' && c.action) && rep.cube.some(c => c.kind === 'take'), 'report lists the double and the take');
+  const ups = host.find('cubeUpdate');
+  for (let t = 0; t < 200 && ups.length < rep.cube.length; t++) { await sleep(50); ups.splice(0, ups.length, ...host.find('cubeUpdate')); }
+  const dbl = ups.find(u => rep.cube[u.i].kind === 'double')?.analysis;
+  const tk = ups.find(u => rep.cube[u.i].kind === 'take')?.analysis;
+  assert(dbl?.best === 'no double' && dbl.severity === 'blunder' && dbl.exact, `the double is a blunder (exact; loss ${dbl?.loss})`);
+  assert(tk?.best === 'take' && tk.severity === 'ok', 'the take was right');
+  await _stop();
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
