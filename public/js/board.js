@@ -180,6 +180,9 @@ function drawSquareLabels() {
   for (let s = 1; s <= TRACK_SIZE; s++) {
     const p = trackPos[s];
     if (!p) continue;
+    // Start and home-entry squares keep their direction arrows instead of a
+    // number (always 83 and 0 for that colour; hover shows them).
+    if (START_SPACES.has(s) || HOME_ENTRY_SPACES.has(s)) continue;
     const star = STAR_SPACES.has(s);
     ctx.font = `600 ${Math.round(W * (star ? 0.015 : 0.0165))}px system-ui, sans-serif`;
     ctx.fillStyle = star ? 'rgba(70,40,0,0.85)' : 'rgba(255,255,255,0.55)';
