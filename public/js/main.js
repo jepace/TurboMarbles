@@ -64,7 +64,17 @@ let selectedHostColor = 'blue';
 function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
+  if (id === 'screen-landing') focusName();
 }
+
+// Put the cursor in the name box (selected, so typing replaces a remembered
+// name and Enter keeps it). Browsers don't reliably honour autofocus on reload.
+function focusName() {
+  const el = $('landing-name');
+  if (!el) return;
+  requestAnimationFrame(() => { el.focus(); el.select(); });
+}
+window.addEventListener('pageshow', () => { if ($('screen-landing').classList.contains('active')) focusName(); });
 
 // ---- DOM refs ----
 const $ = id => document.getElementById(id);
