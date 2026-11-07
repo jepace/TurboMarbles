@@ -15,10 +15,18 @@
   <div class="card">
     <h1>TurboMarbles</h1>
     <p class="tagline">Race your marbles. Wreck your friends.</p>
+    <div id="account-line" class="account-line"></div>
     <input id="landing-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off" autofocus>
+    <label id="remember-row" class="opt-row" title="Saves your name and a private key in this browser, and keeps your games and statistics">
+      <input type="checkbox" id="landing-remember" checked> Keep my stats (remember me on this device)
+    </label>
     <div class="btn-row">
       <button id="btn-create">Create Game</button>
       <button id="btn-join">Join Game</button>
+    </div>
+    <div class="btn-row small-links">
+      <button id="btn-profile" class="secondary" style="display:none">My Profile</button>
+      <button id="btn-use-code" class="link-btn">Signed in on another device? Use a link code</button>
     </div>
   </div>
 </div>
@@ -37,6 +45,28 @@
       <button id="btn-create-confirm" class="btn-go">Create</button>
       <button class="secondary" id="btn-create-back">Back</button>
     </div>
+  </div>
+</div>
+
+<div id="screen-profile" class="screen">
+  <div class="card profile-card">
+    <div class="profile-head">
+      <h2 id="profile-name"></h2>
+      <button id="btn-profile-back" class="secondary">Back</button>
+    </div>
+    <div class="tabs">
+      <button class="tab on" data-tab="people">vs People</button>
+      <button class="tab" data-tab="robots">vs Robots</button>
+    </div>
+    <div id="profile-stats"></div>
+    <div id="profile-trend"></div>
+    <h3>Head to head</h3>
+    <div id="profile-h2h"></div>
+    <h3>Games</h3>
+    <div id="profile-games"></div>
+    <button id="btn-more-games" class="secondary" style="display:none">More…</button>
+    <h3>Account</h3>
+    <div id="profile-account"></div>
   </div>
 </div>
 

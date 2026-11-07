@@ -1,6 +1,6 @@
 // main.js — UI controller, screen management, game event handling
 
-import { connect, on, send, setReconnectInfo } from './socket.js';
+import { connect, on, send, setReconnectInfo, onOpen } from './socket.js';
 import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
@@ -80,21 +80,26 @@ window.addEventListener('pageshow', () => { if ($('screen-landing').classList.co
 const $ = id => document.getElementById(id);
 
 // ---- Landing ----
-$('btn-create').addEventListener('click', () => {
-  if (!validateName()) return;
+$('btn-create').addEventListener('click', () => withName(() => {
   show('screen-create');
   const n = parseInt($('create-count').value, 10);
   updateColorPicker(n >= 2 && n <= 6 ? n : 4);
-});
-$('btn-join').addEventListener('click', () => {
-  if (!validateName()) return;
-  show('screen-join');
-});
+}));
+$('btn-join').addEventListener('click', () => withName(() => show('screen-join')));
 function validateName() {
-  const n = $('landing-name').value.trim();
+  const n = me ? me.name : $('landing-name').value.trim();
   if (!n) { $('landing-name').focus(); return false; }
   myName = n;
   return true;
+}
+// Continue once there is a name — registering it first if "Keep my stats" is
+// ticked and this browser isn't signed in yet.
+function withName(next) {
+  if (!validateName()) return;
+  if (me || !$('landing-remember').checked) { next(); return; }
+  pendingAfterRegister = next;
+  connect();
+  send({ action: 'register', name: myName });
 }
 // Enter on name field → Create Game (most common action)
 $('landing-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create').click(); });
@@ -419,7 +424,192 @@ $('board-canvas').addEventListener('mouseleave', () => { $('board-tip').style.di
 
 on('error', ({ code, message }) => {
   if (code && code.startsWith('ANALYSIS')) resetAnalyzeButton();
+  if (code === 'NAME_TAKEN' || code === 'RATE_LIMITED' || code === 'BAD_LINK_CODE') pendingAfterRegister = null;
+  if (code === 'STATS_UNAVAILABLE') { statsUnavailable = true; updateLanding(); if (pendingAfterRegister) { const f = pendingAfterRegister; pendingAfterRegister = null; f(); } return; }
   alert(message);
+});
+
+// ---- Accounts: sign-in, profile, stats, history ----
+// The device key (the login) lives in this browser only. The server keeps
+// just its hash; see src/Accounts.js.
+const KEY_STORE = 'tm.key';
+let me = null;                    // { id, name } when signed in
+let pendingAfterRegister = null;  // continue Create/Join after registering
+let statsUnavailable = false;
+let viewingStored = false;        // the analysis page is showing a past game
+let profileData = null, profileTab = 'people';
+const loadKey = () => { try { return localStorage.getItem(KEY_STORE); } catch { return null; } };
+const saveKey = k => { try { k ? localStorage.setItem(KEY_STORE, k) : localStorage.removeItem(KEY_STORE); } catch { /* private mode */ } };
+
+onOpen(() => { const k = loadKey(); if (k) send({ action: 'identify', key: k }); });
+if (loadKey()) connect();         // sign in straight away
+
+function updateLanding() {
+  const line = $('account-line');
+  if (me) {
+    line.textContent = `Signed in as ${me.name}`;
+    $('landing-name').value = me.name;
+    $('landing-name').disabled = true;
+    $('remember-row').style.display = 'none';
+    $('btn-profile').style.display = '';
+    $('btn-use-code').style.display = 'none';
+  } else {
+    line.textContent = statsUnavailable ? 'Playing as a guest (stats are off on this server)' : '';
+    $('landing-name').disabled = false;
+    $('remember-row').style.display = statsUnavailable ? 'none' : '';
+    $('btn-profile').style.display = 'none';
+    $('btn-use-code').style.display = statsUnavailable ? 'none' : '';
+  }
+}
+updateLanding();
+
+on('identity', ({ player }) => {
+  if (!player) { saveKey(null); me = null; } else me = player;
+  updateLanding();
+  if (profileData && me) $('profile-name').textContent = me.name;
+});
+on('registered', ({ player, key, linked }) => {
+  saveKey(key);
+  me = player;
+  updateLanding();
+  if (linked) alert(`Signed in as ${player.name} on this device.`);
+  const next = pendingAfterRegister; pendingAfterRegister = null;
+  if (next) next();
+});
+on('accountDeleted', () => {
+  saveKey(null); me = null; profileData = null;
+  updateLanding(); show('screen-landing');
+  alert('Your account has been deleted.');
+});
+
+$('btn-use-code').addEventListener('click', () => {
+  const code = prompt('Enter the link code from your other device (Profile → Link another device), or a recovery key:');
+  if (!code) return;
+  connect();
+  const c = code.trim();
+  if (c.replace(/[^A-Za-z0-9]/g, '').length === 10) send({ action: 'redeemLink', code: c });
+  else { saveKey(c); send({ action: 'identify', key: c }); }
+});
+$('btn-profile').addEventListener('click', () => { connect(); send({ action: 'profile' }); });
+$('btn-profile-back').addEventListener('click', () => show('screen-landing'));
+for (const t of document.querySelectorAll('#screen-profile .tab')) {
+  t.addEventListener('click', () => { profileTab = t.dataset.tab; renderProfile(); });
+}
+
+on('profile', data => { profileData = data; renderProfile(); show('screen-profile'); });
+on('history', ({ games }) => {
+  if (!profileData) return;
+  profileData.games.push(...games);
+  renderProfile();
+  if (games.length < 30) $('btn-more-games').style.display = 'none';
+});
+$('btn-more-games').addEventListener('click', () => {
+  const last = profileData?.games.at(-1);
+  if (last) send({ action: 'history', before: last.endedAt });
+});
+
+function renderProfile() {
+  const d = profileData;
+  if (!d) return;
+  $('profile-name').textContent = d.player.name;
+  for (const t of document.querySelectorAll('#screen-profile .tab')) t.classList.toggle('on', t.dataset.tab === profileTab);
+  const s = d.stats[profileTab];
+  const pct = (a, b) => (b ? `${Math.round(100 * a / b)}%` : '—');
+  const rate = s.choices ? 100 * s.eq_lost / s.choices : null;
+  const rating = rate == null ? '—' : RATINGS.find(([max]) => rate < max)[1];
+  const stat = (v, k, title) => el('div', { class: 'stat', title: title ?? '' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'k' }, k));
+  $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
+    stat(s.games, 'games'),
+    stat(`${s.wins} (${pct(s.wins, s.games)})`, 'won'),
+    stat(`${s.points > 0 ? '+' : ''}${s.points}`, 'money points', 'Two-player games: 1 a win, 2 an aggro, × the cube'),
+    stat(`${s.aggro_wins} / ${s.aggro_losses}`, 'aggros won / lost'),
+    stat(`${s.doubles} / ${s.takes} / ${s.drops}`, 'doubles / takes / drops'),
+    stat(rating, 'rating', 'From the error rate in analysed games'),
+    stat(rate == null ? '—' : `${rate.toFixed(1)}%`, 'error rate per choice', 'Average equity lost per real choice, clear errors only'),
+    stat(`${s.errors} / ${s.blunders}`, 'errors / blunders'),
+    stat(`${s.analysed} of ${s.games}`, 'games analysed'),
+  ));
+  // Error-rate trend (analysed games, this tab).
+  const tr = d.stats.trend.filter(t => !!t.vs_robot === (profileTab === 'robots'));
+  if (tr.length >= 2) {
+    const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 80;
+    const ys = tr.map(t => 100 * t.eq_lost / t.choices), top = Math.max(5, ...ys);
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none');
+    const pl = document.createElementNS(ns, 'polyline');
+    pl.setAttribute('points', ys.map((y, i) => `${8 + i * (Wd - 16) / (ys.length - 1)},${Ht - 6 - (y / top) * (Ht - 12)}`).join(' '));
+    pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#e94560'); pl.setAttribute('stroke-width', '2'); pl.setAttribute('vector-effect', 'non-scaling-stroke');
+    svg.append(pl);
+    $('profile-trend').replaceChildren(svg, el('div', { class: 'muted', style: 'font-size:0.75rem' }, `Error rate per analysed game (lower is better; top of chart ${top.toFixed(0)}%)`));
+  } else $('profile-trend').replaceChildren(el('div', { class: 'muted' }, 'Analyse a few games to see your error-rate trend.'));
+  // Head to head (people).
+  const h = d.stats.headToHead;
+  $('profile-h2h').replaceChildren(h.length ? el('table', { class: 'ptable' },
+    el('tr', {}, el('th', {}, 'Opponent'), el('th', {}, 'Games'), el('th', {}, 'Won'), el('th', {}, 'Points')),
+    ...h.map(r => el('tr', {}, el('td', {}, r.name), el('td', {}, String(r.games)), el('td', {}, `${r.wins} (${pct(r.wins, r.games)})`),
+      el('td', {}, `${r.points > 0 ? '+' : ''}${r.points}`)))) : el('div', { class: 'muted' }, 'No games against other people yet.'));
+  // Game history (this tab).
+  const games = d.games.filter(g => g.vsRobot === (profileTab === 'robots'));
+  $('profile-games').replaceChildren(games.length ? el('table', { class: 'ptable' },
+    el('tr', {}, el('th', {}, 'When'), el('th', {}, 'Players'), el('th', {}, 'Result'), el('th', {}, 'Points'), el('th', {}, 'Error rate')),
+    ...games.map(g => {
+      const tr = el('tr', { class: 'click', title: 'Open this game' },
+        el('td', {}, new Date(g.endedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })),
+        el('td', {}, g.seats.map((x, i) => (i === g.seat ? 'You' : x.name + (x.isRobot ? ' 🤖' : ''))).join(' · ') + (g.cube ? ' · cube' : '')),
+        el('td', { class: g.won ? 'won' : 'lost' }, (g.won ? 'Won' : 'Lost') + (g.aggro ? ' (aggro)' : '')),
+        el('td', {}, g.players === 2 ? `${g.points > 0 ? '+' : ''}${g.points}` : '—'),
+        el('td', {}, g.errorRate == null ? (g.analysed ? '—' : 'not analysed') : `${(100 * g.errorRate).toFixed(1)}%`));
+      tr.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
+      return tr;
+    })) : el('div', { class: 'muted' }, profileTab === 'robots' ? 'No games against robots yet.' : 'No games against people yet.'));
+  $('btn-more-games').style.display = d.games.length >= 30 ? '' : 'none';
+  renderAccountSection();
+}
+
+function renderAccountSection(extra) {
+  const box = $('profile-account');
+  const btn = (label, fn, cls = 'secondary') => { const b = el('button', { class: cls }, label); b.addEventListener('click', fn); return b; };
+  const rows = [
+    el('div', { class: 'acct-row' }, el('span', { class: 'muted' }, `Signed in on ${profileData?.devices ?? 1} device${profileData?.devices === 1 ? '' : 's'}.`)),
+    el('div', { class: 'acct-row' },
+      btn('Link another device', () => send({ action: 'linkCode' })),
+      btn('Sign out other devices', () => { if (confirm('Sign out every other device? They will need a new link code.')) send({ action: 'signOutOthers' }); }),
+      btn('Show recovery key', () => renderAccountSection(el('div', {},
+        el('div', { class: 'muted' }, 'Your recovery key signs in as you on any device ("Use a link code" on the start screen, then paste it). Keep it somewhere safe and private — anyone with it can play as you.'),
+        el('div', { class: 'keybox' }, loadKey() ?? '(not stored in this browser)'))))),
+    el('div', { class: 'acct-row' },
+      el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
+      btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); })),
+    el('div', { class: 'acct-row' },
+      btn('Delete my account', () => {
+        const c = prompt(`This deletes your account and stats for good (your past games stay in your opponents' histories, without your name). Type your name to confirm:`);
+        if (c) send({ action: 'deleteAccount', confirm: c });
+      }, 'secondary danger')),
+  ];
+  if (extra) rows.splice(2, 0, extra);
+  box.replaceChildren(...rows);
+}
+on('linkCode', ({ code, expiresInMin }) => renderAccountSection(el('div', {},
+  el('div', { class: 'muted' }, `On your other device, open the start screen, choose "Use a link code" and enter this code within ${expiresInMin} minutes (it works once):`),
+  el('div', { class: 'keybox', style: 'font-size:1.4rem;letter-spacing:2px;text-align:center' }, code))));
+
+// A past game, opened from the history: the analysis page as a replay viewer.
+on('storedGame', ({ game, report }) => {
+  const mySeat = game.seats.findIndex(x => me && x.playerId === me.id);
+  const last = report.rolls.at(-1)?.marbles;
+  gameState = {
+    players: report.players.map((p, i) => ({ index: i, name: p.name, color: p.color, isRobot: p.isRobot, marbles: last?.[i] ?? [] })),
+    turnIndex: 0, phase: 'GAME_OVER', dice: null, diceUsed: [false, false], cube: null, score: null,
+  };
+  myPlayerIndex = mySeat >= 0 ? mySeat : 0;
+  viewingStored = true;
+  analysisReport = report; apSel = -1;
+  show('screen-game');
+  $('win-overlay').style.display = 'none';
+  initBoard($('board-canvas'));
+  faceMyArm();
+  openAnalysis();
+  if (!report.rolls.some(r => r.analysis)) log('This game was not analysed — showing the moves only.');
 });
 
 // ---- Move feedback (robot comparison after each committed roll) ----
@@ -510,7 +700,8 @@ function openAnalysis() {
   sel.replaceChildren(el('option', { value: 'all', textContent: 'All players' }),
     ...rep.players.map((p, i) => el('option', { value: String(i), textContent: p.name })));
   // Default view: my own errors.
-  if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = 'errors'; }
+  const analysed = rep.rolls.some(r => r.analysis);
+  if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = analysed ? 'errors' : 'all'; }
   else { sel.value = 'all'; $('ap-filter').value = 'all'; }
   drawChart();
   renderMoveList();
@@ -566,6 +757,11 @@ on('analysisUpdate', ({ idx, analysis, failed }) => {
 function closeAnalysis() {
   $('game-layout').classList.remove('analysis-mode');
   $('analysis-panel').style.display = 'none';
+  if (viewingStored) {
+    viewingStored = false; gameState = null; analysisReport = null;
+    show('screen-profile');
+    return;
+  }
   resizeBoard();
   if (gameState) drawBoard(gameState);
 }
@@ -703,7 +899,7 @@ function selectRoll(idx, opt = null) {
         ? 'Depth: instant estimate (a formula, no games played)'
         : `Depth: ${LEVEL_NAMES[lvl] ?? lvl} · up to ${games} games per option`));
     if (deepening.has(idx)) depth.append(el('span', { class: 'muted' }, ' · going deeper…'));
-    else if (lvl < LEVEL_NAMES.length - 1) {
+    else if (lvl < LEVEL_NAMES.length - 1 && !viewingStored) {
       const b = el('button', { class: 'secondary ap-view', title: 'Redo this decision with more games (+)' }, `Go deeper (+) → ${LEVEL_NAMES[lvl + 1]}`);
       b.addEventListener('click', () => analyzeDeeper(idx));
       depth.append(b);

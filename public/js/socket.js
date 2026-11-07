@@ -12,6 +12,8 @@ export function connect() {
   ws = new WebSocket(`${proto}://${location.host}`);
 
   ws.addEventListener('open', () => {
+    // Sign-in and the like go first, on every (re)connection.
+    for (const fn of openHandlers) { try { fn(); } catch (err) { console.error(err); } }
     // Flush any messages that were queued before the connection opened
     const queued = sendQueue.splice(0);
     queued.forEach(msg => ws.send(JSON.stringify(msg)));
@@ -39,6 +41,10 @@ export function connect() {
     }
   });
 }
+
+const openHandlers = [];
+// Run fn each time the connection opens (before queued messages are sent).
+export function onOpen(fn) { openHandlers.push(fn); }
 
 export function on(event, fn) {
   if (!handlers[event]) handlers[event] = [];
