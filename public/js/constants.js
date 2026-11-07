@@ -77,3 +77,32 @@ export function parseSpaceName(text) {
   if (m[2][0] === DOWN && n >= 0 && n <= 5) return prev + 14 - n;
   return null;
 }
+
+// ---- Pip count ---------------------------------------------------------------
+//
+// A raw pip count, like backgammon's: the squares a player's marbles still
+// have to travel, with no allowance for needing a 1 or 6, exact landings or
+// tidiness.
+//   track:  the walk to the home entry (the long way — no shortcuts)
+//   star:   hop along the star track to the approach star (the star just
+//           before your arm; 1 per star), then 6 down to the entry
+//   hub:    1 out onto the approach star, then 6 down (7)
+//   base:   one more than the start square
+//   home:   plus the empty home slots' numbers (4+3+2+1 = 10 with none home)
+export function pipCount(arm, marbles) {
+  const cfg = PLAYER_CONFIG[arm];
+  const approach = PLAYER_CONFIG[(arm + 5) % 6].star;
+  const starIdx = st => PLAYER_CONFIG.findIndex(c => c.star === st);
+  const walk = sq => (cfg.homeEntry - sq + TRACK_SIZE) % TRACK_SIZE;
+  const fromSquare = sq => ALL_STARS.has(sq) ? (starIdx(approach) - starIdx(sq) + 6) % 6 + 6 : walk(sq);
+  let pips = 0;
+  const filled = new Set();
+  for (const m of marbles) {
+    if (m.zone === 'home') filled.add(m.slot);
+    else if (m.zone === 'center') pips += 7;
+    else if (m.zone === 'base') pips += walk(cfg.start) + 1;
+    else pips += fromSquare(m.space);
+  }
+  for (let s = 1; s <= HOME_SLOTS; s++) if (!filled.has(s)) pips += s;
+  return pips;
+}

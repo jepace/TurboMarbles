@@ -396,3 +396,5 @@ button.secondary { background: #fff2; }
 
 .badge.unclear { color: #b0b8c8; border: 1px dashed #b0b8c8; }
 .ap-depth { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.85rem; }
+
+.player-row .pips { margin-left: auto; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
