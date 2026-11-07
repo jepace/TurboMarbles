@@ -7,6 +7,7 @@ import {
   MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets, gameResult,
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
+import { recordGame, saveAnalysis, storeEnabled } from './Store.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
 import { worthThinking } from './RobotRollout.js';
@@ -112,6 +113,7 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     armIndex: orderedArmMap[i],
     isRobot: false,
     ws: i === 0 ? hostWs : null,
+    accountId: i === 0 ? (hostWs._player?.id ?? null) : null,   // signed-in player's id (stats)
   }));
 
   const room = {
@@ -154,6 +156,7 @@ export function joinRoom(ws, code, playerName) {
   slot.playerId = playerId;
   slot.name = playerName;
   slot.ws = ws;
+  slot.accountId = ws._player?.id ?? null;
   sessions.set(ws._id, { roomId: room.id, playerIndex: slot.index });
 
   // Exclude the joining player — they'll get lobbyState via joinedRoom instead
@@ -283,12 +286,71 @@ function finishGame(room) {
     room.score[r.winner] += r.points;
     room.score.forEach((_, i) => { if (i !== r.winner) room.score[i] -= r.points; });
   }
+  storeFinishedGame(room, r);
   broadcast(room, { event: 'gameResult', winnerIndex: game.winner, result: r,
     score: room.totalPlayers === 2 ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed });
 }
 
+// ---------- Stats: store finished games and their analyses ----------
+
+// Store the finished game if a signed-in player took part. Games against
+// robots are flagged by the store (robot seats with no account).
+function storeFinishedGame(room, r) {
+  if (!storeEnabled() || !room.slots.some(s => s.accountId)) return;
+  const { game } = room;
+  try {
+    finishRollRecord(game);
+    const two = room.totalPlayers === 2;
+    room.storedGameId = recordGame({
+      cube: !!game.cube, winnerSeat: game.winner,
+      rolls: game._rolls ?? [],
+      seats: room.slots.map((s, i) => {
+        const c = game._cubeStats?.[i] ?? {};
+        const won = game.winner === i;
+        return {
+          playerId: s.accountId ?? null, name: s.name ?? `Player ${i + 1}`, color: s.color,
+          isRobot: !!s.isRobot && !s.accountId, won,
+          points: two && r ? (won ? r.points : -r.points) : 0, aggro: !!r?.aggro,
+          doubles: c.doubles, takes: c.takes, drops: c.drops,
+        };
+      }),
+    });
+  } catch (err) {
+    console.error('[store] could not record game', err);
+  }
+}
+
+// Per-seat numbers from an analysis report (clear errors only, as on the page).
+function seatAnalysis(report) {
+  return report.players.map((_, pi) => {
+    const mine = report.rolls.filter(x => x.pi === pi && x.analysis);
+    const bad = mine.filter(x => x.analysis.severity !== 'ok');
+    return { choices: mine.length, errors: bad.filter(x => x.analysis.severity === 'error').length,
+      blunders: bad.filter(x => x.analysis.severity === 'blunder').length,
+      eqLost: bad.reduce((sum, x) => sum + x.analysis.loss, 0) };
+  });
+}
+function saveRoomAnalysis(room, report) {
+  if (!room.storedGameId || !storeEnabled()) return;
+  try { saveAnalysis(room.storedGameId, report, seatAnalysis(report)); } catch (err) { console.error('[store] could not save analysis', err); }
+}
+
+// A stored game, for replay: its saved analysis, or a plain report built
+// from its roll records.
+export function storedGameReport(g) {
+  if (g.report) return g.report;
+  const rolls = g.rolls ?? [];
+  return {
+    players: g.seats.map(s => ({ name: s.name, color: s.color, isRobot: s.isRobot })),
+    winner: g.winnerSeat,
+    rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
+      ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
+  };
+}
+
 // ---------- Doubling cube ----------
 
+const cubeStat = (game, pi) => ((game._cubeStats ??= {})[pi] ??= { doubles: 0, takes: 0, drops: 0 });
 const cubeOwnerFor = (game, pi) => game.cube.owner == null ? 'centre' : game.cube.owner === pi ? 'me' : 'opp';
 
 // Chances for player pi from the start of the current turn: exact when a duel
@@ -312,6 +374,7 @@ export function handleDouble(ws, roomId) {
 function doubleFor(room, pi) {
   const { game } = room;
   if (!offerDouble(game, pi)) return false;
+  cubeStat(game, pi).doubles++;
   broadcast(room, { event: 'doubleOffered', playerIndex: pi, value: game.cubeOffer.value });
   const to = game.cubeOffer.to;
   if (room.slots[to]?.isRobot) robotAnswerDouble(room);
@@ -338,10 +401,12 @@ function answerDouble(room, pi, take) {
   const { game } = room;
   if (take) {
     if (!takeDouble(game, pi)) return;
+    cubeStat(game, pi).takes++;
     broadcast(room, { event: 'doubleTaken', playerIndex: pi, value: game.cube.value, owner: pi });
     scheduleCurrentTurn(room);         // the doubler (robot) rolls; a human doubler rolls themselves
   } else {
     if (!dropDouble(game, pi)) return;
+    cubeStat(game, pi).drops++;
     broadcast(room, { event: 'doubleDropped', playerIndex: pi, winnerIndex: game.winner, result: game.result });
     finishGame(room);
   }
@@ -527,6 +592,7 @@ function leaveRoom(ws) {
     // Remove from lobby immediately — slot becomes available for another player
     slot.playerId = null;
     slot.name = null;
+    slot.accountId = null;
     broadcast(room, { event: 'playerLeft', playerIndex: sess.playerIndex });
     if (cleanupIfAbandoned(room)) return; // delete the room if no humans remain
     // Hand the host role to another human still in the lobby, so the room
@@ -1087,6 +1153,7 @@ export function handleAnalyzeGame(ws, roomId) {
   };
   const finish = report => {
     room.analysis = { state: 'done', result: report };
+    saveRoomAnalysis(room, report);
     for (const w of waiting) sendTo(w, { event: 'analysisResult', report });
   };
   const waiting = new Set([ws]);
@@ -1166,6 +1233,7 @@ function autoCheck(room, report, end) {
         if (room.analysis?.result !== report) return;      // a rematch replaced the report
         roll.analysis = msg.item;
         broadcast(room, { event: 'analysisUpdate', idx: msg.idx, analysis: msg.item });
+        saveRoomAnalysis(room, report);
       }
       if (msg.type === 'end' && --live === 0) stop();
     });
@@ -1209,6 +1277,7 @@ export function handleAnalyzeDeeper(ws, roomId, idx) {
     if (item && room.analysis?.result === report) {
       roll.analysis = item;
       broadcast(room, { event: 'analysisUpdate', idx, analysis: item });
+      saveRoomAnalysis(room, report);
     } else if (!item) {
       broadcast(room, { event: 'analysisUpdate', idx, analysis: roll.analysis, failed: true });
     }

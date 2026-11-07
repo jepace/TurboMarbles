@@ -49,12 +49,14 @@ load_rc_config "${name}"
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
 : ${turbomarbles_piddir:="/var/run/turbomarbles"}
 : ${turbomarbles_pidfile:="${turbomarbles_piddir}/turbomarbles.pid"}
+: ${turbomarbles_datadir:="/var/db/turbomarbles"}   # players, games, stats (SQLite)
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
 command_args="-f -r -R 5 -H -P ${turbomarbles_pidfile} -o ${turbomarbles_log} \
     /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} \
     ORIGIN=${turbomarbles_origin} TRUST_PROXY=${turbomarbles_trust_proxy} \
+    DATA_DIR=${turbomarbles_datadir} \
     /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
 start_precmd="turbomarbles_prestart"
@@ -62,6 +64,7 @@ start_precmd="turbomarbles_prestart"
 turbomarbles_prestart()
 {
     install -d -o "${turbomarbles_user}" -m 755 "${turbomarbles_piddir}"
+    install -d -o "${turbomarbles_user}" -m 700 "${turbomarbles_datadir}"
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
     chmod 640 "${turbomarbles_log}"

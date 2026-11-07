@@ -25,6 +25,8 @@ node test/cli.mjs         # CLI helper unit tests (no server needed)
 node test/endgame.mjs     # endgame table + robot endgame play (no server needed)
 node test/thinker.mjs     # robot background thinking: deadline / fallback guarantees (no server needed)
 node test/cube.mjs        # doubling cube: rules, scoring, robot cube decisions, rematch (no server needed)
+node test/store.mjs       # players, device keys, link codes, games, stats (in-memory SQLite)
+node test/accounts.mjs    # account actions + finished games recorded with analysis (no server needed)
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -38,6 +40,8 @@ node test/integration.mjs # integration tests (requires server running)
 - `src/DuelTable.js` + `src/duel-11.json.gz`, `src/duel-12.json.gz` — exact solutions of two-player endgames: both players down to their last marble (any home layout), and last marble vs two out (tidy homes). Used by the robot and the analysis page. Rebuild with `node tools/build-duel-table.mjs` (≈6 min for 11, longer for 12) after any rules change that affects movement; the build checks its move composition against the engine first.
 - `src/RobotRollout.js`, `src/RobotThinker.js`, `src/robotThinkWorker.js` — late-game robot thinking: rollouts of its options in one background worker; `think()` always settles by the deadline (`config.robotThinkMs`, default 1500; 0 = off) and the robot falls back to its normal move. It only overrides the normal move when a rollout winner is clearly better.
 - `src/Evaluator.js` + `src/evaluator-weights.json` — instant position evaluator (softmax over players: race, base, home, danger, to-move; exact duel tables when they apply; `evaluate1` = 1-ply over the next roll). Fitted by `tools/train-evaluator.mjs` (gen / fit). Used for the instant analysis pass and to pick which options get played out.
+- `src/Store.js` — SQLite (built-in `node:sqlite`, Node 22.13+; disabled cleanly if missing): players, device keys (only hashes stored), link codes, finished games (roll records + analysis, gzipped), per-seat stats. `DATA_DIR` (rc.d: `/var/db/turbomarbles`; default `data/`).
+- `src/Accounts.js` — account WebSocket actions (identify/register/rename/linkCode/redeemLink/signOutOthers/deleteAccount/profile/history/openGame), rate-limited per IP. Passwordless: the device key is the login; names are unique, and guests can't use a registered name.
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.

@@ -27,6 +27,7 @@ sudo rsync ${RSYNC_OPTS} \
     --exclude='board-drawing-full' \
     --exclude='*.sqlite' \
     --exclude='*.sqlite3' \
+    --exclude='data/' \
     --exclude='deploy.sh' \
     --exclude='rc.d/' \
     --exclude='*.md' \

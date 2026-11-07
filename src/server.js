@@ -10,7 +10,12 @@ import {
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
   handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper,
+  storedGameReport,
 } from './GameManager.js';
+import { handleAccountAction, ACCOUNT_ACTIONS } from './Accounts.js';
+import { openStore, isNameTaken } from './Store.js';
+
+openStore();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT   = process.env.PORT   || 8080;
@@ -41,6 +46,16 @@ function clientIp(req) {
 function cleanName(name) {
   if (typeof name !== 'string') return '';
   return name.replace(/[\p{C}]/gu, '').trim().slice(0, 20);
+}
+
+// The name a connection plays under: a signed-in player always plays as
+// their account name; a guest may use any name that isn't a registered
+// player's (so nobody can pose as someone else). null = name taken.
+function playName(ws, raw) {
+  if (ws._player) return ws._player.name;
+  const name = cleanName(raw);
+  if (name && isNameTaken(name)) return null;
+  return name;
 }
 
 const isPlainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -92,6 +107,7 @@ wss.on('connection', (ws, req) => {
   ws._alive = true; // initialise for ping-pong
 
   const ip = clientIp(req);
+  ws._ip = ip;
   const count = (connPerIp.get(ip) ?? 0) + 1;
   if (count > MAX_CONN_PER_IP) {
     ws.close(1013, 'Too many connections');
@@ -149,6 +165,7 @@ wss.on('connection', (ws, req) => {
 // ---- Message dispatch -------------------------------------------------------
 
 const KNOWN_ACTIONS = new Set([
+  ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
   'double', 'take', 'drop', 'rematch', 'analyzeDeeper',
@@ -160,9 +177,17 @@ function dispatch(ws, msg) {
     return;
   }
 
+  if (ACCOUNT_ACTIONS.has(msg.action)) {
+    return handleAccountAction(ws, msg, { send, cleanName,
+      onOpenGame: (w, g) => send(w, { event: 'storedGame',
+        game: { id: g.id, endedAt: g.endedAt, cube: g.cube, seats: g.seats, winnerSeat: g.winnerSeat },
+        report: storedGameReport(g) }) });
+  }
+
   switch (msg.action) {
     case 'createRoom': {
-      const name = cleanName(msg.name);
+      const name = playName(ws, msg.name);
+      if (name === null) return send(ws, { event: 'error', code: 'NAME_TAKEN', message: 'That name belongs to a registered player. Choose another, or sign in.' });
       if (!name || msg.totalPlayers === undefined) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
       const n = Number(msg.totalPlayers);
       if (!Number.isInteger(n) || n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
@@ -175,7 +200,8 @@ function dispatch(ws, msg) {
     }
 
     case 'joinRoom': {
-      const name = cleanName(msg.name);
+      const name = playName(ws, msg.name);
+      if (name === null) return send(ws, { event: 'error', code: 'NAME_TAKEN', message: 'That name belongs to a registered player. Choose another, or sign in.' });
       const code = typeof msg.code === 'string' ? msg.code.toUpperCase().trim().slice(0, 16) : '';
       if (!code || !name) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
       const result = joinRoom(ws, code, name);

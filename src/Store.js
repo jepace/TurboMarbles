@@ -24,7 +24,9 @@ import { gzipSync, gunzipSync } from 'zlib';
 let db = null;
 let disabledReason = null;
 
-export function openStore(dir = process.env.DATA_DIR ?? './data', file = 'turbomarbles.sqlite') {
+// Default: data/ next to src/ (the rc.d script sets DATA_DIR=/var/db/turbomarbles).
+const DEFAULT_DIR = new URL('../data/', import.meta.url).pathname;
+export function openStore(dir = process.env.DATA_DIR || DEFAULT_DIR, file = 'turbomarbles.sqlite') {
   if (db) return true;
   let DatabaseSync;
   try {
