@@ -709,13 +709,14 @@ on('moveFeedback', fb => {
 function resetAnalyzeButton() {
   const btn = $('btn-analyze');
   btn.disabled = false;
-  btn.textContent = 'Analyze Game';
+  btn.textContent = matchOver && matchGames.length > 1 ? 'Analyze Match' : 'Analyze Game';
 }
 // ---- Several games (a match): one report per game, by game number ----
 const reports = new Map();         // game number → report
 let curGame = null;                // game shown on the analysis page (null = match view)
 let matchGames = [];               // finished games of this match/session: { n, score, result, winner }
 let lastGameNo = null;
+let matchOver = false;
 const inMatch = () => !!gameState?.match;
 $('btn-analyze').addEventListener('click', () => {
   if (reports.has(lastGameNo)) { showGame(lastGameNo); return; }
@@ -1884,6 +1885,8 @@ on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
     lastGameNo = game;
     if (!match) matchGames = [];
     matchGames.push({ n: game, winner: winnerIndex, result, score: match ? match.score.slice() : null });
+    matchOver = !!match?.over;
+    if (!$('btn-analyze').disabled) resetAnalyzeButton();
   }
   if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; gameState.match = match ? { ...match, crawford: false } : null; }
   showGameOver(winnerIndex);
