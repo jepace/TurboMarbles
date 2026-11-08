@@ -434,3 +434,5 @@ button.danger { color: #ff8080; }
 
 .ap-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.82rem; color: var(--muted); }
 .ap-status button { padding: 0.2rem 0.7rem; font-size: 0.8rem; }
+
+.ap-head-btns { display: flex; align-items: center; gap: 10px; }

@@ -362,6 +362,46 @@ function moveLogText() {
   ].join('\n');
 }
 
+// A past game opened from the profile has no live log: rebuild it from the
+// report (same format: mover's numbers; cube decisions in their place).
+function reportLogText(rep, endedAt) {
+  const name = i => rep.players[i]?.name ?? `Player ${i + 1}`;
+  const cubes = rep.cube ?? [];
+  const lines = [];
+  let k = 0;
+  const cubeLine = c => c.kind === 'double'
+    ? (c.action ? `${name(c.pi)} doubles to ${c.v * 2}` : null)
+    : `${name(c.pi)} ${c.action ? `takes — cube at ${c.v * 2}` : 'drops'}`;
+  rep.rolls.forEach((r, idx) => {
+    while (k < cubes.length && cubes[k].rollIdx <= idx) { const l = cubeLine(cubes[k++]); if (l) lines.push(l); }
+    lines.push(`${r.turn}. ${name(r.pi)}: ${r.dice.join('-')}: ${r.played}`);
+  });
+  while (k < cubes.length) { const l = cubeLine(cubes[k++]); if (l) lines.push(l); }
+  if (rep.winner != null) lines.push(`🏆 ${name(rep.winner)} wins the game!`);
+  return [`TurboMarbles game log — ${new Date(endedAt ?? Date.now()).toISOString()}`, 'Players:',
+    rep.players.map(p => `  ${p.name} (${p.color})`).join('\n'), '', ...lines, ''].join('\n');
+}
+
+// Copy text to the clipboard (or download it when the clipboard is unavailable).
+async function copyText(btn, text, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = 'Copied ✓';
+  } catch {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
+    a.download = `turbomarbles-log-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    btn.textContent = 'Downloaded ✓';
+  }
+  setTimeout(() => { btn.textContent = label; }, 2000);
+}
+$('btn-ap-copy').addEventListener('click', () => {
+  const text = viewingStored && analysisReport ? reportLogText(analysisReport, storedEndedAt) : moveLogText();
+  copyText($('btn-ap-copy'), text, 'Copy log');
+});
+
 $('btn-copy-log').addEventListener('click', async () => {
   const btn  = $('btn-copy-log');
   const text = moveLogText();
@@ -438,6 +478,7 @@ let me = null;                    // { id, name } when signed in
 let pendingAfterRegister = null;  // continue Create/Join after registering
 let statsUnavailable = false;
 let viewingStored = false;        // the analysis page is showing a past game
+let storedEndedAt = null;
 let profileData = null, profileTab = 'people';
 const loadKey = () => { try { return localStorage.getItem(KEY_STORE); } catch { return null; } };
 const saveKey = k => { try { k ? localStorage.setItem(KEY_STORE, k) : localStorage.removeItem(KEY_STORE); } catch { /* private mode */ } };
@@ -608,6 +649,7 @@ on('storedGame', ({ game, report }) => {
   };
   myPlayerIndex = mySeat >= 0 ? mySeat : 0;
   viewingStored = true;
+  storedEndedAt = game.endedAt;
   analysisReport = report; apSel = -1;
   show('screen-game');
   $('win-overlay').style.display = 'none';
