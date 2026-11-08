@@ -58,7 +58,9 @@ describe('engine — dead cube in a match', () => {
 describe('engine — aggro scoring', () => {
   const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true });
   g.cube.value = 4;
-  assert(gameResult(g, 0).points === 8 && gameResult(g, 0).aggro, 'loser has nobody home: aggro, cube 4 → 8 points');
+  assert(gameResult(g, 0).points === 12 && gameResult(g, 0).baggro, 'loser has all four in base: baggro, cube 4 → 12 points');
+  Object.assign(g.players[1].marbles[1], { zone: 'track', space: 10 });
+  assert(gameResult(g, 0).points === 8 && gameResult(g, 0).aggro && !gameResult(g, 0).baggro, 'loser has nobody home, one out: aggro, cube 4 → 8 points');
   Object.assign(g.players[1].marbles[0], { zone: 'home', slot: 4 });
   assert(gameResult(g, 0).points === 4 && !gameResult(g, 0).aggro, 'loser has one home: plain win, 4 points');
   // Winning move sets the result.
@@ -251,10 +253,19 @@ await describe('cube analysis — go deeper / analyse anyway', async () => {
   assert(deeper?.level === 1 && deeper.n === 40, `go deeper: next level (${deeper?.n} games)`);
 });
 
+describe('3+ players — every loser pays: 1, aggro 2, baggro 3', () => {
+  const g = createGame(['blue', 'yellow', 'green', 'red'].map(c => ({ name: c, color: c })), undefined, 0);
+  Object.assign(g.players[1].marbles[0], { zone: 'home', slot: 4 });      // plain: 1
+  Object.assign(g.players[2].marbles[0], { zone: 'track', space: 20 });   // aggro: 2
+  const r = gameResult(g, 0);                                              // red: all in base, baggro: 3
+  assert(r.points === 6 && r.losers.map(l => l.points).join() === '1,2,3' && r.baggro, `winner +6, losers −1 −2 −3 (${r.losers.map(l => l.points)})`);
+});
+
 describe('Jacoby rule — aggros count only once the cube has been turned', () => {
   const mk = () => { const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true, jacoby: true }); return g; };
   const g = mk();
-  assert(gameResult(g, 0).points === 1 && !gameResult(g, 0).aggro, 'cube at 1: an aggro scores 1');
+  assert(gameResult(g, 0).points === 1 && !gameResult(g, 0).aggro, 'cube at 1: a baggro scores 1');
+  Object.assign(g.players[1].marbles[1], { zone: 'track', space: 10 });
   g.cube.value = 2;
   assert(gameResult(g, 0).points === 4 && gameResult(g, 0).aggro, 'cube turned to 2: an aggro scores 4');
 });
@@ -271,7 +282,7 @@ await describe('match play — score, Crawford game, post-Crawford, match over',
     const g = room.game;
     g.turnIndex = pi;
     g.players[pi].marbles.forEach((m, i) => Object.assign(m, i < 3 ? { zone: 'home', slot: 4 - i } : { zone: 'track', space: g.players[pi].config.homeEntry }));
-    g.players[1 - pi].marbles.forEach((m, i) => Object.assign(m, aggro || i > 0 ? { zone: 'base', space: null, slot: null } : { zone: 'home', slot: 4 }));
+    g.players[1 - pi].marbles.forEach((m, i) => Object.assign(m, i === 0 ? (aggro ? { zone: 'track', space: 10 } : { zone: 'home', slot: 4 }) : { zone: 'base', space: null, slot: null }));
     g.phase = 'AWAITING_MOVE'; g.dice = [1, 2]; g.diceUsed = [false, true]; g._humanMadeMove = false; g._undoStack = [];
     handleMove(pi === 0 ? host : guest, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
   };

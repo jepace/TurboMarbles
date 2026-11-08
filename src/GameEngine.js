@@ -118,11 +118,25 @@ export function dropDouble(state, playerIndex) {
 
 // Points for a game won by `winner` (cube games): the cube's value, doubled
 // for an aggro — the loser has no marbles home.
+// How much a loser pays, in units of the stake: 1, 2 for an aggro (no
+// marbles home), 3 for a baggro (all four still in base).
+export function lossMultiple(player) {
+  if (player.marbles.every(m => m.zone === 'base')) return 3;
+  if (player.marbles.every(m => m.zone !== 'home')) return 2;
+  return 1;
+}
+// The result of a won game. Every loser pays the winner stake × multiple
+// (the stake is the cube's value, else 1). Jacoby: with the cube never turned
+// (still at 1), aggros and baggros count as single games.
+// { winner, points (the winner's total), losers: [{ pi, points }], aggro, baggro, dropped }
 export function gameResult(state, winner) {
-  const loser = state.players.find((_, i) => i !== winner);
-  // Jacoby: with the cube never turned (still at 1), an aggro counts as a single game.
-  const aggro = !!loser && loser.marbles.every(m => m.zone !== 'home') && !(state.jacoby && (state.cube?.value ?? 1) === 1);
-  return { winner, points: (state.cube?.value ?? 1) * (aggro ? 2 : 1), aggro, dropped: false };
+  const stake = state.cube?.value ?? 1;
+  const single = state.jacoby && stake === 1;
+  const losers = state.players.map((p, pi) => ({ pi, mult: single ? 1 : lossMultiple(p) }))
+    .filter(l => l.pi !== winner).map(l => ({ pi: l.pi, points: stake * l.mult, mult: l.mult }));
+  const top = Math.max(1, ...losers.map(l => l.mult));
+  return { winner, points: losers.reduce((s, l) => s + l.points, 0), losers,
+    aggro: top >= 2, baggro: top === 3, dropped: false };
 }
 
 // --- Legal move computation ---

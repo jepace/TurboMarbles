@@ -114,8 +114,9 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
 - Optional doubling cube (2 players, money play; chosen when creating the room): double only at the
   start of your turn before rolling (not before an extra roll from a 6). Take → the cube doubles and
   is yours; only the owner redoubles. Drop → lose the cube's current value. A win scores the cube
-  value, double for an **aggro** (loser has no marbles home). Every 2-player room keeps a money score
-  across Rematches (without the cube a win is 1 point, an aggro 2); 3+ players: games won. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
+  value, double for an **aggro** (loser has no marbles home), triple for a **baggro** (loser has all four
+  still in base). Every room keeps a points score across Rematches: each loser pays the winner 1, 2 for an
+  aggro, 3 for a baggro (× the cube); with 3+ players the winner collects from every loser. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
   Janowski money-play formulas). Cube decisions are analysed too (`src/CubeAnalysis.js`): in-game feedback
   (`cubeFeedback`) and post-game rows with no double / double-take / double-drop equities.
 - Jacoby rule (money play option): an aggro only counts double once the cube has been turned.

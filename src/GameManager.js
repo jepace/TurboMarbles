@@ -298,16 +298,16 @@ function finishGame(room) {
   room.rematchVotes = null;
   room.gamesPlayed++;
   if (game.winner != null) room.wins[game.winner]++;
-  // Two-player rooms keep a money score: a win is 1 point (2 for an aggro),
-  // times the cube's value when playing with the cube.
-  const r = game.result ?? (room.totalPlayers === 2 && game.winner != null ? gameResult(game, game.winner) : null);
+  // Every room keeps a points score: each loser pays the winner 1 (2 for an
+  // aggro, 3 for a baggro), times the cube's value when playing with the cube.
+  const r = game.result ?? (game.winner != null ? gameResult(game, game.winner) : null);
   const m = room.match;
   if (r && m) {
     m.score[r.winner] += r.points;
     if (m.score[r.winner] >= m.length) { m.over = true; m.winner = r.winner; }
   } else if (r) {
     room.score[r.winner] += r.points;
-    room.score.forEach((_, i) => { if (i !== r.winner) room.score[i] -= r.points; });
+    for (const l of r.losers ?? room.score.map((_, pi) => ({ pi, points: r.points })).filter(l => l.pi !== r.winner)) room.score[l.pi] -= l.points;
   }
   storeFinishedGame(room, r);
   room.records ??= [];
@@ -317,7 +317,7 @@ function finishGame(room) {
   room.records.push(rec);
   room.storedGameId = null;
   broadcast(room, { event: 'gameResult', game: rec.n, winnerIndex: game.winner, result: r,
-    score: room.totalPlayers === 2 && !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
+    score: !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
 }
 
@@ -340,7 +340,8 @@ function storeFinishedGame(room, r) {
         return {
           playerId: s.accountId ?? null, name: s.name ?? `Player ${i + 1}`, color: s.color,
           isRobot: !!s.isRobot && !s.accountId, won,
-          points: two && r ? (won ? r.points : -r.points) : 0, aggro: !!r?.aggro,
+          points: r ? (won ? r.points : -(r.losers?.find(l => l.pi === i)?.points ?? (two ? r.points : 0))) : 0,
+          aggro: won ? !!r?.aggro : (r?.losers?.find(l => l.pi === i)?.mult ?? (r?.aggro ? 2 : 1)) >= 2,
           doubles: c.doubles, takes: c.takes, drops: c.drops,
         };
       }),
@@ -1224,7 +1225,7 @@ function publicState(room) {
     diceUsed: game.diceUsed,
     cube: game.cube,
     cubeOffer: game.cubeOffer,
-    score: room.totalPlayers === 2 && !room.match ? room.score.slice() : null,
+    score: !room.match ? room.score.slice() : null,
     wins: room.wins.slice(),
     match: room.match ? { ...structuredClone(room.match), crawford: !!game.cube?.crawford } : null,
     jacoby: !!room.jacoby,

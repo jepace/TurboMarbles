@@ -11,7 +11,7 @@
 //      take point TP = (L − ½) / (W + L + ½)     cash point CP = (L + 1) / (W + L + ½)
 //    Doubler: double when min(double/take, double/drop) beats no double.
 //    Taker:   take when the equity of owning the doubled cube beats −1 (dropping).
-import { applyMove, rollDice, earnsExtraRoll } from './GameEngine.js';
+import { applyMove, rollDice, earnsExtraRoll, lossMultiple } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { duelWinChance } from './DuelTable.js';
 
@@ -36,7 +36,7 @@ function playoutFromTurn(g, mover) {
     turn = 1 - turn;
   }
   const loser = g.players[1 - g.winner];
-  return { winner: g.winner, aggro: !!loser && loser.marbles.every(m => m.zone !== 'home') };
+  return { winner: g.winner, extra: loser ? lossMultiple(loser) - 1 : 0 };
 }
 
 // Exact estimate when a duel table covers the position, else null.
@@ -55,7 +55,9 @@ export function rolloutEstimate(game, pi, { budgetMs = 1200, minGames = 50 } = {
   while (n < minGames || Date.now() - t0 < budgetMs) {
     const r = playoutFromTurn(structuredClone(start), game.turnIndex);
     n++;
-    if (r.winner === pi) { wins++; if (r.aggro) aggroWin++; } else if (r.aggro) aggroLoss++;
+    // aggroWin / aggroLoss: extra points per game (an aggro adds 1, a baggro 2).
+    if (r.winner === pi) aggroWin += r.extra; else aggroLoss += r.extra;
+    if (r.winner === pi) wins++;
     if (n >= 20000) break;
   }
   return { p: wins / n, aggroWin: aggroWin / n, aggroLoss: aggroLoss / n, n, exact: false };

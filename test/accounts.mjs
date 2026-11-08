@@ -53,6 +53,7 @@ assert(R.slots[0].accountId === reg.player.id && R.slots[1].accountId === b._pla
 handleDouble(host, roomId); handleTake(guest, roomId);
 const g = R.game;
 g.players[0].marbles.forEach((m, i) => Object.assign(m, i < 3 ? { zone: 'home', slot: 4 - i } : { zone: 'track', space: 84 }));
+Object.assign(g.players[1].marbles[0], { zone: 'track', space: 30 });   // an aggro, not a baggro
 g.dice = [1, 2]; g.diceUsed = [false, true]; g.phase = 'AWAITING_MOVE'; g._humanMadeMove = false; g._undoStack = [];
 handleMove(host, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
 const st = playerStats(reg.player.id);

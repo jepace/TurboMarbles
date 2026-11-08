@@ -589,7 +589,7 @@ function renderProfile() {
   $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
     stat(s.games, 'games'),
     stat(`${s.wins} (${pct(s.wins, s.games)})`, 'won'),
-    stat(`${s.points > 0 ? '+' : ''}${s.points}`, 'money points', 'Two-player games: 1 a win, 2 an aggro, × the cube'),
+    stat(`${s.points > 0 ? '+' : ''}${s.points}`, 'money points', 'Each loser pays 1, 2 for an aggro, 3 for a baggro, × the cube'),
     stat(`${s.aggro_wins} / ${s.aggro_losses}`, 'aggros won / lost'),
     stat(`${s.doubles} / ${s.takes} / ${s.drops}`, 'doubles / takes / drops'),
     stat(rating, 'rating', 'From the error rate in analysed games'),
@@ -787,7 +787,7 @@ function renderMatchView() {
   $('ap-moves').replaceChildren(...matchGames.map(g => {
     const row = el('div', { class: 'ap-row', style: 'grid-template-columns: 5em 1fr auto' },
       el('span', {}, `Game ${g.n}`),
-      el('span', {}, `${g.winner != null ? playerName(g.winner) + ' won' : ''}${g.result ? ` · ${g.result.points} pt${g.result.points === 1 ? '' : 's'}${g.result.aggro ? ' (aggro)' : g.result.dropped ? ' (drop)' : ''}` : ''}${g.score ? ` · ${g.score.join('–')}` : ''}`),
+      el('span', {}, `${g.winner != null ? playerName(g.winner) + ' won' : ''}${g.result ? ` · ${g.result.points} pt${g.result.points === 1 ? '' : 's'}${g.result.baggro ? ' (baggro)' : g.result.aggro ? ' (aggro)' : g.result.dropped ? ' (drop)' : ''}` : ''}${g.score ? ` · ${g.score.join('–')}` : ''}`),
       el('span', { class: 'muted' }, reports.has(g.n) ? 'open ›' : 'analyse ›'));
     row.addEventListener('click', () => showGame(g.n));
     return row;
@@ -1891,7 +1891,7 @@ on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
   if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; gameState.match = match ? { ...match, crawford: false } : null; }
   showGameOver(winnerIndex);
   if (result) {
-    const how = result.dropped ? 'double dropped' : result.aggro ? 'an aggro!' : 'single game';
+    const how = result.dropped ? 'double dropped' : result.baggro ? 'a baggro!' : result.aggro ? 'an aggro!' : 'single game';
     $('winner-msg').textContent = `${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} (${how}) 🎉`;
     log(`${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} — ${how}`);
   }
