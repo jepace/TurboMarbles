@@ -338,7 +338,7 @@ function homeSlots(player, movedId = -1, toSlot = 0) {
 // 57.7% of 2-player, 38.5% of 3-player and 26.7% of 4-player games. With 5–6
 // players a bigger entry bonus is needed to break even (getting a marble home
 // also takes it out of reach of many opponents).
-const HOME_STEP = 60;
+const HOME_STEP = 40;   // was 60: entering home low looked worse than walking on (self-play: even strength)
 const homeEnterBonus = players => (players >= 5 ? 150 : 50);
 
 // ---- Distance-to-home estimate --------------------------------------------
