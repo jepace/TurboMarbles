@@ -351,7 +351,8 @@ function moveLogText() {
   const players = (gameState?.players ?? [])
     .map(p => `  ${p.name} (${p.color})`)
     .join('\n');
-  const lines = [...$('game-log').children].map(el => el.textContent);
+  // Just the raw log: the robot's comments (feedback lines) stay on screen only.
+  const lines = [...$('game-log').children].filter(el => !el.classList.contains('log-feedback')).map(el => el.textContent);
   return [
     `TurboMarbles game log — ${new Date().toISOString()}`,
     'Players:',
