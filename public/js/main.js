@@ -1667,8 +1667,38 @@ function drawChart() {
     c.append(t);
     c.addEventListener('click', () => selectRoll(i));
   });
+  // A thin line follows the mouse; a box shows the moves around that point;
+  // clicking anywhere jumps there.
+  const hover = add('line', { x1: 0, x2: 0, y1: 0, y2: Ht, stroke: '#fffa', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke', visibility: 'hidden' });
+  const tip = el('div', { class: 'chart-tip' });
+  tip.style.display = 'none';
+  const wrap = el('div', { class: 'chart-wrap' }, svg, tip);
+  const idxAt = ev => {
+    const box = svg.getBoundingClientRect();
+    const fx = (ev.clientX - box.left) / box.width * Wd;
+    return Math.max(0, Math.min(n - 1, Math.round(n > 1 ? (fx - padX) / (Wd - 2 * padX) * (n - 1) : 0)));
+  };
+  const lineFor = (r, i) => {
+    const a = r.analysis;
+    const v = !a ? '' : a.severity === 'ok' ? ' ✓' : ` · ${SEV_LABEL[a.severity]} −${eqOf(a.loss)}`;
+    return el('div', { class: 'tip-line' + (i === apSel ? ' sel' : '') },
+      el('span', { class: 'log-dot', style: `background:${colorVar(rep.players[r.pi].color)}` }),
+      `${r.turn}. ${rep.players[r.pi].name} ${r.dice.join('-')}: ${r.played}${v}`);
+  };
+  svg.addEventListener('mousemove', ev => {
+    const i = idxAt(ev);
+    hover.setAttribute('x1', x(i)); hover.setAttribute('x2', x(i)); hover.setAttribute('visibility', 'visible');
+    const from = Math.max(0, i - 2), to = Math.min(n, i + 3);
+    tip.replaceChildren(...rep.rolls.slice(from, to).map((r, k) => { const d = lineFor(r, from + k); if (from + k === i) d.classList.add('cur'); return d; }));
+    tip.style.display = 'block';
+    const box = svg.getBoundingClientRect(), px = ev.clientX - box.left;
+    tip.style.left = `${Math.min(Math.max(0, px - 120), box.width - 250)}px`;
+  });
+  svg.addEventListener('mouseleave', () => { hover.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
+  svg.addEventListener('click', ev => { if (ev.target.tagName !== 'circle') selectRoll(idxAt(ev)); });
+  svg.style.cursor = 'crosshair';
   const label = two ? `${rep.players[0].name}'s chance to win` : 'Each player’s chance to win';
-  $('ap-chart').replaceChildren(svg, el('div', { class: 'muted', style: 'font-size:0.72rem' }, label + ' after each real choice · dots are errors (click to jump)'));
+  $('ap-chart').replaceChildren(wrap, el('div', { class: 'muted', style: 'font-size:0.72rem' }, label + ' after each real choice · dots are errors · click anywhere to jump there'));
 }
 
 document.addEventListener('keydown', e => {
