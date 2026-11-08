@@ -831,6 +831,16 @@ function cubeStats(rep, pi) {
       .reduce((x, c) => x + (c.analysis.lossNorm ?? c.analysis.loss), 0), cubePending: (rep.cube ?? []).some(c => c.pi === pi && c.pending) };
 }
 
+// A small "?" whose explanation shows on hover, or on tap (touch screens).
+const help = tip => {
+  const h = el('span', { class: 'help', title: tip }, '?');
+  h.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = h.nextElementSibling?.classList.contains('help-tip');
+    if (open) h.nextElementSibling.remove(); else h.after(el('span', { class: 'help-tip' }, tip));
+  });
+  return h;
+};
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
@@ -1142,8 +1152,8 @@ function selectCube(i) {
   const a = c.analysis;
   const kids = [el('div', { class: 'ap-title' }, el('span', { class: 'cube-ico big' }, String(c.v)),
     el('b', {}, `Turn ${c.turn} · ${p.name}`), el('span', { class: 'muted' }, ` ${CUBE_ACTION[c.kind](c.action).toLowerCase()} (cube at ${c.v})`))];
-  if (!a) kids.push(el('div', { class: 'muted' }, 'Being worked out…'));
-  else if (a.skip) kids.push(el('div', { class: 'muted' }, `Nowhere near a double (the estimate gave ${p.name} ${a.p != null ? (100 * a.p).toFixed(0) + '%' : 'under 60%'}) — not analysed.`));
+  if (!a) kids.push(el('div', { class: 'muted' }, '…'));
+  else if (a.skip) kids.push(el('div', { class: 'muted' }, `Not near a double (${a.p != null ? (100 * a.p).toFixed(0) + '%' : '<60%'}) — skipped`));
   else {
     const isDouble = c.kind === 'double';
     kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Equity: expected stake won (+) or lost (−), at this cube' }, 'Equity'), el('span')));
@@ -1158,16 +1168,15 @@ function selectCube(i) {
       kids.push(el('div', { class: 'ap-opt' }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
         el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + eqv(o.eq)), el('span')));
     }
-    kids.push(el('div', { class: 'fact' }, `${p.name} wins ${(100 * a.p).toFixed(1)}%` +
-      (a.aggroWin || a.aggroLoss ? ` (aggro wins ${(100 * a.aggroWin).toFixed(1)}%, aggro losses ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
-      (a.exact ? ' — exact (duel table)' : ` — from ${a.n} played-out games`)));
-    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${eqv(a.loss)} equity at cube ${c.v}.`
-      : a.close ? "Close call — the estimate can't separate the options; counts as correct."
-      : `✓ Right decision (${a.best}).`;
-    kids.push(el('div', { class: 'muted' }, verdict + (isDouble ? ' A double is worth the opponent\'s better answer (the lower of take and drop).' : '')
-      + (a.match ? ` Match play, ${p.name} ${isDouble ? a.match.a : a.match.b}-away, opponent ${isDouble ? a.match.b : a.match.a}-away: equity is match-winning chances in game units (EMG), from ${p.name}'s side.`
-        : ` Equity is the stake you expect to win (+) or lose (−) at cube ${c.v}, from ${p.name}'s side; losing a game at cube 1 is −1.0.`)
-      + ' The cube formulas are an approximation (cube efficiency 0.68).'));
+    kids.push(el('div', { class: 'fact' }, `${p.name} ${(100 * a.p).toFixed(1)}%` +
+      (a.aggroWin || a.aggroLoss ? ` (aggro ${(100 * a.aggroWin).toFixed(1)}% / ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
+      (a.exact ? ' · exact' : '')));
+    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]}: −${eqv(a.loss)}`
+      : a.close ? 'Close' : '✓';
+    kids.push(el('div', { class: 'muted' }, verdict + (a.match ? ` · ${isDouble ? a.match.a : a.match.b}-away / ${isDouble ? a.match.b : a.match.a}-away` : ''),
+      help((a.match ? `Match equity in game units (EMG), from ${p.name}'s side.` : `Equity at cube ${c.v}, from ${p.name}'s side; losing a game at cube 1 = −1.`)
+        + (isDouble ? ' A double is worth the lower of take and drop.' : '') + ' Janowski model, cube efficiency 0.68.'
+        + (a.exact ? ' Chances exact (duel table).' : ` Chances from ${a.n} played-out games.`))));
   }
   // Depth, and going deeper (more games; or analyse a skipped no-double anyway).
   if (a && !a.exact) {
@@ -1232,14 +1241,12 @@ function selectRoll(idx, opt = null) {
       line.addEventListener('click', () => selectRoll(idx, k));
       kids.push(line);
     });
-    const verdict = a.estimate
-      ? (a.severity === 'ok'
-        ? (a.loss > 0 ? `✓ Close to the best by the estimate (−${eqOf(a.loss)}).` : '✓ Best play by the estimate.')
-        : `${SEV_LABEL[a.severity]} by the estimate: −${eqOf(a.loss)} against the best. Go deeper to check it with played-out games.`)
-      : a.severity === 'ok'
-      ? (a.loss > 0 ? `✓ Within the noise (−${eqOf(a.loss)} ± ${eqOf(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
-      : `${SEV_LABEL[a.severity]}: this play gives up ${eqOf(a.loss)} equity against the best (± ${eqOf(1.96 * a.se)}).`;
-    kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
+    const verdict = a.severity === 'ok'
+      ? (a.loss > 0 ? `✓ −${eqOf(a.loss)}${a.estimate ? '' : ` ± ${eqOf(1.96 * a.se)}`}` : '✓ Best')
+      : `${SEV_LABEL[a.severity]}: −${eqOf(a.loss)}${a.estimate ? ' (estimate)' : ` ± ${eqOf(1.96 * a.se)}`}`;
+    kids.push(el('div', { class: 'muted' }, `${verdict} · ${r.options} plays`,
+      help(a.estimate ? 'From the instant evaluator; go deeper to play it out.'
+        : `Equity lost against the best play, with its 95% noise range; a loss inside the noise counts as correct. The best few plays, yours and the robot's were played out.`)));
     const lvl = a.level ?? 0;
     const games = Math.max(...a.options.map(o => o.n ?? 0));
     const depth = el('div', { class: 'ap-depth' },
@@ -1731,7 +1738,7 @@ function renderCube() {
     $('cube').textContent = String(c.value);
     const dead = c.owner != null && c.away && c.away[c.owner] <= c.value;
     $('cube-owner').textContent = c.crawford ? 'Crawford game — no doubling'
-      : cubeOwnerText(c) + (dead ? ' · dead (a win already takes the match)' : '');
+      : cubeOwnerText(c) + (dead ? ' · dead' : '');
     const bd = $('btn-double');
     bd.style.display = canIDouble() ? '' : 'none';
     if ($('btn-roll').disabled) hideRollPopup();
@@ -1740,7 +1747,7 @@ function renderCube() {
     const o = gameState.cubeOffer;
     if (o && o.to === myPlayerIndex && gameState.phase === 'CUBE_OFFERED') {
       $('cube-offer-msg').replaceChildren(el('div', { class: 'cube-face' }, String(o.value)),
-        el('div', {}, `${playerName(o.from)} doubles to ${o.value}. Take, and play on for ${o.value}? Or drop, and lose ${c.value}?`));
+        el('div', {}, `${playerName(o.from)} doubles`, help(`Take: play on for ${o.value}, and own the cube. Drop: lose ${c.value} now.`)));
       $('cube-offer').style.display = 'flex';
     } else if (!o) $('cube-offer').style.display = 'none';
   }
@@ -1813,11 +1820,11 @@ on('doubleOffered', ({ playerIndex, value }) => {
   $('btn-roll').disabled = true;
   if (playerIndex !== myPlayerIndex) {
     $('cube-offer-msg').replaceChildren(el('div', { class: 'cube-face' }, String(value)),
-      el('div', {}, `${playerName(playerIndex)} doubles to ${value}. Take, and play on for ${value}? Or drop, and lose ${gameState.cube.value}?`));
+      el('div', {}, `${playerName(playerIndex)} doubles`, help(`Take: play on for ${value}, and own the cube. Drop: lose ${gameState.cube.value} now.`)));
     $('cube-offer').style.display = 'flex';
-    $('turn-banner').textContent = 'Take or drop?';
+    $('turn-banner').textContent = 'Doubled';
   } else {
-    $('turn-banner').textContent = `Waiting for ${playerName(1 - playerIndex)} to take or drop…`;
+    $('turn-banner').textContent = `${playerName(1 - playerIndex)} to answer`;
   }
   renderCube();
 });
@@ -1972,7 +1979,7 @@ function onCanvasClick(e) {
 
   const n1 = selectedMarbleMoves.length, n2 = selectedComboMoves.length;
   if (n1 === 0 && n2 === 0) {
-    setHint('That marble has no legal moves. Try another.');
+    setHint('No moves for that marble.');
   } else {
     setHint(`${n1} move${n1 === 1 ? '' : 's'} with one die` +
       (n2 ? ` (green), ${n2} more with both dice (dashed blue)` : '') + ' — click a highlighted space.');
@@ -2319,7 +2326,7 @@ function enableRoll() {
   $('btn-roll').disabled = false;
   renderCube();
   const choose = canIDouble();
-  $('turn-banner').textContent = choose ? 'Your turn — Roll (Enter) or Double (D)' : 'Your turn — Roll! (Enter)';
+  $('turn-banner').textContent = 'Your turn';
   $('turn-banner').style.color = '#f0c040';
   clearTimeout(autoRollTimer);
   if (choose) showRollPopup();
@@ -2334,7 +2341,9 @@ function showRollPopup() { renderCube(); $('roll-popup').style.display = 'flex';
 function hideRollPopup() { $('roll-popup').style.display = 'none'; }
 $('pop-roll').addEventListener('click', doRoll);
 
+const KEEP_HINTS = new Set(['No moves for that marble.']);
 function setHint(msg) {
+  if (msg && !KEEP_HINTS.has(msg)) msg = '';
   const el = $('move-hint');
   el.textContent = msg;
   el.style.display = msg ? 'block' : 'none';

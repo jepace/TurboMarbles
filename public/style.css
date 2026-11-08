@@ -458,3 +458,8 @@ button.danger { color: #ff8080; }
 .ap-status button { padding: 0.2rem 0.7rem; font-size: 0.8rem; }
 
 .ap-head-btns { display: flex; align-items: center; gap: 10px; }
+
+.help { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; margin-left: 5px; border-radius: 50%;
+  border: 1px solid currentColor; font-size: 0.65rem; font-weight: 700; opacity: 0.6; cursor: help; vertical-align: middle; }
+.help:hover { opacity: 1; }
+.help-tip { display: block; margin-top: 4px; font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
