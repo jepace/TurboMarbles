@@ -162,6 +162,9 @@ button.secondary { background: #fff2; }
   align-items: center;
 }
 
+#btn-double { background: #c8920a; color: #111; font-weight: 700; }
+#btn-double:hover { background: #e0a818; }
+
 /* ---- Commit / Undo area ---- */
 #commit-area {
   display: flex;
@@ -390,9 +393,8 @@ button.secondary { background: #fff2; }
   display: flex; align-items: center; justify-content: center; box-shadow: 2px 3px 6px #0006; border: 2px solid #c8920a; }
 #cube-owner { font-size: 0.8rem; color: var(--muted); flex: 1; }
 /* Double button and offer: a cube face showing the value it doubles to. */
-#btn-double, .cube-face { width: 40px; height: 40px; padding: 0; border-radius: 6px; background: #f4f0e6; color: #111; font-weight: 900; font-size: 1.2rem;
+.cube-face { width: 40px; height: 40px; padding: 0; border-radius: 6px; background: #f4f0e6; color: #111; font-weight: 900; font-size: 1.2rem;
   display: flex; align-items: center; justify-content: center; box-shadow: 2px 3px 6px #0006; border: 2px dashed #c8920a; cursor: pointer; }
-#btn-double:hover { transform: rotate(-8deg); border-style: solid; }
 #btn-double[style*="none"] { display: none !important; }
 .cube-face { margin: 0 auto; cursor: default; border-style: solid; animation: cube-in 0.4s ease-out; }
 @keyframes cube-in { from { transform: rotate(-90deg) scale(0.4); } to { transform: none; } }
