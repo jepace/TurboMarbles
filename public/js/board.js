@@ -187,7 +187,7 @@ function drawSquareLabels(n) {
     if (activeSet.has(START_SPACES.get(s)) || activeSet.has(HOME_ENTRY_SPACES.get(s))) continue;
     const star = STAR_SPACES.has(s);
     ctx.font = `600 ${Math.round(W * (star ? 0.015 : 0.0165))}px system-ui, sans-serif`;
-    ctx.fillStyle = star ? 'rgba(70,40,0,0.85)' : 'rgba(255,255,255,0.55)';
+    ctx.fillStyle = star ? 'rgba(70,40,0,0.6)' : 'rgba(255,255,255,0.36)';
     ctx.fillText(String(labelFn(s)), p.x, p.y + (star ? W * 0.001 : 1));
   }
   ctx.restore();

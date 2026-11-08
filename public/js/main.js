@@ -719,7 +719,32 @@ function openAnalysis() {
   selectRoll(firstErr >= 0 ? firstErr : 0);
 }
 
+// How much work is behind the report: estimates vs played-out decisions.
+let playingOutAll = false;
+function renderStatus() {
+  const rep = analysisReport;
+  if (!rep) return;
+  const dec = rep.rolls.filter(r => r.analysis);
+  const played = dec.filter(r => !r.analysis.estimate);
+  const games = played.reduce((s, r) => s + r.analysis.options.reduce((x, o) => x + (o.n ?? 0), 0), 0);
+  const cubeGames = (rep.cube ?? []).reduce((s, c) => s + (c.analysis?.n ?? 0), 0);
+  const parts = [`${dec.length} decisions`, `${dec.length - played.length} estimated`,
+    `${played.length} played out (${(games + cubeGames).toLocaleString()} games)`];
+  if (deepening.size) parts.push(`checking ${deepening.size}…`);
+  const kids = [el('span', { title: 'Estimated = judged instantly by the formula (one roll ahead). Played out = options played to the end many times.' }, parts.join(' · '))];
+  if (!viewingStored && dec.some(r => (r.analysis.level ?? 0) < 2)) {
+    const b = el('button', { class: 'secondary', title: 'Play out every decision at the deep level (minutes; runs in the background)' },
+      playingOutAll ? 'Playing out all…' : 'Play out all');
+    b.disabled = playingOutAll;
+    b.addEventListener('click', () => { send({ action: 'playOutAll' }); });
+    kids.push(b);
+  }
+  $('ap-status').replaceChildren(...kids);
+}
+on('playOutAll', ({ running }) => { playingOutAll = running; renderStatus(); });
+
 function renderSummary() {
+  renderStatus();
   const rep = analysisReport;
   // Summary table, one column per player.
   const stats = rep.players.map((_, i) => playerStats(rep, i));
@@ -756,7 +781,7 @@ function analyzeDeeper(idx) {
 }
 on('analysisDeepening', ({ idx }) => {
   deepening.add(idx);
-  if ($('game-layout').classList.contains('analysis-mode')) renderMoveList();
+  if ($('game-layout').classList.contains('analysis-mode')) { renderMoveList(); renderStatus(); }
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
 on('cubeUpdate', ({ i, analysis }) => {

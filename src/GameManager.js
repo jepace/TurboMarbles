@@ -1295,12 +1295,15 @@ export function handleAnalyzeGame(ws, roomId) {
 // After the instant pass, every decision where the play differs from the
 // robot's choice, or the estimate calls it an error, is played out at level 1
 // in the background; each answer replaces the estimate as it arrives.
-function autoCheck(room, report, end) {
-  const level = 1, opts = config.analysisLevels[level];
+function autoCheck(room, report, end, { level = 1, all = false } = {}) {
+  const opts = config.analysisLevels[level];
+  // The automatic pass checks the questionable decisions (and the cube);
+  // "play out all" (all = true) redoes every decision below `level`.
   const todo = report.rolls.map((r, idx) => ({ r, idx })).filter(({ r, idx }) =>
-    r.analysis && (!r.analysis.robotAgrees || r.analysis.severity !== 'ok') && room.game?._rolls?.[idx]?.after);
+    r.analysis && !r._deepening && room.game?._rolls?.[idx]?.after &&
+    (all ? (r.analysis.level ?? 0) < level : (!r.analysis.robotAgrees || r.analysis.severity !== 'ok')));
   const cubeLog = room.game?._cubeLog ?? [];
-  const cubeTodo = (report.cube ?? []).map(c => c.i).filter(i => cubeLog[i]);
+  const cubeTodo = all ? [] : (report.cube ?? []).map(c => c.i).filter(i => cubeLog[i]);
   if (!opts || (!todo.length && !cubeTodo.length)) { end(); return; }
   for (const { r, idx } of todo) {
     Object.defineProperty(r, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
@@ -1337,6 +1340,28 @@ function autoCheck(room, report, end) {
     });
     worker.on('error', err => { console.error('[analysis] auto-check failed', err); worker.terminate(); if (--live === 0) stop(); });
   }
+}
+
+// ---------- Play out every decision ----------
+// A player asks for the whole game at the deep level (every decision played
+// out, not just the questionable ones). Runs in the background like the
+// automatic checks; each row updates as it finishes.
+export function handlePlayOutAll(ws, roomId) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || sess.roomId !== roomId || room.analysis?.state !== 'done') return;
+  if (room._playingOutAll) return;
+  if (analysesRunning >= MAX_ANALYSES) {
+    sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a minute.' });
+    return;
+  }
+  analysesRunning++;
+  room._playingOutAll = true;
+  broadcast(room, { event: 'playOutAll', running: true });
+  autoCheck(room, room.analysis.result, () => {
+    analysesRunning--; room._playingOutAll = false;
+    broadcast(room, { event: 'playOutAll', running: false });
+  }, { level: 2, all: true });
 }
 
 // ---------- Go deeper on one decision ----------

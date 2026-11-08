@@ -5,7 +5,7 @@ import {
   createRoom, joinRoom, addRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
-  handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper,
+  handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper, handlePlayOutAll,
   _reset, _getRoom,
 } from '../src/GameManager.js';
 import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
@@ -1056,6 +1056,16 @@ describe('analyzeGame — reports every roll of every player', () => {});
   host.sent = [];
   handleAnalyzeDeeper(host, roomId, 0);
   assert(!host.find('analysisDeepening').length, 'no level beyond the last one');
+  // Play out all: every decision redone at level 2, in the background.
+  const small = { screen: 4, deep: 8, keep: 2, maxDeep: 8 };
+  gmConfig.analysisLevels = [small, small, small];
+  room.analysis.result.rolls.forEach(r => { if (r.analysis) r.analysis.level = 0; });
+  host.sent = [];
+  handlePlayOutAll(host, roomId);
+  const t2 = Date.now();
+  while (!host.find('playOutAll').some(e => e.running === false) && Date.now() - t2 < 30000) await new Promise(res => setTimeout(res, 50));
+  assert(host.find('playOutAll')[0]?.running === true && host.find('playOutAll').some(e => e.running === false), 'play out all starts and finishes');
+  assert(room.analysis.result.rolls.filter(r => r.analysis).every(r => r.analysis.level === 2), 'every decision is now at the deep level');
 }
 
 describe('addRobot — random names from the list, no duplicates', () => {
