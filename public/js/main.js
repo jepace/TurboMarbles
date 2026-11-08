@@ -380,15 +380,64 @@ function leaveForGood() {
 $('btn-play-again').addEventListener('click', leaveForGood);
 $('btn-quit').addEventListener('click', () => {
   const g = gameState;
-  if (g && g.winner == null && g.phase !== 'GAME_OVER') {
-    const people = g.players.filter((p, i) => i !== myPlayerIndex && !p.isRobot).length;
-    const msg = !people ? 'Quit this game?'
-      : g.players.length > 2 ? 'Quit? A robot will play your marbles.'
-      : g.match ? `Resign the match? ${playerName(1 - myPlayerIndex)} wins it.`
-      : `Resign? ${playerName(1 - myPlayerIndex)} wins ${g.cube?.value ?? 1} point${(g.cube?.value ?? 1) === 1 ? '' : 's'}.`;
-    if (!confirm(msg)) return;
-  }
-  leaveForGood();
+  if (!g || g.winner != null || g.phase === 'GAME_OVER') { leaveForGood(); return; }
+  const people = g.players.filter((p, i) => i !== myPlayerIndex && !p.isRobot).length;
+  if (g.players.length > 2) { if (confirm(people ? 'Quit? A robot will play your marbles.' : 'Quit this game?')) leaveForGood(); return; }
+  openResignDialog();
+});
+// Two players: offer to resign at 1×/2×/3× (on your turn), or abandon.
+function boardPopup(id, ...kids) {
+  $(id)?.remove();
+  const p = el('div', { id, class: 'board-popup resign-popup' }, ...kids);
+  $('board-area').append(p);
+  return p;
+}
+const ptsTxt = n => `${n} pt${n === 1 ? '' : 's'}`;
+function openResignDialog() {
+  const g = gameState, stake = g.cube?.value ?? 1, opp = 1 - myPlayerIndex;
+  const people = !g.players[opp]?.isRobot;
+  const myTurn = isMyTurn() && ['IN_TURN', 'AWAITING_MOVE'].includes(g.phase) && !g.cubeOffer && !g.resignOffer;
+  const mine = g.players[myPlayerIndex];
+  const abandonMult = mine.marbles.some(m => m.zone === 'home') ? 1 : 3;
+  const btn = (label, cls, fn, title = '') => { const b = el('button', { class: cls, title }, label); b.addEventListener('click', fn); return b; };
+  const close = () => $('resign-popup')?.remove();
+  clearTimeout(autoRollTimer);
+  const offers = [[1, 'Single'], [2, 'Aggro'], [3, 'Baggro']].map(([m, name]) => {
+    const b = btn(`${name} ${ptsTxt(stake * m)}`, 'secondary', () => { send({ action: 'resign', mult: m }); close(); });
+    b.disabled = !myTurn;
+    return b;
+  });
+  boardPopup('resign-popup',
+    el('div', {}, 'Resign', help(`Offer the game at a single, aggro or baggro (× the cube). ${playerName(opp)} accepts or plays on. Only on your turn.`)),
+    el('div', { class: 'btn-row' }, ...offers),
+    el('div', { class: 'btn-row' },
+      btn(people ? (g.match ? 'Abandon the match' : `Abandon −${stake * abandonMult}`) : 'Quit', 'secondary',
+        () => { close(); leaveForGood(); }, people ? 'Leave now: you lose the most you still could' : ''),
+      btn('Cancel', 'secondary', () => { close(); if (isMyTurn() && !$('btn-roll').disabled) enableRoll(); })));
+}
+on('resignOffered', ({ playerIndex, mult, points }) => {
+  gameState.resignOffer = { from: playerIndex, to: 1 - playerIndex, mult, points, prevPhase: gameState.phase };
+  gameState.phase = 'RESIGN_OFFERED';
+  clearTimeout(autoRollTimer);
+  hideRollPopup();
+  const name = ['', 'a single game', 'an aggro', 'a baggro'][mult];
+  log(`${playerName(playerIndex)} offers to resign: ${name}, ${ptsTxt(points)}`, gameState.players[playerIndex]?.color);
+  if (playerIndex === myPlayerIndex) { $('turn-banner').textContent = `${playerName(1 - playerIndex)} to answer`; return; }
+  const btn = (label, cls, accept) => { const b = el('button', { class: cls }, label); b.addEventListener('click', () => { send({ action: 'resignAnswer', accept }); $('resign-popup')?.remove(); }); return b; };
+  boardPopup('resign-popup', el('div', {}, `${playerName(playerIndex)} resigns: ${ptsTxt(points)}`),
+    el('div', { class: 'btn-row' }, btn('Accept', 'btn-go', true), btn('Play on', 'secondary', false)));
+  $('turn-banner').textContent = 'Resignation offered';
+});
+on('resignAnswered', ({ playerIndex, accept }) => {
+  $('resign-popup')?.remove();
+  const o = gameState?.resignOffer;
+  log(`${playerName(playerIndex)} ${accept ? 'accepts' : 'plays on'}`, gameState?.players[playerIndex]?.color);
+  if (!gameState || !o) return;
+  gameState.resignOffer = null;
+  if (accept) return;
+  gameState.phase = o.prevPhase;
+  $('turn-banner').textContent = isMyTurn() ? 'Your turn' : `${playerName(gameState.turnIndex)}'s turn`;
+  if (isMyTurn() && o.prevPhase === 'IN_TURN') enableRoll();
 });
 on('playerQuit', ({ playerIndex, resigned }) => {
   if (playerIndex !== myPlayerIndex) log(`${playerName(playerIndex)} ${resigned ? 'resigns' : 'left'}`, gameState?.players[playerIndex]?.color);
@@ -1938,6 +1987,13 @@ on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
     if (!$('btn-analyze').disabled) resetAnalyzeButton();
   }
   if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; gameState.match = match ? { ...match, crawford: false } : null; }
+  // A dropped double in a match: no game-over screen — the next game starts at once.
+  if (result?.dropped && match && !match.over) {
+    flushTurnLog(); turnLogPlayer = null; gameState.phase = 'GAME_OVER';
+    log(`${playerName(winnerIndex)} wins ${ptsTxt(result.points)} — double dropped · ${sessionLine(false)}`);
+    renderCube();
+    return;
+  }
   showGameOver(winnerIndex);
   if (result) {
     const how = result.dropped ? 'double dropped' : result.baggro ? 'a baggro!' : result.aggro ? 'an aggro!' : 'single game';

@@ -118,6 +118,37 @@ export function dropDouble(state, playerIndex) {
 
 // Points for a game won by `winner` (cube games): the cube's value, doubled
 // for an aggro — the loser has no marbles home.
+// --- Resigning (two players) ---
+//
+// During their own turn (before or after rolling) a player may offer to resign at
+// 1, 2 or 3 times the stake (a single game, an aggro, a baggro). The opponent
+// accepts — the game ends at that value — or declines and play goes on.
+export function canResign(state, pi) {
+  return state.players.length === 2 && state.winner == null && ['IN_TURN', 'AWAITING_MOVE'].includes(state.phase) &&
+    state.turnIndex === pi && !state.cubeOffer && !state.resignOffer;
+}
+export function offerResign(state, pi, mult) {
+  if (!canResign(state, pi) || ![1, 2, 3].includes(mult)) return false;
+  state.resignOffer = { from: pi, to: 1 - pi, mult, points: (state.cube?.value ?? 1) * mult, prevPhase: state.phase };
+  state.phase = 'RESIGN_OFFERED';
+  return true;
+}
+export function answerResign(state, pi, accept) {
+  const o = state.resignOffer;
+  if (!o || state.phase !== 'RESIGN_OFFERED' || o.to !== pi) return false;
+  state.resignOffer = null;
+  if (!accept) { state.phase = o.prevPhase; return true; }
+  state.phase = 'GAME_OVER';
+  state.winner = pi;
+  state.result = { winner: pi, points: o.points, losers: [{ pi: o.from, points: o.points, mult: o.mult }],
+    aggro: o.mult >= 2, baggro: o.mult === 3, dropped: false, resigned: true };
+  return true;
+}
+// What abandoning a game costs (quitting without an accepted resignation):
+// the most the quitter could still lose — 1 with a marble home (home marbles
+// can't be hit), else 3 (anything out can still be hit back to base).
+export const abandonMultiple = player => player.marbles.some(m => m.zone === 'home') ? 1 : 3;
+
 // How much a loser pays, in units of the stake: 1, 2 for an aggro (no
 // marbles home), 3 for a baggro (all four still in base).
 export function lossMultiple(player) {

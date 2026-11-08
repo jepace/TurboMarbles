@@ -1,9 +1,9 @@
 // test/cube.mjs — doubling cube (money play): rules, scoring, robot decisions,
 // session score and rematch. No server needed.
-import { createGame, canDouble, offerDouble, takeDouble, dropDouble, gameResult, applyMove } from '../src/GameEngine.js';
+import { offerResign, answerResign, createGame, canDouble, offerDouble, takeDouble, dropDouble, gameResult, applyMove } from '../src/GameEngine.js';
 import {
   createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove, handleAnalyzeGame, handleAnalyzeDeeperCube,
-  handleDouble, handleTake, handleDrop, handleRematch, handleQuit,
+  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleResign, handleResignAnswer,
   _reset, _getRoom, config as gmConfig,
 } from '../src/GameManager.js';
 import { shouldDouble, shouldTake, cubefulEquity } from '../src/CubeDecision.js';
@@ -307,6 +307,39 @@ await describe('match play — score, Crawford game, post-Crawford, match over',
   assert(res.match.over && res.match.winner === 1 && res.match.score.join() === '2,3', `match over: Bob wins 3–2 (${res.match.score})`);
   handleRematch(host, roomId); handleRematch(guest, roomId);
   assert(room.match.score.join() === '0,0' && !room.match.over && !room.match.crawfordUsed, 'rematch after the match: a new match');
+});
+
+describe('resignation offers — 1x / 2x / 3x, accept or decline', () => {
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true });
+  g.cube.value = 2;
+  assert(!offerResign(g, 1, 2), 'only on your turn');
+  assert(offerResign(g, 0, 2) && g.phase === 'RESIGN_OFFERED' && g.resignOffer.points === 4, 'offer an aggro at cube 2: 4 points');
+  assert(answerResign(g, 1, false) && g.phase === 'IN_TURN' && g.winner == null, 'declined: play on');
+  assert(offerResign(g, 0, 3) && answerResign(g, 1, true) && g.winner === 1 && g.result.points === 6 && g.result.baggro, 'baggro accepted: 6 points');
+});
+
+await describe('abandoning costs the most still losable', async () => {
+  _reset(); gmConfig.initialTurnIndex = 0;
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Alice', 2, undefined, { cube: true });
+  joinRoom(guest, code, 'Bob'); startGame(host, roomId);
+  handleQuit(guest, roomId);
+  assert(host.find('gameResult').pop()?.result.points === 3, 'Bob quits with nothing home: Alice +3');
+  _reset();
+  const h2 = mockWs(), g2 = mockWs();
+  const r2 = createRoom(h2, 'Alice', 2, undefined, { cube: true });
+  joinRoom(g2, r2.code, 'Bob'); startGame(h2, r2.roomId);
+  Object.assign(_getRoom(r2.roomId).game.players[1].marbles[0], { zone: 'home', slot: 4 });
+  handleQuit(g2, r2.roomId);
+  assert(h2.find('gameResult').pop()?.result.points === 1, 'Bob quits with one home: Alice +1');
+  _reset();
+  const h3 = mockWs(), g3 = mockWs();
+  const r3 = createRoom(h3, 'Alice', 2, undefined, { cube: true });
+  joinRoom(g3, r3.code, 'Bob'); startGame(h3, r3.roomId);
+  handleResign(h3, r3.roomId, 1);
+  assert(g3.find('resignOffered').pop()?.points === 1, 'Bob is offered a single game');
+  handleResignAnswer(g3, r3.roomId, true);
+  assert(g3.find('gameResult').pop()?.winnerIndex === 1, 'accepted: Bob wins');
 });
 
 await describe('quitting — resign a match; 3+ players: a robot takes the seat', async () => {

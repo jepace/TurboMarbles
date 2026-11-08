@@ -4,7 +4,7 @@ import { randomBytes } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
-  MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets, gameResult,
+  MARBLES_PER_PLAYER, offerResign, answerResign, abandonMultiple, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets, gameResult,
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { matchCube, emg } from './MatchEquity.js';
@@ -46,7 +46,7 @@ export const config = {
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   cubeAnalysisGames: 400, // played-out games per cube decision (when no exact table applies)
   cubeLevels: [400, 1600, 6400],
-  dropNextGameMs: 2000,   // match play: pause after a dropped double before the next game starts   // games per cube decision: first pass, then 'Go deeper'
+  dropNextGameMs: 600,   // match play: pause after a dropped double before the next game starts   // games per cube decision: first pass, then 'Go deeper'
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   robotThinkMs: 1500,
@@ -497,6 +497,46 @@ async function cubeEstimate(game, pi) {
   return think(snapshot(game), pi, config.robotThinkMs, 'cube');
 }
 
+// ---------- Resignation offers (two players) ----------
+export function handleResign(ws, roomId, mult) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'playing') return;
+  const sess = sessions.get(ws._id);
+  const game = room.game;
+  if (!sess || !offerResign(game, sess.playerIndex, mult)) return;
+  broadcast(room, { event: 'resignOffered', playerIndex: sess.playerIndex, mult, points: game.resignOffer.points });
+  if (room.slots[game.resignOffer.to]?.isRobot) robotAnswerResign(room);
+}
+export function handleResignAnswer(ws, roomId, accept) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || room.state !== 'playing') return;
+  answerResignFor(room, sess.playerIndex, !!accept);
+}
+function answerResignFor(room, pi, accept) {
+  const game = room.game, o = game.resignOffer;
+  if (!o || !answerResign(game, pi, accept)) return;
+  broadcast(room, { event: 'resignAnswered', playerIndex: pi, accept, mult: o.mult, points: o.points });
+  if (accept) finishGame(room);
+}
+// The robot accepts when the offer is at least what it expects from playing
+// on (its win chance and extra aggro/baggro points; cube ignored); otherwise
+// it declines. Without an estimate it accepts.
+function robotAnswerResign(room) {
+  const game = room.game, o = game.resignOffer, pi = o.to;
+  const toMove = { ...game, phase: 'IN_TURN', resignOffer: null };
+  cubeEstimate(toMove, pi).then(est => {
+    if (room.game !== game || game.resignOffer !== o) return;
+    let accept = true;
+    if (est) {
+      const p = est.p, extraWin = est.aggroWin, extraLoss = est.aggroLoss;   // the robot's side
+      const expected = p + extraWin - (1 - p) - extraLoss;   // per unit of stake
+      accept = o.mult >= expected - 1e-9;
+    }
+    answerResignFor(room, pi, accept);
+  }).catch(() => answerResignFor(room, pi, true));
+}
+
 export function handleDouble(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'playing') return;
@@ -741,10 +781,11 @@ export function handleQuit(ws, roomId) {
   if (room.state === 'playing' && game && game.winner == null && slot && !slot.isRobot) {
     const others = room.slots.filter((s, i) => i !== pi && s.playerId && !s.isRobot).length;
     if (room.totalPlayers === 2 && others > 0) {
-      const w = 1 - pi, m = room.match;
-      const points = m ? m.length - m.score[w] : (game.cube?.value ?? 1);
-      game.cubeOffer = null; game.phase = 'GAME_OVER'; game.winner = w;
-      game.result = { winner: w, points, losers: [{ pi, points, mult: 1 }], aggro: false, baggro: false, dropped: false, resigned: true };
+      // Abandoning: in a match, the match; else the most still losable.
+      const w = 1 - pi, m = room.match, mult = abandonMultiple(game.players[pi]);
+      const points = m ? m.length - m.score[w] : (game.cube?.value ?? 1) * mult;
+      game.cubeOffer = null; game.resignOffer = null; game.phase = 'GAME_OVER'; game.winner = w;
+      game.result = { winner: w, points, losers: [{ pi, points, mult }], aggro: mult >= 2, baggro: mult === 3, dropped: false, resigned: true, abandoned: true };
       broadcast(room, { event: 'playerQuit', playerIndex: pi, resigned: true });
       finishGame(room);
     } else if (others > 0) {
@@ -1267,6 +1308,7 @@ function publicState(room) {
     diceUsed: game.diceUsed,
     cube: game.cube,
     cubeOffer: game.cubeOffer,
+    resignOffer: game.resignOffer ?? null,
     score: !room.match ? room.score.slice() : null,
     wins: room.wins.slice(),
     match: room.match ? { ...structuredClone(room.match), crawford: !!game.cube?.crawford } : null,

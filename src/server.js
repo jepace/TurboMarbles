@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
+  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS } from './Accounts.js';
@@ -172,7 +172,7 @@ const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'quit', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
+  'double', 'take', 'drop', 'rematch', 'quit', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
 ]);
 
 function dispatch(ws, msg) {
@@ -253,6 +253,16 @@ function dispatch(ws, msg) {
       break;
     }
 
+    case 'resign': {
+      const roomId = getRoomByWs(ws);
+      if (roomId) handleResign(ws, roomId, msg.mult);
+      return;
+    }
+    case 'resignAnswer': {
+      const roomId = getRoomByWs(ws);
+      if (roomId) handleResignAnswer(ws, roomId, msg.accept === true);
+      return;
+    }
     case 'quit': {
       const roomId = getRoomByWs(ws);
       if (roomId) handleQuit(ws, roomId);
