@@ -32,13 +32,10 @@ const BASE_COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'
 const BASE_DARK   = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
 const COLORS = BASE_COLORS.slice();
 const DARK_C = BASE_DARK.slice();
-// Each viewer may see themselves in a favourite colour: arms a and b swap
-// paint (display only — nothing else changes). null = no swap.
-export function setColorSwap(a, b) {
-  for (let i = 0; i < 6; i++) { COLORS[i] = BASE_COLORS[i]; DARK_C[i] = BASE_DARK[i]; }
-  if (a == null || b == null || a === b) return;
-  [COLORS[a], COLORS[b]] = [BASE_COLORS[b], BASE_COLORS[a]];
-  [DARK_C[a], DARK_C[b]] = [BASE_DARK[b], BASE_DARK[a]];
+// Each viewer may see their own arm in a favourite colour: the colours turn
+// round the ring by `shift` arms, keeping their order (display only).
+export function setColorShift(shift = 0) {
+  for (let i = 0; i < 6; i++) { COLORS[i] = BASE_COLORS[(i + shift + 6) % 6]; DARK_C[i] = BASE_DARK[(i + shift + 6) % 6]; }
 }
 
 const STAR_GOLD = '#f5c842';

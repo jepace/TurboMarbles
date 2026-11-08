@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorSwap } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -62,17 +62,19 @@ const COLOR_MAP = {
 
 let selectedHostColor = 'blue';
 
-// ---- My colour: I see myself in my favourite colour; whoever really has it
-// shows in my real colour instead. Display only, for me alone.
+// ---- My colour: the board's colours turn round the ring (order kept) so my
+// arm shows in my favourite colour. Display only, for me alone; chosen on the
+// start screen or the settings page, applied when a game starts.
+let colorShift = 0;
+const armOfColor = c => PLAYER_CONFIG.findIndex(x => x.color === c);
 function dc(c) {
-  const fav = settings.myColor, mine = gameState?.players?.[myPlayerIndex]?.color;
-  if (!fav || !mine || fav === mine || !c) return c;
-  return c === mine ? fav : c === fav ? mine : c;
+  const a = armOfColor(c);
+  return !colorShift || a < 0 ? c : PLAYER_CONFIG[(a + colorShift) % 6].color;
 }
 function applyColorSwap() {
   const fav = settings.myColor, mine = gameState?.players?.[myPlayerIndex]?.color;
-  const arm = c => PLAYER_CONFIG.findIndex(x => x.color === c);
-  setColorSwap(fav && mine ? arm(mine) : null, fav && mine ? arm(fav) : null);
+  colorShift = fav && mine ? (armOfColor(fav) - armOfColor(mine) + 6) % 6 : 0;
+  setColorShift(colorShift);
 }
 
 // ---- Screen management ----
@@ -730,7 +732,10 @@ function renderProfile() {
 function prefSelect(key, opts) {
   const s = el('select', {}, ...opts.map(([v, t]) => el('option', { value: v, textContent: t })));
   s.value = myPrefs[key] ?? '';
-  s.addEventListener('change', () => { myPrefs = { ...myPrefs, [key]: s.value || undefined }; send({ action: 'setPrefs', prefs: myPrefs }); });
+  s.addEventListener('change', () => {
+    myPrefs = { ...myPrefs, [key]: s.value || undefined }; send({ action: 'setPrefs', prefs: myPrefs });
+    if (key === 'myColor') { settings.myColor = s.value || undefined; saveSettings(); $('opt-color').value = s.value; }
+  });
   return s;
 }
 function renderAccountSection(extra) {
@@ -747,6 +752,8 @@ function renderAccountSection(extra) {
     el('div', { class: 'acct-row' }, el('span', {}, 'Analysis opens on'),
       prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['all', 'all rolls']]),
       prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']])),
+    el('div', { class: 'acct-row' }, el('span', {}, 'My colour'),
+      prefSelect('myColor', [['', 'as dealt'], ...['blue', 'pink', 'orange', 'yellow', 'green', 'white'].map(c => [c, c])])),
     el('div', { class: 'acct-row' },
       el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
       btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); })),
@@ -1491,8 +1498,6 @@ $('opt-color').value = settings.myColor ?? '';
 $('opt-color').addEventListener('change', e => {
   settings.myColor = e.target.value || undefined; saveSettings();
   if (me) { myPrefs = { ...myPrefs, myColor: settings.myColor }; send({ action: 'setPrefs', prefs: myPrefs }); }
-  applyColorSwap();
-  if (gameState) { drawBoard(gameState); renderSidebar(); renderDice(gameState.dice, gameState.players[gameState.turnIndex]?.color); }
 });
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
