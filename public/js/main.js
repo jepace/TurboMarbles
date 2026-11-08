@@ -856,6 +856,9 @@ function el(tag, props = {}, ...kids) {
   return e;
 }
 
+function loadApView() { try { return JSON.parse(localStorage.getItem('apView') ?? '{}'); } catch { return {}; } }
+function saveApView() { try { localStorage.setItem('apView', JSON.stringify({ filter: $('ap-filter').value, player: $('ap-player').value })); } catch {} }
+for (const id of ['ap-filter', 'ap-player']) $(id).addEventListener('change', saveApView);
 function openAnalysis(matchView = false) {
   $('game-layout').classList.add('analysis-mode');
   $('analysis-panel').style.display = 'flex';
@@ -872,6 +875,10 @@ function openAnalysis(matchView = false) {
   const analysed = rep.rolls.some(r => r.analysis);
   if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = analysed ? 'errors' : 'all'; }
   else { sel.value = 'all'; $('ap-filter').value = 'all'; }
+  // Sticky: once chosen, the filter and player stay across games (and visits).
+  const stick = loadApView();
+  if (stick.filter) $('ap-filter').value = stick.filter;
+  if (stick.player && [...sel.options].some(o => o.value === stick.player)) sel.value = stick.player;
   drawChart();
   renderMoveList();
   const firstErr = rep.rolls.findIndex(r => r.pi === myPlayerIndex && r.analysis && r.analysis.severity !== 'ok');
