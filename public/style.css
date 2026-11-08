@@ -466,3 +466,4 @@ button.danger { color: #ff8080; }
   border: 1px solid currentColor; font-size: 0.65rem; font-weight: 700; opacity: 0.6; cursor: help; vertical-align: middle; }
 .help:hover { opacity: 1; }
 .help-tip { display: block; margin-top: 4px; font-size: 0.8rem; font-weight: 400; opacity: 0.85; }
+#game-log.no-feedback .log-feedback { display: none; }

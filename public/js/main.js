@@ -1399,7 +1399,10 @@ $('opt-numbers').addEventListener('change', e => {
   applySquareNumbers();
   if (gameState) drawBoard(gameState);
 });
-$('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; if (!settings.feedback) pendingFeedback = null; saveSettings(); });
+// Off hides the feedback already in the log (on shows it again).
+const applyFeedbackVisibility = () => $('game-log').classList.toggle('no-feedback', !settings.feedback);
+applyFeedbackVisibility();
+$('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; if (!settings.feedback) pendingFeedback = null; applyFeedbackVisibility(); saveSettings(); });
 $('opt-analysis').addEventListener('change', e => {
   settings.analysis = e.target.checked; saveSettings();
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
