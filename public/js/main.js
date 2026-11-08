@@ -798,8 +798,9 @@ function playerStats(rep, pi) {
   const rolls = rep.rolls.filter(r => r.pi === pi);
   const choices = rolls.filter(r => r.analysis);
   const sev = k => choices.filter(r => r.analysis.severity === k).length;
-  // Only clear losses count (a difference inside the rollout noise counts as 0).
-  const lost = choices.reduce((s, r) => s + (r.analysis.severity !== 'ok' ? r.analysis.loss : 0), 0);
+  // Every loss beyond the rollout noise counts, however small (a difference
+  // inside the noise counts as 0; instant evaluations have no noise).
+  const lost = choices.reduce((s, r) => s + (r.analysis.loss > 1.96 * (r.analysis.se ?? 0) ? r.analysis.loss : 0), 0);
   const cube = cubeStats(rep, pi);
   // One game, one score: moves and cube decisions together, in equity
   // (a move's win-chance loss x is 2x equity; cube losses already are).
@@ -822,7 +823,9 @@ function cubeStats(rep, pi) {
   const bad = mine.filter(c => c.analysis.severity !== 'ok');
   return { cubeN: mine.length, cubeError: bad.filter(c => c.analysis.severity === 'error').length,
     cubeBlunder: bad.filter(c => c.analysis.severity === 'blunder').length,
-    cubeLost: bad.reduce((x, c) => x + c.analysis.loss, 0), cubePending: (rep.cube ?? []).some(c => c.pi === pi && c.pending) };
+    // Every wrong cube action that isn't a close call counts, per unit of cube.
+    cubeLost: mine.filter(c => !c.analysis.close && c.analysis.played !== c.analysis.best)
+      .reduce((x, c) => x + (c.analysis.lossNorm ?? c.analysis.loss), 0), cubePending: (rep.cube ?? []).some(c => c.pi === pi && c.pending) };
 }
 
 function el(tag, props = {}, ...kids) {
@@ -1114,19 +1117,16 @@ function selectCube(i) {
   else {
     const isDouble = c.kind === 'double';
     kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Equity: expected stake won (+) or lost (−), at this cube' }, 'Equity'), el('span')));
+    // A double is worth the lower of take and drop (the opponent's best answer):
+    // that row carries the double's tags.
+    const dblKey = isDouble ? (a.options[1].eq <= a.options[2].eq ? 'dt' : 'dp') : null;
     for (const o of a.options) {
-      // The double's own equity is the lower of take and drop (the opponent's best answer).
-      const bestHere = isDouble ? (o.key === 'nd' ? a.best === 'no double' : false) : o.key === a.best;
-      const playedHere = isDouble ? (o.key === 'nd' ? a.played === 'no double' : false) : o.key === a.played;
+      const side = o.key === 'nd' ? 'no double' : o.key === dblKey ? 'double' : null;
+      const bestHere = isDouble ? side != null && a.best === side : o.key === a.best;
+      const playedHere = isDouble ? side != null && a.played === side : o.key === a.played;
       const tag = [bestHere ? 'best' : '', playedHere ? 'played' : ''].filter(Boolean).join(' · ');
       kids.push(el('div', { class: 'ap-opt' }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
         el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + eqv(o.eq)), el('span')));
-    }
-    if (isDouble) {
-      const dbl = Math.min(a.options[1].eq, a.options[2].eq);
-      kids.push(el('div', { class: 'ap-opt' }, el('span', {}, 'Double (opponent answers best)',
-        el('span', { class: 'tags' }, [a.best === 'double' ? 'best' : '', a.played === 'double' ? 'played' : ''].filter(Boolean).join(' · '))),
-        el('span'), el('span', { class: 'num' }, (dbl > 0 ? '+' : '') + eqv(dbl)), el('span')));
     }
     kids.push(el('div', { class: 'fact' }, `${p.name} wins ${(100 * a.p).toFixed(1)}%` +
       (a.aggroWin || a.aggroLoss ? ` (aggro wins ${(100 * a.aggroWin).toFixed(1)}%, aggro losses ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
@@ -1134,7 +1134,10 @@ function selectCube(i) {
     const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${eqv(a.loss)} equity at cube ${c.v}.`
       : a.close ? "Close call — the estimate can't separate the options; counts as correct."
       : `✓ Right decision (${a.best}).`;
-    kids.push(el('div', { class: 'muted' }, verdict + ` Equity is the stake you expect to win (+) or lose (−) at cube ${c.v}, from ${p.name}'s side; losing a game at cube 1 is −1.0. The cube formulas are an approximation (cube efficiency 0.68).`));
+    kids.push(el('div', { class: 'muted' }, verdict + (isDouble ? ' A double is worth the opponent\'s better answer (the lower of take and drop).' : '')
+      + (a.match ? ` Match play, ${p.name} ${isDouble ? a.match.a : a.match.b}-away, opponent ${isDouble ? a.match.b : a.match.a}-away: equity is match-winning chances in game units (EMG), from ${p.name}'s side.`
+        : ` Equity is the stake you expect to win (+) or lose (−) at cube ${c.v}, from ${p.name}'s side; losing a game at cube 1 is −1.0.`)
+      + ' The cube formulas are an approximation (cube efficiency 0.68).'));
   }
   // Depth, and going deeper (more games; or analyse a skipped no-double anyway).
   if (a && !a.exact) {
