@@ -1399,7 +1399,7 @@ $('opt-numbers').addEventListener('change', e => {
   applySquareNumbers();
   if (gameState) drawBoard(gameState);
 });
-$('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; saveSettings(); });
+$('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; if (!settings.feedback) pendingFeedback = null; saveSettings(); });
 $('opt-analysis').addEventListener('change', e => {
   settings.analysis = e.target.checked; saveSettings();
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
@@ -2270,7 +2270,7 @@ function flushTurnLog() {
   if (!pendingFeedback && pi === myPlayerIndex && settings.feedback && !turnLogMoves.length) {
     pendingFeedback = { text: '✓ Robot agrees', cls: 'agree' };
   }
-  if (pendingFeedback && pi === myPlayerIndex) log(`↳ ${pendingFeedback.text}`, null, `log-feedback ${pendingFeedback.cls}`);
+  if (pendingFeedback && pi === myPlayerIndex && settings.feedback) log(`↳ ${pendingFeedback.text}`, null, `log-feedback ${pendingFeedback.cls}`);
   pendingFeedback = null;
   turnLogMoves = [];
   turnLogDice  = null;
