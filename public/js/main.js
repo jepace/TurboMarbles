@@ -516,8 +516,11 @@ function renderProfile() {
   for (const t of document.querySelectorAll('#screen-profile .tab')) t.classList.toggle('on', t.dataset.tab === profileTab);
   const s = d.stats[profileTab];
   const pct = (a, b) => (b ? `${Math.round(100 * a / b)}%` : '—');
-  const rate = s.choices ? 100 * s.eq_lost / s.choices : null;
-  const rating = rate == null ? '—' : RATINGS.find(([max]) => rate < max)[1];
+  // Moves and cube together, in equity (a move's win-chance loss x is 2x).
+  const nDec = s.choices + s.cube_decisions;
+  const eqLostAll = 2 * s.eq_lost + (+s.cube_eq_lost);
+  const rate = nDec ? eqLostAll / nDec : null;
+  const rating = rate == null ? '—' : RATINGS.find(([max]) => 50 * rate < max)[1];
   const stat = (v, k, title) => el('div', { class: 'stat', title: title ?? '' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'k' }, k));
   $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
     stat(s.games, 'games'),
@@ -526,23 +529,23 @@ function renderProfile() {
     stat(`${s.aggro_wins} / ${s.aggro_losses}`, 'aggros won / lost'),
     stat(`${s.doubles} / ${s.takes} / ${s.drops}`, 'doubles / takes / drops'),
     stat(rating, 'rating', 'From the error rate in analysed games'),
-    stat(rate == null ? '—' : (rate / 50).toFixed(3), 'error rate per choice', 'Average equity lost per real choice (clear errors only)'),
-    stat(`${s.errors} / ${s.blunders}`, 'errors / blunders'),
-    stat(`${s.cube_errors} / ${s.cube_blunders}`, 'cube errors / blunders', `${s.cube_decisions} analysed cube decisions; ${(+s.cube_eq_lost).toFixed(3)} equity lost`),
+    stat(rate == null ? '—' : rate.toFixed(3), 'error rate per decision', 'Average equity lost per decision, moves and cube together (clear errors only)'),
+    stat(`${s.errors + s.cube_errors} / ${s.blunders + s.cube_blunders}`, 'errors / blunders',
+      `Moves ${s.errors} / ${s.blunders}, cube ${s.cube_errors} / ${s.cube_blunders} (${s.cube_decisions} cube decisions analysed)`),
     stat(`${s.analysed} of ${s.games}`, 'games analysed'),
   ));
   // Error-rate trend (analysed games, this tab).
   const tr = d.stats.trend.filter(t => !!t.vs_robot === (profileTab === 'robots'));
   if (tr.length >= 2) {
     const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 80;
-    const ys = tr.map(t => 100 * t.eq_lost / t.choices), top = Math.max(5, ...ys);
+    const ys = tr.map(t => 2 * t.eq_lost / t.choices), top = Math.max(0.1, ...ys);
     const svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none');
     const pl = document.createElementNS(ns, 'polyline');
     pl.setAttribute('points', ys.map((y, i) => `${8 + i * (Wd - 16) / (ys.length - 1)},${Ht - 6 - (y / top) * (Ht - 12)}`).join(' '));
     pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#e94560'); pl.setAttribute('stroke-width', '2'); pl.setAttribute('vector-effect', 'non-scaling-stroke');
     svg.append(pl);
-    $('profile-trend').replaceChildren(svg, el('div', { class: 'muted', style: 'font-size:0.75rem' }, `Error rate per analysed game (lower is better; top of chart ${top.toFixed(0)}%)`));
+    $('profile-trend').replaceChildren(svg, el('div', { class: 'muted', style: 'font-size:0.75rem' }, `Error rate per analysed game, moves (lower is better; top of chart ${top.toFixed(3)})`));
   } else $('profile-trend').replaceChildren(el('div', { class: 'muted' }, 'Analyse a few games to see your error-rate trend.'));
   // Head to head (people).
   const h = d.stats.headToHead;
@@ -677,13 +680,21 @@ function playerStats(rep, pi) {
   const sev = k => choices.filter(r => r.analysis.severity === k).length;
   // Only clear losses count (a difference inside the rollout noise counts as 0).
   const lost = choices.reduce((s, r) => s + (r.analysis.severity !== 'ok' ? r.analysis.loss : 0), 0);
-  const rate = choices.length ? 100 * lost / choices.length : 0;
+  const cube = cubeStats(rep, pi);
+  // One game, one score: moves and cube decisions together, in equity
+  // (a move's win-chance loss x is 2x equity; cube losses already are).
+  const moveEq = 2 * lost;
+  const decisions = choices.length + cube.cubeN;
+  const eqLost = moveEq + cube.cubeLost;
+  const eqRate = decisions ? eqLost / decisions : 0;
   return {
     rolls: rolls.length, forced: rolls.length - choices.length, choices: choices.length,
     agree: choices.filter(r => r.analysis.robotAgrees).length,
-    error: sev('error'), blunder: sev('blunder'),
-    lost, rate, rating: choices.length ? RATINGS.find(([max]) => rate < max)[1] : '—',
-    ...cubeStats(rep, pi),
+    moveError: sev('error'), moveBlunder: sev('blunder'), moveEq,
+    error: sev('error') + cube.cubeError, blunder: sev('blunder') + cube.cubeBlunder,
+    decisions, eqLost, eqRate,
+    rating: decisions ? RATINGS.find(([max]) => 50 * eqRate < max)[1] : '—',
+    ...cube,
   };
 }
 function cubeStats(rep, pi) {
@@ -747,6 +758,9 @@ function renderStatus() {
 }
 on('playOutAll', ({ running }) => { playingOutAll = running; renderStatus(); });
 
+// Hover text splitting a combined number into moves and cube.
+function cubeSplit(s, f) { return (analysisReport?.cube ?? []).length ? f(s) : ''; }
+
 function renderSummary() {
   renderStatus();
   const rep = analysisReport;
@@ -758,19 +772,14 @@ function renderSummary() {
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
     row('Rating', s => el('span', { class: 'rating' }, s.rating), 'From the error rate'),
-    row('Error rate', s => s.choices ? `${(s.rate / 50).toFixed(3)} per choice` : '—', 'Average equity lost per real choice (clear losses only); losing a game = 1.0'),
-    row('Equity lost', s => eqOf(s.lost),
-      'Total over the game. Equity here is the chance to win (no doubling cube or gammons), so this is the sum of win chance lost by each clear error'),
-    row('Errors / Blunders', s => el('span', {},
+    row('Error rate', s => s.decisions ? `${s.eqRate.toFixed(3)} per decision` : '—',
+      'Average equity lost per decision — moves and cube together (clear errors only); losing a game = 1.0'),
+    row('Equity lost', s => el('span', { title: cubeSplit(s, x => `${eqv(x.moveEq)} on moves, ${eqv(x.cubeLost)} on the cube`) }, eqv(s.eqLost)),
+      'Total over the game, moves and cube together'),
+    row('Errors / Blunders', s => el('span', { title: cubeSplit(s, x => `moves ${x.moveError} / ${x.moveBlunder}, cube ${x.cubeError} / ${x.cubeBlunder}`) },
       el('span', { class: s.error ? 'sev-error' : '' }, String(s.error)), ' / ',
-      el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder))), 'Error: 0.06–0.20 equity lost. Blunder: 0.20 or more'),
-    ...((analysisReport.cube ?? []).length ? [
-      row('Cube errors / blunders', s => s.cubePending && !s.cubeN ? 'checking…' : el('span', {},
-        el('span', { class: s.cubeError ? 'sev-error' : '' }, String(s.cubeError)), ' / ',
-        el('span', { class: s.cubeBlunder ? 'sev-blunder' : '' }, String(s.cubeBlunder))),
-        'Cube decisions (double / take / drop). Error: 0.06–0.20 equity lost (per unit of cube). Blunder: 0.20 or more'),
-      row('Cube equity lost', s => eqv(s.cubeLost), 'Equity lost by clear cube errors, at the cube value of each decision'),
-    ] : []),
+      el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder)), s.cubePending ? ' …' : ''),
+      'Moves and cube decisions together. Error: 0.06–0.20 equity lost. Blunder: 0.20 or more'),
   ));
   $('ap-summary').replaceChildren(table);
 }
