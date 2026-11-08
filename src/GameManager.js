@@ -8,7 +8,7 @@ import {
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { matchCube, emg } from './MatchEquity.js';
-import { recordGame, saveAnalysis, storeEnabled } from './Store.js';
+import { recordGame, saveAnalysis, storeEnabled, rateGame } from './Store.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
@@ -327,7 +327,9 @@ function finishGame(room) {
     }, config.dropNextGameMs);
     t.unref?.();
   }
-  broadcast(room, { event: 'gameResult', game: rec.n, winnerIndex: game.winner, result: r,
+  const ratings = room._ratings ? room.slots.map(s => (s.accountId && room._ratings[s.accountId]) || null) : null;
+  room._ratings = null;
+  broadcast(room, { event: 'gameResult', game: rec.n, ratings, winnerIndex: game.winner, result: r,
     score: !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
 }
@@ -342,10 +344,7 @@ function storeFinishedGame(room, r) {
   try {
     finishRollRecord(game);
     const two = room.totalPlayers === 2;
-    room.storedGameId = recordGame({
-      cube: !!game.cube, winnerSeat: game.winner,
-      rolls: game._rolls ?? [],
-      seats: room.slots.map((s, i) => {
+    const seats = room.slots.map((s, i) => {
         const c = game._cubeStats?.[i] ?? {};
         const won = game.winner === i;
         return {
@@ -355,8 +354,10 @@ function storeFinishedGame(room, r) {
           aggro: won ? !!r?.aggro : (r?.losers?.find(l => l.pi === i)?.mult ?? (r?.aggro ? 2 : 1)) >= 2,
           doubles: c.doubles, takes: c.takes, drops: c.drops,
         };
-      }),
-    });
+      });
+    room.storedGameId = recordGame({ cube: !!game.cube, winnerSeat: game.winner, rolls: game._rolls ?? [], seats });
+    // Rated only between accounts with no robot seat (a quitter's seat still counts as theirs).
+    room._ratings = rateGame(seats, game.winner);
   } catch (err) {
     console.error('[store] could not record game', err);
   }
@@ -1323,6 +1324,11 @@ function publicState(room) {
   };
 }
 
+// The code of the lobby this connection is in (for invites), else null.
+export function roomCodeOf(ws) {
+  const room = rooms.get(sessions.get(ws._id)?.roomId);
+  return room && room.state === 'lobby' ? room.code : null;
+}
 export function getRoomByWs(ws) {
   const sess = sessions.get(ws._id);
   return sess ? sess.roomId : null;

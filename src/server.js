@@ -7,12 +7,12 @@ import { dirname, join } from 'path';
 import {
   createRoom, joinRoom, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
-  handleDisconnect, handleReconnect, getRoomByWs,
+  handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf,
   handleUndo, handleCommit, handleAnalyzeGame,
   handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
-import { handleAccountAction, ACCOUNT_ACTIONS } from './Accounts.js';
+import { handleAccountAction, ACCOUNT_ACTIONS, accountDisconnected } from './Accounts.js';
 import { openStore, isNameTaken } from './Store.js';
 
 openStore();
@@ -159,6 +159,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', (_code) => {
     handleDisconnect(ws);
+    accountDisconnected(ws);
   });
   ws.on('error', (err) => {
     console.error(`[ws] error    id=${ws._id}`, err.message);
@@ -182,7 +183,7 @@ function dispatch(ws, msg) {
   }
 
   if (ACCOUNT_ACTIONS.has(msg.action)) {
-    return handleAccountAction(ws, msg, { send, cleanName,
+    return handleAccountAction(ws, msg, { send, cleanName, roomCodeOf,
       onOpenGame: (w, g) => send(w, { event: 'storedGame',
         game: { id: g.id, endedAt: g.endedAt, cube: g.cube, seats: g.seats, winnerSeat: g.winnerSeat },
         report: storedGameReport(g) }) });

@@ -10,6 +10,15 @@
 //   profile      {}                 stats + recent games
 //   history      { before }         more games
 //   openGame     { id }             a past game (only for its players) to replay
+//   leaderboard  {}                 top players by rating (results against people)
+//   friends      {}                 friends (online or not), requests, blocked, unread counts
+//   friendRequest{ name }           ask (or accept, if they asked first)
+//   friendRespond{ id, accept }     accept or decline a request
+//   friendRemove { id }   block { id }   unblock { id }
+//   dm           { to, body }       a direct message to a friend (rate-limited)
+//   conversation { with, before }   messages with a friend (marks them read)
+//   invite       { to }             invite an online friend into my room
+// Pushed: friends (list changed), presence { id, online }, dm, invited { from, code }.
 //
 // A signed-in connection carries ws._player = { id, name }.
 import * as store from './Store.js';
@@ -26,11 +35,51 @@ function limited(kind, ip) {
 function hit(kind, ip) { const k = `${kind}:${ip}`; (hits.get(k) ?? hits.set(k, []).get(k)).push(Date.now()); }
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some(x => t - x < WINDOW_MS)) hits.delete(k); }, 10 * 60 * 1000).unref();
 
-export const ACCOUNT_ACTIONS = new Set(['setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
+export const ACCOUNT_ACTIONS = new Set(['leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
+  'block', 'unblock', 'dm', 'conversation', 'invite', 'setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
   'deleteAccount', 'profile', 'history', 'openGame']);
 
-// send(ws, msg); cleanName(raw) → '' if unusable; onOpenGame(ws, game) shows a stored game.
-export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
+// ---- Presence: which players are connected (by account) ----
+const online = new Map();            // playerId → Set<ws>
+let sendFn = null;
+const pushTo = (id, msg) => { for (const w of online.get(id) ?? []) sendFn?.(w, msg); };
+const isOnline = id => (online.get(id)?.size ?? 0) > 0;
+function friendIds(id) { return store.friendList(id).friends.map(f => f.id); }
+function setPlayer(ws, p) {
+  if (ws._player?.id && ws._player.id !== p?.id) accountDisconnected(ws);
+  ws._player = p;
+  if (!p) return;
+  const set = online.get(p.id) ?? online.set(p.id, new Set()).get(p.id);
+  const was = set.size > 0;
+  set.add(ws);
+  if (!was) for (const f of friendIds(p.id)) pushTo(f, { event: 'presence', id: p.id, online: true });
+}
+// The connection closed (or signed in as someone else).
+export function accountDisconnected(ws) {
+  const id = ws._player?.id;
+  const set = id && online.get(id);
+  if (!set) return;
+  set.delete(ws);
+  if (!set.size) { online.delete(id); if (store.storeEnabled()) for (const f of friendIds(id)) pushTo(f, { event: 'presence', id, online: false }); }
+}
+// Messages: at most 20 a minute per player.
+const dmTimes = new Map();
+function dmLimited(id) {
+  const t = Date.now(), list = (dmTimes.get(id) ?? []).filter(x => t - x < 60_000);
+  dmTimes.set(id, list);
+  if (list.length >= 20) return true;
+  list.push(t); return false;
+}
+function friendsPayload(id) {
+  const l = store.friendList(id), unread = store.unreadCounts(id);
+  const mark = f => ({ ...f, online: isOnline(f.id), unread: unread[f.id] ?? 0 });
+  return { event: 'friends', friends: l.friends.map(mark), incoming: l.incoming.map(mark), outgoing: l.outgoing, blocked: store.blockList(id) };
+}
+
+// send(ws, msg); cleanName(raw) → '' if unusable; onOpenGame(ws, game) shows a stored game;
+// roomCodeOf(ws) → the code of the room this connection is in (for invites), or null.
+export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, roomCodeOf }) {
+  sendFn = send;
   const err = (code, message) => send(ws, { event: 'error', code, message });
   if (!store.storeEnabled()) return err('STATS_UNAVAILABLE', 'Accounts and stats are not available on this server.');
   const ip = ws._ip ?? 'unknown';
@@ -42,7 +91,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       if (limited('identifyFail', ip)) return err('RATE_LIMITED', 'Too many attempts. Try again later.');
       const p = store.authenticate(msg.key);
       if (!p) { hit('identifyFail', ip); return send(ws, { event: 'identity', player: null }); }
-      ws._player = p;
+      setPlayer(ws, p);
       ws._key = msg.key;
       return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id) });
     }
@@ -54,7 +103,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       if (r.error === 'NAME_TAKEN') return err('NAME_TAKEN', `"${name}" is taken. Choose another name, or sign in on this device with a link code.`);
       if (r.error) return err(r.error, 'Could not register.');
       hit('register', ip);
-      ws._player = r.player; ws._key = r.key;
+      setPlayer(ws, r.player); ws._key = r.key;
       return send(ws, { event: 'registered', player: r.player, key: r.key });
     }
     case 'rename': {
@@ -78,7 +127,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       if (limited('linkFail', ip)) return err('RATE_LIMITED', 'Too many wrong codes. Try again later.');
       const r = store.redeemLinkCode(msg.code);
       if (!r) { hit('linkFail', ip); return err('BAD_LINK_CODE', 'That code is wrong or has expired.'); }
-      ws._player = r.player; ws._key = r.key;
+      setPlayer(ws, r.player); ws._key = r.key;
       return send(ws, { event: 'registered', player: r.player, key: r.key, linked: true, prefs: store.getPrefs(r.player.id) });
     }
     case 'signOutOthers': {
@@ -91,6 +140,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       if (typeof msg.confirm !== 'string' || msg.confirm.trim().toLowerCase() !== me.name.toLowerCase()) {
         return err('CONFIRM_MISMATCH', 'Type your name exactly to confirm.');
       }
+      accountDisconnected(ws);
       store.deletePlayer(me.id);
       ws._player = null; ws._key = null;
       return send(ws, { event: 'accountDeleted' });
@@ -98,12 +148,65 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
     case 'profile': {
       if (!needMe()) return;
       return send(ws, { event: 'profile', player: me, devices: store.deviceCount(me.id),
-        stats: store.playerStats(me.id), games: store.playerGames(me.id, { limit: 30 }) });
+        stats: store.playerStats(me.id), games: store.playerGames(me.id, { limit: 30 }), rating: store.ratingOf(me.id) });
     }
     case 'history': {
       if (!needMe()) return;
       const before = Number(msg.before);
       return send(ws, { event: 'history', games: store.playerGames(me.id, { limit: 30, before: Number.isFinite(before) ? before : Infinity }) });
+    }
+    case 'leaderboard':
+      return send(ws, { event: 'leaderboard', players: store.leaderboard({ limit: 100 }), me: me ? store.ratingOf(me.id) : null });
+    case 'friends':
+      if (!needMe()) return;
+      return send(ws, friendsPayload(me.id));
+    case 'friendRequest': {
+      if (!needMe()) return;
+      const other = store.findPlayerByName(msg.name);
+      if (!other) return err('NOT_FOUND', 'No player by that name.');
+      const r = store.friendRequest(me.id, other.id);
+      if (r === 'SELF' || r === 'BLOCKED') return err(r, r === 'SELF' ? "That's you." : 'Not possible.');
+      send(ws, friendsPayload(me.id)); pushTo(other.id, friendsPayload(other.id));
+      return;
+    }
+    case 'friendRespond': {
+      if (!needMe() || typeof msg.id !== 'string') return;
+      if (msg.accept) store.friendRequest(me.id, msg.id); else store.friendRemove(me.id, msg.id);
+      send(ws, friendsPayload(me.id)); pushTo(msg.id, friendsPayload(msg.id));
+      return;
+    }
+    case 'friendRemove': case 'block': case 'unblock': {
+      if (!needMe() || typeof msg.id !== 'string') return;
+      if (msg.action === 'friendRemove') store.friendRemove(me.id, msg.id);
+      else if (msg.action === 'block') store.block(me.id, msg.id); else store.unblock(me.id, msg.id);
+      send(ws, friendsPayload(me.id)); pushTo(msg.id, friendsPayload(msg.id));
+      return;
+    }
+    case 'dm': {
+      if (!needMe() || typeof msg.to !== 'string') return;
+      if (!store.areFriends(me.id, msg.to) || store.isBlocked(msg.to, me.id)) return err('NOT_FRIENDS', 'You can only message friends.');
+      if (dmLimited(me.id)) return err('RATE_LIMITED', 'Slow down a little.');
+      const m = store.sendMessage(me.id, msg.to, msg.body);
+      if (!m) return;
+      const out = { event: 'dm', message: { ...m, fromName: me.name } };
+      send(ws, out); pushTo(msg.to, out);
+      for (const w of online.get(me.id) ?? []) if (w !== ws) send(w, out);
+      return;
+    }
+    case 'conversation': {
+      if (!needMe() || typeof msg.with !== 'string') return;
+      const before = Number(msg.before);
+      return send(ws, { event: 'conversation', with: msg.with,
+        messages: store.conversation(me.id, msg.with, { before: Number.isFinite(before) ? before : Infinity }) });
+    }
+    case 'invite': {
+      if (!needMe() || typeof msg.to !== 'string') return;
+      if (!store.areFriends(me.id, msg.to)) return err('NOT_FRIENDS', 'You can only invite friends.');
+      const code = roomCodeOf?.(ws);
+      if (!code) return err('NO_ROOM', 'Create a game first, then invite.');
+      if (!isOnline(msg.to)) return err('OFFLINE', 'They are not online.');
+      pushTo(msg.to, { event: 'invited', from: me.name, fromId: me.id, code });
+      return send(ws, { event: 'inviteSent', to: msg.to });
     }
     case 'openGame': {
       if (!needMe()) return;

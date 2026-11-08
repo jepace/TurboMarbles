@@ -78,6 +78,38 @@ assert(guest.find('error').some(e => e.code === 'CONFIRM_MISMATCH'), 'delete nee
 act(guest, { action: 'deleteAccount', confirm: 'sloane' });
 assert(guest.find('accountDeleted').length === 1 && !guest._player, 'account deleted');
 
+console.log('rating, friends, blocks, messages');
+{
+  const x = mockWs(), y = mockWs(), z = mockWs();
+  for (const w of [x, y, z]) w._ip = '10.9.9.9';
+  act(x, { action: 'register', name: 'Xena' }); act(y, { action: 'register', name: 'Yuri' }); act(z, { action: 'register', name: 'Zed' });
+  const X = x._player.id, Y = y._player.id;
+  const { rateGame, leaderboard } = await import('../src/Store.js');
+  const r = rateGame([{ playerId: X }, { playerId: Y }], 0);
+  assert(r[X].change === 16 && r[Y].change === -16, `even players: winner +16, loser −16 (${r[X].change}, ${r[Y].change})`);
+  assert(!rateGame([{ playerId: X }, { playerId: null, isRobot: true }], 0), 'a game with a robot is not rated');
+  act(x, { action: 'leaderboard' });
+  const lb = x.find('leaderboard').pop().players;
+  assert(lb.find(e => e.name === 'Xena')?.rating === 1516 && lb.find(e => e.name === 'JEP')?.rating === 1516, 'leaderboard: Xena 1516 (and JEP, rated from the earlier game between accounts)');
+  act(x, { action: 'friendRequest', name: 'yuri' });
+  assert(y.find('friends').pop()?.incoming[0]?.id === X, 'Yuri sees the request');
+  act(x, { action: 'dm', to: Y, body: 'hi' });
+  assert(x.find('error').pop()?.code === 'NOT_FRIENDS', 'no messages before accepting');
+  act(y, { action: 'friendRespond', id: X, accept: true });
+  assert(x.find('friends').pop()?.friends[0]?.online === true, 'friends now, and Yuri shows online');
+  act(x, { action: 'dm', to: Y, body: 'hello Yuri' });
+  assert(y.find('dm').pop()?.message.body === 'hello Yuri', 'message delivered');
+  act(y, { action: 'friends' });
+  assert(y.find('friends').pop().friends[0].unread === 1, 'one unread');
+  act(y, { action: 'conversation', with: X });
+  assert(y.find('conversation').pop().messages.length === 1, 'conversation loads (and marks read)');
+  act(y, { action: 'block', id: X });
+  act(x, { action: 'dm', to: Y, body: 'still there?' });
+  assert(x.find('error').pop()?.code === 'NOT_FRIENDS', 'blocked: no more messages');
+  act(x, { action: 'friendRequest', name: 'Yuri' });
+  assert(x.find('error').pop()?.code === 'BLOCKED', 'blocked: no friend request');
+}
+
 closeStore();
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

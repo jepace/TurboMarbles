@@ -115,6 +115,34 @@ function migrate() {
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
   if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
+  if (!pcols.has('rating')) db.exec('ALTER TABLE players ADD COLUMN rating REAL NOT NULL DEFAULT 1500');
+  if (!pcols.has('rated_games')) db.exec('ALTER TABLE players ADD COLUMN rated_games INTEGER NOT NULL DEFAULT 0');
+  // Social: friends (one row per pair, a < b), blocks, direct messages.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS friends (
+      a TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      b TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      requester TEXT NOT NULL,
+      accepted INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (a, b)
+    );
+    CREATE TABLE IF NOT EXISTS blocks (
+      blocker TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      blocked TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      PRIMARY KEY (blocker, blocked)
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      to_id   TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      body    TEXT NOT NULL,
+      sent_at INTEGER NOT NULL,
+      read    INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS messages_to ON messages(to_id, read);
+    CREATE INDEX IF NOT EXISTS messages_pair ON messages(from_id, to_id, sent_at);
+  `);
   db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema', '2')").run();
 }
 
@@ -224,6 +252,112 @@ export function deletePlayer(playerId) {
   db.prepare("UPDATE seats SET name = 'deleted player' WHERE player_id = ?").run(playerId);
   db.prepare('DELETE FROM players WHERE id = ?').run(playerId);
   return true;
+}
+
+// ---- Rating (Elo, games against people) -------------------------------------------
+//
+// Only seats with an account, and only games with no robot seat, are rated.
+// The winner scores 1 against each loser (and each loser 0 against the
+// winner); with several losers K is shared out, so a 6-player win isn't worth
+// five 2-player wins. K = 32 for a player's first 30 rated games, then 20.
+export const RATING_START = 1500;
+export function rateGame(seats, winnerSeat) {
+  if (!db || winnerSeat == null || seats.some(s => s.isRobot)) return null;
+  const ids = seats.map(s => s.playerId);
+  if (!ids[winnerSeat] || ids.filter(Boolean).length < 2) return null;
+  const get = db.prepare('SELECT rating, rated_games FROM players WHERE id = ?');
+  const cur = ids.map(id => id ? get.get(id) : null);
+  if (!cur[winnerSeat]) return null;
+  const losers = ids.map((id, i) => i).filter(i => i !== winnerSeat && cur[i]);
+  if (!losers.length) return null;
+  const K = i => (cur[i].rated_games < 30 ? 32 : 20) / losers.length;
+  const delta = new Array(seats.length).fill(0);
+  const w = winnerSeat;
+  for (const l of losers) {
+    const ew = 1 / (1 + 10 ** ((cur[l].rating - cur[w].rating) / 400));
+    delta[w] += K(w) * (1 - ew);
+    delta[l] += (cur[l].rated_games < 30 ? 32 : 20) * (0 - (1 - ew));
+  }
+  const up = db.prepare('UPDATE players SET rating = rating + ?, rated_games = rated_games + 1 WHERE id = ?');
+  const out = {};
+  for (const i of [w, ...losers]) { up.run(delta[i], ids[i]); out[ids[i]] = { rating: Math.round(cur[i].rating + delta[i]), change: Math.round(delta[i]) }; }
+  return out;
+}
+export function leaderboard({ limit = 50, minGames = 1 } = {}) {
+  if (!db) return [];
+  return db.prepare(`SELECT id, name, rating, rated_games FROM players WHERE rated_games >= ? ORDER BY rating DESC LIMIT ?`)
+    .all(minGames, limit).map((r, i) => ({ rank: i + 1, id: r.id, name: r.name, rating: Math.round(r.rating), games: r.rated_games }));
+}
+export function ratingOf(id) {
+  const r = db?.prepare('SELECT rating, rated_games FROM players WHERE id = ?').get(id);
+  return r ? { rating: Math.round(r.rating), games: r.rated_games } : null;
+}
+
+// ---- Friends, blocks, messages ------------------------------------------------------
+const pair = (x, y) => (x < y ? [x, y] : [y, x]);
+export function findPlayerByName(name) {
+  return db?.prepare('SELECT id, name FROM players WHERE name_key = ?').get(nameKey(String(name ?? ''))) ?? null;
+}
+export function isBlocked(blocker, blocked) {
+  return !!db?.prepare('SELECT 1 FROM blocks WHERE blocker = ? AND blocked = ?').get(blocker, blocked);
+}
+// Ask to be friends (or accept, if they already asked). Returns 'requested' | 'accepted' | 'already' | error.
+export function friendRequest(me, other) {
+  if (!db || me === other) return 'SELF';
+  if (isBlocked(other, me) || isBlocked(me, other)) return 'BLOCKED';
+  const [a, b] = pair(me, other);
+  const row = db.prepare('SELECT requester, accepted FROM friends WHERE a = ? AND b = ?').get(a, b);
+  if (!row) { db.prepare('INSERT INTO friends (a, b, requester, accepted, created_at) VALUES (?, ?, ?, 0, ?)').run(a, b, me, now()); return 'requested'; }
+  if (row.accepted) return 'already';
+  if (row.requester === me) return 'requested';
+  db.prepare('UPDATE friends SET accepted = 1 WHERE a = ? AND b = ?').run(a, b);
+  return 'accepted';
+}
+export function friendRemove(me, other) {
+  const [a, b] = pair(me, other);
+  db?.prepare('DELETE FROM friends WHERE a = ? AND b = ?').run(a, b);
+}
+export function areFriends(x, y) {
+  const [a, b] = pair(x, y);
+  return !!db?.prepare('SELECT 1 FROM friends WHERE a = ? AND b = ? AND accepted = 1').get(a, b);
+}
+// { friends: [{id,name}], incoming: [{id,name}], outgoing: [{id,name}] }
+export function friendList(me) {
+  if (!db) return { friends: [], incoming: [], outgoing: [] };
+  const rows = db.prepare(`SELECT f.requester, f.accepted, p.id, p.name, p.rating FROM friends f
+    JOIN players p ON p.id = CASE WHEN f.a = ? THEN f.b ELSE f.a END WHERE f.a = ? OR f.b = ? ORDER BY p.name`).all(me, me, me);
+  const pick = r => ({ id: r.id, name: r.name, rating: Math.round(r.rating) });
+  return { friends: rows.filter(r => r.accepted).map(pick),
+    incoming: rows.filter(r => !r.accepted && r.requester !== me).map(pick),
+    outgoing: rows.filter(r => !r.accepted && r.requester === me).map(pick) };
+}
+export function block(me, other) {
+  if (!db || me === other) return;
+  db.prepare('INSERT OR IGNORE INTO blocks (blocker, blocked) VALUES (?, ?)').run(me, other);
+  friendRemove(me, other);
+}
+export function unblock(me, other) { db?.prepare('DELETE FROM blocks WHERE blocker = ? AND blocked = ?').run(me, other); }
+export function blockList(me) {
+  return db?.prepare('SELECT p.id, p.name FROM blocks b JOIN players p ON p.id = b.blocked WHERE b.blocker = ? ORDER BY p.name').all(me) ?? [];
+}
+export const MESSAGE_MAX = 500;
+export function sendMessage(from, to, body) {
+  const text = String(body ?? '').replace(/[\u0000-\u0008\u000b-\u001f]/g, '').trim().slice(0, MESSAGE_MAX);
+  if (!db || !text) return null;
+  const r = db.prepare('INSERT INTO messages (from_id, to_id, body, sent_at) VALUES (?, ?, ?, ?)').run(from, to, text, now());
+  return { id: Number(r.lastInsertRowid), from, to, body: text, sentAt: now() };
+}
+export function conversation(me, other, { limit = 50, before = Infinity } = {}) {
+  if (!db) return [];
+  const rows = db.prepare(`SELECT id, from_id, to_id, body, sent_at FROM messages
+    WHERE ((from_id = ? AND to_id = ?) OR (from_id = ? AND to_id = ?)) AND id < ? ORDER BY id DESC LIMIT ?`)
+    .all(me, other, other, me, Number.isFinite(before) ? before : 2 ** 53, limit);
+  db.prepare('UPDATE messages SET read = 1 WHERE to_id = ? AND from_id = ? AND read = 0').run(me, other);
+  return rows.reverse().map(r => ({ id: r.id, from: r.from_id, to: r.to_id, body: r.body, sentAt: r.sent_at }));
+}
+export function unreadCounts(me) {
+  if (!db) return {};
+  return Object.fromEntries(db.prepare('SELECT from_id, COUNT(*) n FROM messages WHERE to_id = ? AND read = 0 GROUP BY from_id').all(me).map(r => [r.from_id, r.n]));
 }
 
 // ---- Games ------------------------------------------------------------------------
