@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorSwap } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -39,6 +39,7 @@ try {
   if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
   if (typeof saved.analysis === 'boolean') settings.analysis = saved.analysis;
   if (typeof saved.numbers === 'boolean') settings.numbers = saved.numbers;
+  if (typeof saved.myColor === 'string') settings.myColor = saved.myColor;
 } catch { /* storage unavailable: use defaults */ }
 function saveSettings() {
   try { localStorage.setItem('tm.settings', JSON.stringify(settings)); } catch { /* ignore */ }
@@ -60,6 +61,19 @@ const COLOR_MAP = {
 // ARM_MAP and ARM_COLORS imported from ./constants.js
 
 let selectedHostColor = 'blue';
+
+// ---- My colour: I see myself in my favourite colour; whoever really has it
+// shows in my real colour instead. Display only, for me alone.
+function dc(c) {
+  const fav = settings.myColor, mine = gameState?.players?.[myPlayerIndex]?.color;
+  if (!fav || !mine || fav === mine || !c) return c;
+  return c === mine ? fav : c === fav ? mine : c;
+}
+function applyColorSwap() {
+  const fav = settings.myColor, mine = gameState?.players?.[myPlayerIndex]?.color;
+  const arm = c => PLAYER_CONFIG.findIndex(x => x.color === c);
+  setColorSwap(fav && mine ? arm(mine) : null, fav && mine ? arm(fav) : null);
+}
 
 // ---- Screen management ----
 function show(id) {
@@ -555,6 +569,7 @@ let myPrefs = {};                  // account preferences (signed in)
 on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
 on('identity', ({ player, prefs }) => {
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
+  if (myPrefs.myColor && myPrefs.myColor !== settings.myColor) { settings.myColor = myPrefs.myColor; saveSettings(); $('opt-color').value = settings.myColor; }
   updateLanding();
   if (profileData && me) $('profile-name').textContent = me.name;
 });
@@ -835,7 +850,7 @@ const pts = x => (100 * x).toFixed(1);
 const eqOf = x => (2 * x).toFixed(3);
 const eqv = x => x.toFixed(3);
 const pctTxt = x => `${Math.round(100 * x)}%`;
-const colorVar = c => `var(--${c})`;
+const colorVar = c => `var(--${dc(c)})`;
 
 // Error-rate bands: equity lost per decision (moves and cube). Calibrated by
 // tools/calibrate-ratings.mjs at the "checked" level: the robot ≈ 0.007,
@@ -1422,6 +1437,13 @@ document.addEventListener('keydown', e => {
 $('opt-feedback').checked = settings.feedback;
 $('opt-analysis').checked = settings.analysis;
 $('opt-numbers').checked = settings.numbers;
+$('opt-color').value = settings.myColor ?? '';
+$('opt-color').addEventListener('change', e => {
+  settings.myColor = e.target.value || undefined; saveSettings();
+  if (me) { myPrefs = { ...myPrefs, myColor: settings.myColor }; send({ action: 'setPrefs', prefs: myPrefs }); }
+  applyColorSwap();
+  if (gameState) { drawBoard(gameState); renderSidebar(); renderDice(gameState.dice, gameState.players[gameState.turnIndex]?.color); }
+});
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
   applySquareNumbers();
@@ -1938,8 +1960,17 @@ on('playerDisconnected', ({ playerIndex, timeoutMs }) => {
 });
 
 on('robotTookOver', ({ playerIndex }) => {
-  log(`Robot took over for ${playerName(playerIndex)}`);
+  if (gameState?.players?.[playerIndex]) gameState.players[playerIndex].isRobot = true;
+  log(`${playerName(playerIndex)} is now a robot 🤖`, gameState?.players?.[playerIndex]?.color);
+  if (playerIndex !== myPlayerIndex) toast(`${playerName(playerIndex)} left — a robot plays for them now 🤖`);
+  renderSidebar();
 });
+// A short notice over the board.
+function toast(msg) {
+  const t = el('div', { class: 'toast' }, msg);
+  $('board-area').append(t);
+  setTimeout(() => t.remove(), 5000);
+}
 
 on('reconnected', ({ gameState: gs }) => {
   gameState = gs;
@@ -2321,7 +2352,7 @@ function renderLobbySlots(slots) {
     li.dataset.color = slot.color;
     const dot = document.createElement('span');
     dot.className = 'slot-dot';
-    dot.style.background = COLOR_MAP[slot.color] ?? '#888';
+    dot.style.background = COLOR_MAP[dc(slot.color)] ?? '#888';
     const name = document.createElement('span');
     name.className = 'slot-name';
     name.textContent = slot.filled ? slot.name + (slot.isRobot ? ' 🤖' : '') : '(empty)';
@@ -2348,7 +2379,7 @@ function renderSidebar() {
     row.className = 'player-row' + (p.index === gameState.turnIndex ? ' active-turn' : '');
     const dot = document.createElement('span');
     dot.className = 'player-dot';
-    dot.style.background = COLOR_MAP[p.color] ?? '#888';
+    dot.style.background = COLOR_MAP[dc(p.color)] ?? '#888';
     const label = document.createElement('span');
     label.textContent = p.name + (p.isRobot ? ' 🤖' : '');
     const pips = document.createElement('span');
@@ -2382,7 +2413,7 @@ function renderDice(dice, color) {
     el.textContent = dice ? dice[i] : '–';
     el.classList.toggle('used', !!(gameState?.diceUsed?.[i]));
     el.classList.toggle('selected-die', selectedDie === i);
-    if (color !== undefined) el.style.setProperty('--die-color', color ? COLOR_MAP[color] ?? '' : '');
+    if (color !== undefined) el.style.setProperty('--die-color', color ? COLOR_MAP[dc(color)] ?? '' : '');
   }
 }
 
@@ -2422,6 +2453,7 @@ function isMyTurn() {
 
 // Rotate the board so my own arm is at the bottom of the screen.
 function faceMyArm() {
+  applyColorSwap();
   const color = gameState?.players?.[myPlayerIndex]?.color;
   const arm = PLAYER_CONFIG.findIndex(c => c.color === color);
   setViewArm(arm >= 0 ? arm : 0);
@@ -2447,7 +2479,7 @@ function log(msg, color, cls) {
   if (color) {
     const dot = document.createElement('span');
     dot.className = 'log-dot';
-    dot.style.background = COLOR_MAP[color] ?? '#888';
+    dot.style.background = COLOR_MAP[dc(color)] ?? '#888';
     entry.appendChild(dot);
   }
   entry.appendChild(document.createTextNode(msg));

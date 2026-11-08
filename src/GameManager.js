@@ -759,7 +759,10 @@ export function handleQuit(ws, roomId) {
   if (room.state === 'lobby') { leaveRoom(ws); return; }
   // Gone for good: no reconnecting, and a robot plays the seat in any rematch.
   sessions.delete(ws._id);
-  if (slot) { slot.ws = null; slot.isRobot = true; }
+  if (slot) {
+    slot.ws = null;
+    if (!slot.isRobot) { slot.isRobot = true; broadcast(room, { event: 'robotTookOver', playerIndex: pi }); }
+  }
   const t = room.disconnectTimers.get(pi);
   if (t) { clearTimeout(t); room.disconnectTimers.delete(pi); }
   cleanupIfAbandoned(room);
