@@ -122,7 +122,7 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
 - Matches to N points (2 players; Crawford rule: no doubling in the first game after someone reaches
   N−1, then post-Crawford). Match score per room; Rematch continues the match, then starts a new one.
   Cube decisions in a match use a match equity table for this game (`src/MatchEquity.js`, from the
-  measured 7.3% aggro rate; dead-cube decisions), shown in equity units (EMG).
+  measured 7.3% aggro rate; cube ownership valued like money play where the cube is alive), shown in equity units (EMG).
 - Analysis numbers are all **equity** (decimals of the stake; losing a game = 1.0): a move's win-chance
   loss x shows as 2x; errors 0.06–0.20, blunders ≥ 0.20, for moves and cube alike. Plain chances
   (hit, finish next turn) stay percentages.

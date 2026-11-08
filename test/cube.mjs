@@ -286,6 +286,10 @@ describe('match play — robot cube decisions follow the score', () => {
   // Post-Crawford, the trailer should double at once (nothing to lose); the leader takes.
   const r = matchCube({ p: 0.45, aggroWin: 0.03, aggroLoss: 0.03 }, { a: 4, b: 1, v: 1, crawfordUsed: true });
   assert(r.double && r.take, 'post-Crawford: the trailer doubles even as the underdog, and it is a take');
+  const open = matchCube({ p: 0.52, aggroWin: 0.04, aggroLoss: 0.035 }, { a: 3, b: 3, v: 1, crawfordUsed: false });
+  assert(!open.double, 'no opening double at 3-away 3-away (cube ownership counts)');
+  const strong = matchCube({ p: 0.75, aggroWin: 0.05, aggroLoss: 0.02 }, { a: 3, b: 3, v: 1, crawfordUsed: false });
+  assert(strong.double, 'a big lead at 3-away 3-away is a double');
   const dmp = matchCube({ p: 0.9, aggroWin: 0, aggroLoss: 0 }, { a: 1, b: 1, v: 1, crawfordUsed: true });
   assert(!dmp.double, 'both at match point: doubling is pointless');
   assert(Math.abs(met(1, 1) - 0.5) < 1e-9 && met(1, 3) > met(1, 2) && met(2, 1) < 0.5, 'match equity table is consistent');

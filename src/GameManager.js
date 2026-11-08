@@ -442,7 +442,8 @@ function sendCubeFeedback(room, ws, entry, est) {
 function cubeDecision(room, game, est, d, cube = game.cube) {
   const m = room.match;
   if (m) {
-    const r = matchCube(est, { a: m.length - m.score[d], b: m.length - m.score[1 - d], v: cube.value, crawfordUsed: m.crawfordUsed });
+    const owner = cube.owner == null ? 'centre' : cube.owner === d ? 'me' : 'opp';
+    const r = matchCube(est, { a: m.length - m.score[d], b: m.length - m.score[1 - d], v: cube.value, crawfordUsed: m.crawfordUsed, owner });
     return r;
   }
   const owner = cube.owner == null ? 'centre' : cube.owner === d ? 'me' : 'opp';

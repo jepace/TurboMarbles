@@ -31,7 +31,7 @@ const ownerFor = (cube, d) => cube.owner == null ? 'centre' : cube.owner === d ?
 // from the match equity table at the score, shown as equity (EMG).
 function equities(est, owner, entry, v) {
   if (entry.match) {
-    const r = matchCube(est, { ...entry.match, v });
+    const r = matchCube(est, { ...entry.match, v, owner });
     return { nd: emg(r.nd, r), dt: emg(r.dt, r), dp: emg(r.dp, r) };
   }
   const nd = v * cubefulEquity(entry.jacoby && v === 1 ? { ...est, aggroWin: 0, aggroLoss: 0 } : est, owner);
