@@ -20,6 +20,7 @@ body {
   color: var(--text);
   font-family: 'Segoe UI', system-ui, sans-serif;
   height: 100vh;
+  height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -33,6 +34,7 @@ body {
 #screen-game.active {
   display: block;
   height: 100vh;
+  height: 100dvh;
   position: relative;  /* needed for win overlay absolute positioning */
 }
 
@@ -118,6 +120,7 @@ button.secondary { background: #fff2; }
 #game-layout {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
   overflow: hidden;
 }
@@ -403,7 +406,7 @@ button.secondary { background: #fff2; }
 .account-line { text-align: center; color: var(--muted); font-size: 0.9rem; min-height: 1.2em; }
 .small-links { flex-wrap: wrap; }
 .link-btn { background: none; color: var(--muted); font-weight: normal; font-size: 0.85rem; padding: 0.2rem; text-decoration: underline; }
-#screen-profile.active { align-items: flex-start; overflow-y: auto; height: 100vh; padding: 2rem 0; }
+#screen-profile.active { align-items: flex-start; overflow-y: auto; height: 100vh; height: 100dvh; padding: 2rem 0; }
 .profile-card { max-width: 760px; gap: 0.6rem; }
 .profile-head { display: flex; justify-content: space-between; align-items: center; }
 .profile-head h2 { text-align: left; }

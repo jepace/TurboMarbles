@@ -2242,6 +2242,9 @@ function log(msg, color, cls) {
 }
 
 // ---- Canvas resize ----
+// iPad/iPhone: the visible area changes as the browser toolbars show/hide.
+window.visualViewport?.addEventListener('resize', () => window.dispatchEvent(new Event('resize')));
+window.addEventListener('orientationchange', () => setTimeout(() => window.dispatchEvent(new Event('resize')), 300));
 window.addEventListener('resize', () => {
   resizeBoard();
   if ($('game-layout').classList.contains('analysis-mode') && apSel >= 0) selectRoll(apSel, apOpt);

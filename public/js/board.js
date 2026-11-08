@@ -55,11 +55,14 @@ export function resize() {
   if (!canvas) return;
   const par  = canvas.parentElement;
   const rect = par ? par.getBoundingClientRect() : { width: 0, height: 0 };
-  const size = Math.max(200, Math.min(
+  // The visible viewport (visualViewport on iPad/iPhone, where window
+  // heights can include space under the browser toolbars).
+  const visH = window.visualViewport?.height ?? window.innerHeight;
+  const size = Math.max(200, Math.floor(Math.min(
     rect.width  > 0 ? rect.width  : window.innerWidth  - 230,
-    rect.height > 0 ? rect.height : window.innerHeight - 10,
-    window.innerHeight - 10
-  ));
+    rect.height > 0 ? rect.height : visH - 10,
+    visH - 10
+  )));
   if (canvas.width === size) return;
   canvas.width  = size;
   canvas.height = size;
