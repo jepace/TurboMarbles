@@ -27,26 +27,91 @@
   </div>
 </div>
 
-<!-- Home: the lobby to every part of the game -->
-<div id="screen-home" class="screen">
-  <div class="card home-card">
-    <h1>TurboMarbles</h1>
-    <p id="home-hello" class="tagline"></p>
-    <div class="home-main">
-      <button id="btn-create">Create Game</button>
-      <button id="btn-join">Join Game</button>
-    </div>
-    <div class="home-more">
-      <button id="btn-board" class="secondary">🎨 Board</button>
-      <button id="btn-settings" class="secondary">⚙ Settings</button>
-      <button id="btn-profile" class="secondary">📊 Stats</button>
-    </div>
-    <div class="btn-row small-links"><button id="btn-switch-user" class="link-btn">Not you? Switch player</button></div>
+<!-- Side navigation for every page outside a game (shown with body.with-nav) -->
+<nav id="side-nav">
+  <div class="nav-brand">TurboMarbles</div>
+  <button class="nav-item" data-go="screen-home">🎲 Play</button>
+  <button class="nav-item" data-go="screen-leaderboard">🏆 Leaderboard</button>
+  <button class="nav-item acct" data-go="screen-friends">👥 Friends <span class="nav-badge" id="badge-friends"></span></button>
+  <button class="nav-item acct" data-go="screen-messages">💬 Messages <span class="nav-badge" id="badge-messages"></span></button>
+  <button class="nav-item acct" data-go="screen-profile">📊 Stats</button>
+  <button class="nav-item" data-go="screen-board">🎨 Board</button>
+  <button class="nav-item acct" data-go="screen-settings">⚙ Settings</button>
+  <div class="nav-foot">
+    <div id="nav-me"></div>
+    <button id="btn-switch-user" class="link-btn">Switch player</button>
+  </div>
+</nav>
+
+<!-- Play -->
+<div id="screen-home" class="screen page">
+  <div class="card">
+    <h2>Play</h2>
+    <p id="home-hello" class="muted"></p>
+    <section class="panel">
+      <h3>Quick match</h3>
+      <p class="muted">Play someone who wants the same kind of game.</p>
+      <div class="form-row">
+        <label>Players <select id="qm-players"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
+        <label id="qm-match-row">Match to <select id="qm-match"><option value="0">money game</option><option value="1">1 point</option><option value="3" selected>3 points</option><option value="5">5 points</option><option value="7">7 points</option></select></label>
+        <label id="qm-cube-row"><input type="checkbox" id="qm-cube" checked> Doubling cube</label>
+      </div>
+      <div class="form-row">
+        <button id="btn-quick" class="btn-go">Find a game</button>
+        <span id="qm-status" class="muted"></span>
+        <button id="btn-quick-cancel" class="secondary" style="display:none">Cancel</button>
+      </div>
+    </section>
+    <section class="panel">
+      <h3>Your own game</h3>
+      <p class="muted">Set it up, add robots, invite friends or share the code.</p>
+      <div class="form-row">
+        <button id="btn-create">Create Game</button>
+        <button id="btn-join" class="secondary">Join with a code</button>
+      </div>
+    </section>
   </div>
 </div>
 
+<!-- Leaderboard -->
+<div id="screen-leaderboard" class="screen page">
+  <div class="card">
+    <h2>Leaderboard</h2>
+    <p class="muted">Rating from games against people (Elo; everyone starts at 1500).</p>
+    <div id="lb-me" class="muted"></div>
+    <table class="table" id="lb-table"></table>
+  </div>
+</div>
+
+<!-- Friends -->
+<div id="screen-friends" class="screen page">
+  <div class="card">
+    <h2>Friends</h2>
+    <div class="form-row"><input id="friend-name" type="text" maxlength="20" placeholder="Player name"><button id="btn-friend-add">Add friend</button></div>
+    <div id="friends-box"></div>
+  </div>
+</div>
+
+<!-- Messages -->
+<div id="screen-messages" class="screen page">
+  <div class="card">
+    <h2>Messages</h2>
+    <div class="dm-layout">
+      <div id="dm-list"></div>
+      <div class="dm-pane">
+        <div id="dm-head" class="muted">Choose a friend.</div>
+        <div id="dm-log"></div>
+        <div class="form-row"><input id="dm-input" type="text" maxlength="500" placeholder="Message" disabled><button id="btn-dm-send" disabled>Send</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Invitation from a friend -->
+<div id="invite-pop" style="display:none"></div>
+
 <!-- Board look: colour, track, marbles, with a live preview -->
-<div id="screen-board" class="screen">
+<div id="screen-board" class="screen page">
   <div class="card board-card">
     <div class="profile-head"><h2>Board</h2><button id="btn-board-back" class="secondary">Back</button></div>
     <div class="board-settings">
@@ -64,14 +129,14 @@
 </div>
 
 <!-- Settings: account and preferences -->
-<div id="screen-settings" class="screen">
+<div id="screen-settings" class="screen page">
   <div class="card profile-card">
     <div class="profile-head"><h2>Settings</h2><button id="btn-settings-back" class="secondary">Back</button></div>
     <div id="profile-account"></div>
   </div>
 </div>
 
-<div id="screen-create" class="screen">
+<div id="screen-create" class="screen page">
   <div class="card">
     <h2>Create Game</h2>
     <label>Players (2–6)
@@ -94,7 +159,7 @@
   </div>
 </div>
 
-<div id="screen-profile" class="screen">
+<div id="screen-profile" class="screen page">
   <div class="card profile-card">
     <div class="profile-head">
       <h2 id="profile-name"></h2>
@@ -114,7 +179,7 @@
   </div>
 </div>
 
-<div id="screen-join" class="screen">
+<div id="screen-join" class="screen page">
   <div class="card">
     <h2>Join Game</h2>
     <input id="join-code" type="text" maxlength="6" placeholder="Room code" autocomplete="off" style="text-transform:uppercase">
@@ -135,6 +200,8 @@
       <button id="btn-start" class="btn-go">Start Game</button>
     </div>
     <p id="lobby-wait-msg" style="display:none">Waiting for host to start…</p>
+    <div id="lobby-invite"></div>
+    <div class="chat-box" id="lobby-chat"><div class="chat-log"></div><input class="chat-input" type="text" maxlength="300" placeholder="Say something…"></div>
   </div>
 </div>
 
@@ -216,6 +283,7 @@
       <div id="move-hint" style="display:none"></div>
       <div id="player-list"></div>
       <div id="game-log"></div>
+      <input id="game-chat-input" class="chat-input" type="text" maxlength="300" placeholder="Chat…">
       <div id="settings">
         <label title="After each roll, show how the robot would have played it"><input type="checkbox" id="opt-feedback"> Move feedback</label>
         <label title="Offer a rollout analysis of your moves when the game ends"><input type="checkbox" id="opt-analysis"> Post-game analysis</label>

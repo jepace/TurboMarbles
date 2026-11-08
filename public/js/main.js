@@ -81,8 +81,15 @@ function applyColorSwap() {
 
 // ---- Screen management ----
 function show(id) {
+  const prev = document.querySelector('.screen.active')?.id;
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  // Pages outside a game get the side navigation.
+  document.body.classList.toggle('with-nav', el.classList.contains('page'));
+  for (const b of document.querySelectorAll('#side-nav .nav-item')) b.classList.toggle('on', b.dataset.go === id);
+  // The Board page borrows the board renderer for its preview: give it back.
+  if (prev === 'screen-board' && id !== 'screen-board') { initBoard($('board-canvas')); setColorShift(0); }
   if (id === 'screen-landing') focusName();
 }
 
@@ -101,9 +108,173 @@ const $ = id => document.getElementById(id);
 // ---- Landing ----
 // Login → home (the lobby to everything).
 function goHome() {
-  $('home-hello').textContent = me ? `Signed in as ${me.name}` : `Playing as ${myName} (guest)`;
-  for (const id of ['btn-settings', 'btn-profile']) $(id).style.display = me ? '' : 'none';
+  $('home-hello').textContent = me ? '' : `Playing as ${myName} (guest). Keep your stats, rating and friends by signing in: Switch player, then tick "Keep my stats".`;
+  renderNavMe();
+  for (const b of document.querySelectorAll('#side-nav .acct')) b.style.display = me ? '' : 'none';
   show('screen-home');
+  if (me) send({ action: 'friends' });
+}
+// ---- Side navigation ----
+function renderNavMe() {
+  $('nav-me').replaceChildren(el('div', { class: 'nav-name' }, me?.name ?? myName ?? ''),
+    el('div', { class: 'muted' }, me ? (myRating ? `Rating ${myRating.rating}` : '') : 'guest'));
+}
+let myRating = null;
+function navigate(id) {
+  if (id === 'screen-profile' || id === 'screen-settings') { openProfile(id, 'screen-home'); return; }
+  if (id === 'screen-board') { show(id); renderBoardPage(); return; }
+  if (id === 'screen-leaderboard') send({ action: 'leaderboard' });
+  if (id === 'screen-friends' || id === 'screen-messages') send({ action: 'friends' });
+  show(id);
+  if (id === 'screen-messages') renderMessages();
+}
+for (const b of document.querySelectorAll('#side-nav .nav-item')) b.addEventListener('click', () => navigate(b.dataset.go));
+
+// ---- Quick match ----
+function updateQmOptions() {
+  const two = $('qm-players').value === '2';
+  $('qm-match-row').style.display = two ? '' : 'none';
+  const m = Number($('qm-match').value);
+  $('qm-cube-row').style.display = two && !m ? '' : 'none';
+}
+$('qm-players').addEventListener('change', updateQmOptions);
+$('qm-match').addEventListener('change', updateQmOptions);
+updateQmOptions();
+$('btn-quick').addEventListener('click', () => {
+  const n = Number($('qm-players').value), m = n === 2 ? Number($('qm-match').value) : 0;
+  connect();
+  send({ action: 'quickMatch', name: me?.name ?? myName, players: n, matchTo: m, cube: n === 2 && (m ? m >= 2 : $('qm-cube').checked) });
+  $('qm-status').textContent = 'Looking for players…';
+  $('btn-quick').disabled = true; $('btn-quick-cancel').style.display = '';
+});
+$('btn-quick-cancel').addEventListener('click', () => send({ action: 'quickMatchCancel' }));
+function resetQuick() { $('qm-status').textContent = ''; $('btn-quick').disabled = false; $('btn-quick-cancel').style.display = 'none'; }
+on('quickMatchWaiting', ({ waiting, need }) => { $('qm-status').textContent = `Waiting for players… ${waiting} of ${need}`; });
+on('quickMatchCancelled', resetQuick);
+on('quickMatchFound', resetQuick);
+
+// ---- Leaderboard ----
+on('leaderboard', ({ players, me: mine }) => {
+  if (mine) { myRating = mine; renderNavMe(); }
+  $('lb-me').textContent = mine ? `Your rating: ${mine.rating} (${mine.games} rated game${mine.games === 1 ? '' : 's'})` : '';
+  $('lb-table').replaceChildren(el('tr', {}, el('th', {}, '#'), el('th', {}, 'Player'), el('th', {}, 'Rating'), el('th', {}, 'Games')),
+    ...players.map(p => el('tr', { class: me && p.id === me.id ? 'me' : '' }, el('td', {}, String(p.rank)), el('td', {}, p.name), el('td', {}, String(p.rating)), el('td', {}, String(p.games)))));
+  if (!players.length) $('lb-table').append(el('tr', {}, el('td', { colSpan: 4, class: 'muted' }, 'No rated games yet.')));
+});
+
+// ---- Friends ----
+let friendsData = { friends: [], incoming: [], outgoing: [], blocked: [] };
+const dot = on_ => el('span', { class: 'online-dot' + (on_ ? ' on' : ''), title: on_ ? 'online' : 'offline' });
+function smallBtn(label, fn, cls = 'secondary') { const b = el('button', { class: cls + ' small' }, label); b.addEventListener('click', fn); return b; }
+on('friends', data => {
+  friendsData = data;
+  const unread = data.friends.reduce((n, f) => n + (f.unread || 0), 0);
+  $('badge-friends').textContent = data.incoming.length || '';
+  $('badge-messages').textContent = unread || '';
+  renderFriends(); renderMessages(); renderLobbyInvite();
+});
+on('presence', ({ id, online }) => {
+  const f = friendsData.friends.find(x => x.id === id);
+  if (f) { f.online = online; renderFriends(); renderMessages(); renderLobbyInvite(); }
+});
+function renderFriends() {
+  const d = friendsData, box = $('friends-box');
+  const sec = (title, rows) => rows.length ? [el('h3', {}, title), ...rows] : [];
+  box.replaceChildren(
+    ...sec('Requests', d.incoming.map(f => el('div', { class: 'friend-row' }, el('span', { class: 'fname' }, f.name),
+      smallBtn('Accept', () => send({ action: 'friendRespond', id: f.id, accept: true }), 'btn-go'),
+      smallBtn('Decline', () => send({ action: 'friendRespond', id: f.id, accept: false }))))),
+    ...sec(`Friends (${d.friends.length})`, d.friends.map(f => el('div', { class: 'friend-row' }, dot(f.online), el('span', { class: 'fname' }, f.name),
+      el('span', { class: 'muted' }, String(f.rating)),
+      smallBtn('Message' + (f.unread ? ` (${f.unread})` : ''), () => { dmWith = f.id; navigate('screen-messages'); }),
+      smallBtn('Remove', () => { if (confirm(`Remove ${f.name} from your friends?`)) send({ action: 'friendRemove', id: f.id }); }),
+      smallBtn('Block', () => { if (confirm(`Block ${f.name}? They can't message you, invite you or chat to you.`)) send({ action: 'block', id: f.id }); })))),
+    ...sec('Sent requests', d.outgoing.map(f => el('div', { class: 'friend-row' }, el('span', { class: 'fname' }, f.name), el('span', { class: 'muted' }, 'waiting'),
+      smallBtn('Cancel', () => send({ action: 'friendRemove', id: f.id }))))),
+    ...sec('Blocked', d.blocked.map(f => el('div', { class: 'friend-row' }, el('span', { class: 'fname' }, f.name), smallBtn('Unblock', () => send({ action: 'unblock', id: f.id }))))),
+  );
+  if (!box.children.length) box.append(el('p', { class: 'muted' }, 'No friends yet. Add someone by name.'));
+}
+$('btn-friend-add').addEventListener('click', () => { const n = $('friend-name').value.trim(); if (n) { send({ action: 'friendRequest', name: n }); $('friend-name').value = ''; } });
+$('friend-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-friend-add').click(); });
+
+// ---- Messages ----
+let dmWith = null;
+const dmLogs = new Map();          // friend id → [messages]
+function renderMessages() {
+  $('dm-list').replaceChildren(...friendsData.friends.map(f => {
+    const b = el('button', { class: 'dm-friend' + (f.id === dmWith ? ' on' : '') }, dot(f.online), f.name, f.unread ? el('span', { class: 'nav-badge' }, String(f.unread)) : '');
+    b.addEventListener('click', () => { dmWith = f.id; renderMessages(); });
+    return b;
+  }));
+  if (!friendsData.friends.length) $('dm-list').append(el('p', { class: 'muted' }, 'Add friends to message them.'));
+  const f = friendsData.friends.find(x => x.id === dmWith);
+  $('dm-input').disabled = $('btn-dm-send').disabled = !f;
+  $('dm-head').textContent = f ? f.name : 'Choose a friend.';
+  if (f && $('screen-messages').classList.contains('active') && !dmLogs.has(f.id)) send({ action: 'conversation', with: f.id });
+  if (f && f.unread && $('screen-messages').classList.contains('active')) { send({ action: 'conversation', with: f.id }); f.unread = 0; }
+  renderDmLog();
+}
+function renderDmLog() {
+  const log = $('dm-log');
+  log.replaceChildren(...(dmLogs.get(dmWith) ?? []).map(m => el('div', { class: 'dm-msg' + (me && m.from === me.id ? ' mine' : '') }, m.body)));
+  log.scrollTop = log.scrollHeight;
+}
+on('conversation', ({ with: w, messages }) => { dmLogs.set(w, messages); if (w === dmWith) renderDmLog(); send({ action: 'friends' }); });
+on('dm', ({ message: m }) => {
+  const other = me && m.from === me.id ? m.to : m.from;
+  if (dmLogs.has(other)) dmLogs.get(other).push(m);
+  if (other === dmWith && $('screen-messages').classList.contains('active')) { renderDmLog(); if (m.from !== me?.id) send({ action: 'conversation', with: other }); }
+  else if (m.from !== me?.id) { const f = friendsData.friends.find(x => x.id === other); if (f) { f.unread = (f.unread || 0) + 1; $('badge-messages').textContent = friendsData.friends.reduce((n, x) => n + (x.unread || 0), 0) || ''; renderFriends(); }
+    if (!$('screen-messages').classList.contains('active')) toastAnywhere(`💬 ${m.fromName}: ${m.body.slice(0, 80)}`); }
+});
+function sendDm() { const t = $('dm-input').value.trim(); if (t && dmWith) { send({ action: 'dm', to: dmWith, body: t }); $('dm-input').value = ''; } }
+$('btn-dm-send').addEventListener('click', sendDm);
+$('dm-input').addEventListener('keydown', e => { if (e.key === 'Enter') sendDm(); });
+
+// ---- Invitations ----
+function renderLobbyInvite() {
+  const box = $('lobby-invite');
+  if (!box) return;
+  const on_ = friendsData.friends.filter(f => f.online);
+  box.replaceChildren(...(me && on_.length ? [el('div', { class: 'muted' }, 'Invite a friend:'),
+    el('div', { class: 'chips' }, ...on_.map(f => { const b = el('button', { class: 'chip' }, dot(true), f.name);
+      b.addEventListener('click', () => { send({ action: 'invite', to: f.id }); b.disabled = true; b.append(' ✓'); }); return b; }))] : []));
+}
+on('invited', ({ from, code }) => {
+  const pop = $('invite-pop');
+  const join = el('button', { class: 'btn-go' }, 'Join'), no = el('button', { class: 'secondary' }, 'Not now');
+  pop.replaceChildren(el('div', {}, `${from} invites you to a game`), el('div', { class: 'btn-row' }, join, no));
+  pop.style.display = 'flex';
+  join.addEventListener('click', () => { pop.style.display = 'none'; myName = me?.name ?? myName; send({ action: 'joinRoom', code, name: myName }); });
+  no.addEventListener('click', () => { pop.style.display = 'none'; });
+});
+// A notice that works on any screen.
+function toastAnywhere(msg) {
+  const t = el('div', { class: 'toast global' }, msg);
+  document.body.append(t);
+  setTimeout(() => t.remove(), 5000);
+}
+
+// ---- Chat (lobby and game) ----
+function chatLine(name, text, color) {
+  return el('div', { class: 'chat-line' }, el('b', { style: color ? `color:${COLOR_MAP[dc(color)] ?? ''}` : '' }, name + ': '), text);
+}
+on('chat', ({ playerIndex, name, text }) => {
+  const color = gameState?.players?.[playerIndex]?.color;
+  if ($('screen-lobby').classList.contains('active')) {
+    const box = document.querySelector('#lobby-chat .chat-log');
+    box.append(chatLine(name, text)); box.scrollTop = box.scrollHeight;
+  } else {
+    const entry = chatLine(name, text, color); entry.classList.add('log-entry', 'log-chat');
+    $('game-log').append(entry); $('game-log').scrollTop = $('game-log').scrollHeight;
+  }
+});
+for (const inp of [document.querySelector('#lobby-chat .chat-input'), $('game-chat-input')]) {
+  inp.addEventListener('keydown', e => {
+    e.stopPropagation();                       // typing must not trigger game keys
+    if (e.key === 'Enter' && inp.value.trim()) { send({ action: 'chat', text: inp.value.trim() }); inp.value = ''; }
+  });
 }
 $('btn-continue').addEventListener('click', () => withName(goHome));
 $('btn-switch-user').addEventListener('click', () => {
@@ -667,8 +838,6 @@ $('btn-use-code').addEventListener('click', () => {
 // Stats and Settings both come from the profile data.
 let profileFrom = 'screen-home', profileTarget = 'screen-profile';
 const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile' }); };
-$('btn-profile').addEventListener('click', () => openProfile('screen-profile', 'screen-home'));
-$('btn-settings').addEventListener('click', () => openProfile('screen-settings', 'screen-home'));
 $('btn-profile-back').addEventListener('click', () => show(profileFrom));
 $('btn-settings-back').addEventListener('click', () => show(profileFrom));
 $('btn-game-profile').addEventListener('click', () => openProfile('screen-settings', 'screen-game'));
@@ -676,7 +845,7 @@ for (const t of document.querySelectorAll('#screen-profile .tab')) {
   t.addEventListener('click', () => { profileTab = t.dataset.tab; renderProfile(); });
 }
 
-on('profile', data => { profileData = data; renderProfile(); show(profileTarget); });
+on('profile', data => { profileData = data; if (data.rating) { myRating = data.rating; renderNavMe(); } renderProfile(); show(profileTarget); });
 on('history', ({ games }) => {
   if (!profileData) return;
   profileData.games.push(...games);
@@ -765,29 +934,29 @@ function prefSelect(key, opts) {
 function renderAccountSection(extra) {
   const box = $('profile-account');
   const btn = (label, fn, cls = 'secondary') => { const b = el('button', { class: cls }, label); b.addEventListener('click', fn); return b; };
-  const rows = [
-    el('div', { class: 'acct-row' }, el('span', { class: 'muted' }, `Signed in on ${profileData?.devices ?? 1} device${profileData?.devices === 1 ? '' : 's'}.`)),
-    el('div', { class: 'acct-row' },
-      btn('Link another device', () => send({ action: 'linkCode' })),
-      btn('Sign out other devices', () => { if (confirm('Sign out every other device? They will need a new link code.')) send({ action: 'signOutOthers' }); }),
-      btn('Show recovery key', () => renderAccountSection(el('div', {},
+  const section = (title, ...kids) => el('section', { class: 'panel' }, el('h3', {}, title), ...kids);
+  const row = (label, ...kids) => el('div', { class: 'set-row' }, el('div', { class: 'set-label' }, label), el('div', { class: 'set-ctl' }, ...kids));
+  box.replaceChildren(
+    section('Name',
+      row('Your name', el('b', {}, me?.name ?? '')),
+      row('Change it', el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
+        btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); }))),
+    section('Analysis',
+      row('Opens on', prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['all', 'all rolls']]),
+        prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']]))),
+    section('Devices',
+      row('Signed in on', el('span', {}, `${profileData?.devices ?? 1} device${profileData?.devices === 1 ? '' : 's'}`)),
+      row('Another device', btn('Link another device', () => send({ action: 'linkCode' }))),
+      row('Lost a device?', btn('Sign out other devices', () => { if (confirm('Sign out every other device? They will need a new link code.')) send({ action: 'signOutOthers' }); })),
+      row('Recovery key', btn('Show recovery key', () => renderAccountSection(el('div', {},
         el('div', { class: 'muted' }, 'Your recovery key signs in as you on any device ("Use a link code" on the start screen, then paste it). Keep it somewhere safe and private — anyone with it can play as you.'),
         el('div', { class: 'keybox' }, loadKey() ?? '(not stored in this browser)'))))),
-    el('div', { class: 'acct-row' }, el('span', {}, 'Analysis opens on'),
-      prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['all', 'all rolls']]),
-      prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']])),
-
-    el('div', { class: 'acct-row' },
-      el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
-      btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); })),
-    el('div', { class: 'acct-row' },
-      btn('Delete my account', () => {
+      ...(extra ? [extra] : [])),
+    section('Danger zone',
+      row('Delete account', btn('Delete my account', () => {
         const c = prompt(`This deletes your account and stats for good (your past games stay in your opponents' histories, without your name). Type your name to confirm:`);
         if (c) send({ action: 'deleteAccount', confirm: c });
-      }, 'secondary danger')),
-  ];
-  if (extra) rows.splice(2, 0, extra);
-  box.replaceChildren(...rows);
+      }, 'secondary danger'))));
 }
 on('linkCode', ({ code, expiresInMin }) => renderAccountSection(el('div', {},
   el('div', { class: 'muted' }, `On your other device, open the start screen, choose "Use a link code" and enter this code within ${expiresInMin} minutes (it works once):`),
@@ -1552,8 +1721,8 @@ function renderBoardPage() {
   initBoard($('preview-canvas'));
   drawBoard(gs);
 }
-$('btn-board').addEventListener('click', () => { show('screen-board'); renderBoardPage(); });
-$('btn-board-back').addEventListener('click', () => { initBoard($('board-canvas')); setColorShift(0); show('screen-home'); });
+
+$('btn-board-back').addEventListener('click', () => show('screen-home'));
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
   applySquareNumbers();
@@ -1568,6 +1737,7 @@ $('opt-analysis').addEventListener('change', e => {
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
 });
 
+on('roomCreated', () => renderLobbyInvite());
 on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, jacoby, matchTo }) => {
   roomId = rid;
   myPlayerIndex = 0;
@@ -2039,7 +2209,9 @@ on('doubleDropped', ({ playerIndex }) => {
   $('cube-offer').style.display = 'none';
   log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
 });
-on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
+on('gameResult', ({ winnerIndex, result, score, wins, match, game, ratings }) => {
+  const myR = ratings?.[myPlayerIndex];
+  if (myR) { myRating = { ...(myRating ?? {}), rating: myR.rating }; renderNavMe(); log(`Your rating: ${myR.rating} (${myR.change >= 0 ? '+' : ''}${myR.change})`); }
   if (game != null) {
     lastGameNo = game;
     if (!match) matchGames = [];
