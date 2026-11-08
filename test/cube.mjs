@@ -45,6 +45,16 @@ describe('engine — who may double, and when', () => {
   assert(g3.cube === null, 'no cube with three players');
 });
 
+describe('engine — dead cube in a match', () => {
+  // 3-point match: a is 2-away, b is 3-away.
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 1, { cube: true, away: [2, 3] });
+  assert(offerDouble(g, 1) && takeDouble(g, 0) && g.cube.value === 2 && g.cube.owner === 0, 'b doubles, 2-away a takes');
+  g.turnIndex = 0; g.phase = 'IN_TURN'; g.dice = null;
+  assert(!canDouble(g, 0), 'cube at 2 is dead for the 2-away owner');
+  const h = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true, away: [2, 3] });
+  assert(canDouble(h, 0), 'a centred cube at 1 is still alive for the 2-away player');
+});
+
 describe('engine — aggro scoring', () => {
   const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true });
   g.cube.value = 4;

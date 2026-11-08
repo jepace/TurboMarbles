@@ -30,7 +30,7 @@ export function trackDistance(from, to) {
 
 // --- State factory ---
 
-export function createGame(players, armIndices, initialTurnIndex, { cube = false, jacoby = false, crawford = false } = {}) {
+export function createGame(players, armIndices, initialTurnIndex, { cube = false, jacoby = false, crawford = false, away = null } = {}) {
   // players: array of { id, name, color, isRobot }
   // armIndices: optional explicit arm index per player (overrides ARM_MAP default)
   // Assign player indices and configs; use ARM_MAP so each player occupies the
@@ -65,7 +65,7 @@ export function createGame(players, armIndices, initialTurnIndex, { cube = false
     // Doubling cube (two-player games only, when enabled): value, and owner
     // (null = centred). cubeOffer is set while a double awaits an answer.
     // crawford: this is the Crawford game of a match — no doubling.
-    cube: cube && gamePlayers.length === 2 ? { value: 1, owner: null, ...(crawford ? { crawford: true } : {}) } : null,
+    cube: cube && gamePlayers.length === 2 ? { value: 1, owner: null, ...(crawford ? { crawford: true } : {}), ...(away ? { away: away.slice() } : {}) } : null,
     // Jacoby rule (money play): an aggro only counts double once the cube has been turned.
     jacoby: !!jacoby,
     cubeOffer: null,
@@ -81,9 +81,12 @@ export function createGame(players, armIndices, initialTurnIndex, { cube = false
 // the middle; whoever takes a double owns it and alone may redouble. Dropping
 // a double loses the cube's current value. Winning scores the cube's value,
 // twice that for an aggro (the loser has no marbles home).
+// In a match (cube.away = points each player still needs) the cube is dead for
+// a player once its value already wins them the match: redoubling can't gain.
+export const cubeDeadFor = (c, pi) => !!c?.away && c.away[pi] <= c.value;
 export function canDouble(state, playerIndex) {
   const c = state.cube;
-  return !!c && !c.crawford && state.phase === 'IN_TURN' && state.turnIndex === playerIndex && !state.dice &&
+  return !!c && !c.crawford && !cubeDeadFor(c, playerIndex) && state.phase === 'IN_TURN' && state.turnIndex === playerIndex && !state.dice &&
     state.winner == null && !state.cubeOffer && (c.owner == null || c.owner === playerIndex);
 }
 
@@ -97,7 +100,7 @@ export function offerDouble(state, playerIndex) {
 export function takeDouble(state, playerIndex) {
   const o = state.cubeOffer;
   if (!o || state.phase !== 'CUBE_OFFERED' || o.to !== playerIndex) return false;
-  state.cube = { value: o.value, owner: playerIndex };
+  state.cube = { ...state.cube, value: o.value, owner: playerIndex };
   state.cubeOffer = null;
   state.phase = 'IN_TURN';            // the doubler now rolls
   return true;

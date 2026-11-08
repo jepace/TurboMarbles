@@ -1042,8 +1042,8 @@ describe('analyzeGame — reports every roll of every player', () => {});
   // An automatic check may already be playing this decision out (the play
   // differed from the robot's): wait for it, then go one level deeper.
   const t0b = Date.now();
-  while (Date.now() - t0b < 30000 && room.analysis.result.rolls[0]._deepening) await new Promise(res => setTimeout(res, 50));
-  const cur = room.analysis.result.rolls[0].analysis.level ?? 0;
+  while (Date.now() - t0b < 30000 && room.records.at(-1).analysis.result.rolls[0]._deepening) await new Promise(res => setTimeout(res, 50));
+  const cur = room.records.at(-1).analysis.result.rolls[0].analysis.level ?? 0;
   gmConfig.analysisLevels = [gmConfig.analysis, gmConfig.analysis, { screen: 6, deep: 12, keep: 2, maxDeep: 12 }].slice(0, cur + 2);
   gmConfig.analysisLevels[cur + 1] = { screen: 6, deep: 12, keep: 2, maxDeep: 12 };
   host.sent = []; guest.sent = [];
@@ -1059,13 +1059,13 @@ describe('analyzeGame — reports every roll of every player', () => {});
   // Play out all: every decision redone at level 2, in the background.
   const small = { screen: 4, deep: 8, keep: 2, maxDeep: 8 };
   gmConfig.analysisLevels = [small, small, small];
-  room.analysis.result.rolls.forEach(r => { if (r.analysis) r.analysis.level = 0; });
+  room.records.at(-1).analysis.result.rolls.forEach(r => { if (r.analysis) r.analysis.level = 0; });
   host.sent = [];
   handlePlayOutAll(host, roomId);
   const t2 = Date.now();
   while (!host.find('playOutAll').some(e => e.running === false) && Date.now() - t2 < 30000) await new Promise(res => setTimeout(res, 50));
   assert(host.find('playOutAll')[0]?.running === true && host.find('playOutAll').some(e => e.running === false), 'play out all starts and finishes');
-  assert(room.analysis.result.rolls.filter(r => r.analysis).every(r => r.analysis.level === 2), 'every decision is now at the deep level');
+  assert(room.records.at(-1).analysis.result.rolls.filter(r => r.analysis).every(r => r.analysis.level === 2), 'every decision is now at the deep level');
 }
 
 describe('addRobot — random names from the list, no duplicates', () => {

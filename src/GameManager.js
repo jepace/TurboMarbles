@@ -45,7 +45,8 @@ export const config = {
   ],
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   cubeAnalysisGames: 400, // played-out games per cube decision (when no exact table applies)
-  cubeLevels: [400, 1600, 6400],   // games per cube decision: first pass, then 'Go deeper'
+  cubeLevels: [400, 1600, 6400],
+  dropNextGameMs: 2000,   // match play: pause after a dropped double before the next game starts   // games per cube decision: first pass, then 'Go deeper'
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   robotThinkMs: 1500,
@@ -251,13 +252,12 @@ function beginGame(room, players) {
   // Match play: a fresh match after one has ended; the Crawford game is the
   // first game after someone reaches match point (no doubling in it).
   const m = room.match;
-  if (m?.over) Object.assign(m, { score: [0, 0], crawfordUsed: false, over: false, winner: null });
+  if (m?.over) { Object.assign(m, { score: [0, 0], crawfordUsed: false, over: false, winner: null }); room.records = []; }
   const crawford = !!m && !m.crawfordUsed && m.score.some(x => x === m.length - 1);
   if (crawford) m.crawfordUsed = true;
   room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex,
-    { cube: room.cube, jacoby: room.jacoby, crawford });
+    { cube: room.cube, jacoby: room.jacoby, crawford, away: m ? m.score.map(x => m.length - x) : null });
   room.state = 'playing';
-  room.analysis = null;
   room.robotPlan = null;
   broadcast(room, { event: 'gameStarted', gameState: publicState(room) });
   scheduleCurrentTurn(room);
@@ -310,7 +310,13 @@ function finishGame(room) {
     room.score.forEach((_, i) => { if (i !== r.winner) room.score[i] -= r.points; });
   }
   storeFinishedGame(room, r);
-  broadcast(room, { event: 'gameResult', winnerIndex: game.winner, result: r,
+  room.records ??= [];
+  if (!m) room.records = [];
+  const rec = { n: (room.records.at(-1)?.n ?? 0) + 1, game, analysis: null, storedGameId: room.storedGameId ?? null,
+    score: m ? m.score.slice() : null, result: r, players: room.slots.map((s, i) => ({ name: s.name, color: game.players[i]?.color, isRobot: !!s.isRobot })) };
+  room.records.push(rec);
+  room.storedGameId = null;
+  broadcast(room, { event: 'gameResult', game: rec.n, winnerIndex: game.winner, result: r,
     score: room.totalPlayers === 2 && !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
 }
@@ -362,9 +368,26 @@ function cubeSeat(report, pi) {
     cubeBlunders: bad.filter(c => c.analysis.severity === 'blunder').length,
     cubeEqLost: bad.reduce((sum, c) => sum + c.analysis.loss, 0) };
 }
-function saveRoomAnalysis(room, report) {
-  if (!room.storedGameId || !storeEnabled()) return;
-  try { saveAnalysis(room.storedGameId, report, seatAnalysis(report)); } catch (err) { console.error('[store] could not save analysis', err); }
+function saveRecAnalysis(rec, report) {
+  if (!rec.storedGameId || !storeEnabled()) return;
+  try { saveAnalysis(rec.storedGameId, report, seatAnalysis(report)); } catch (err) { console.error('[store] could not save analysis', err); }
+}
+
+// ---------- Finished games kept for analysis ----------
+// Each finished game is a record { n, game, analysis, storedGameId, score }.
+// A match keeps every game until a new match starts; otherwise just the last.
+// Analysis actions name the game by n (default: the latest).
+function recordFor(room, gameNo) {
+  room.records ??= [];
+  const recs = room.records;
+  // A finished game that has no record yet (it ended some other way): add it.
+  if (room.state === 'finished' && room.game && !recs.some(r => r.game === room.game)) {
+    recs.push({ n: (recs.at(-1)?.n ?? 0) + 1, game: room.game, analysis: null, storedGameId: room.storedGameId ?? null,
+      score: room.match ? room.match.score.slice() : null, result: room.game.result ?? null,
+      players: room.slots.map((s, i) => ({ name: s.name, color: room.game.players[i]?.color, isRobot: !!s.isRobot })) });
+  }
+  if (gameNo == null) return recs[recs.length - 1] ?? null;
+  return recs.find(r => r.n === gameNo) ?? null;
 }
 
 // A stored game, for replay: its saved analysis, or a plain report built
@@ -524,6 +547,16 @@ function answerDouble(room, pi, take) {
     cubeStat(game, pi).drops++;
     broadcast(room, { event: 'doubleDropped', playerIndex: pi, winnerIndex: game.winner, result: game.result });
     finishGame(room);
+    // In a match, a drop goes straight on to the next game (after a moment to
+    // see the result) — no Next game step. Not when it ended the match.
+    if (room.match && !room.match.over) {
+      const t = setTimeout(() => {
+        if (rooms.has(room.id) && room.state === 'finished' && room.game === game) {
+          beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+        }
+      }, config.dropNextGameMs);
+      t.unref?.();
+    }
   }
 }
 
@@ -1272,21 +1305,39 @@ function recordDecision(room, ws) {
 // ---------- Post-game analysis ----------
 
 let analysesRunning = 0;
+// Analyses waiting for a free slot (one runs at a time, server-wide).
+const analysisQueue = [];
+function releaseAnalysis() {
+  analysesRunning--;
+  while (analysesRunning < MAX_ANALYSES && analysisQueue.length) {
+    const q = analysisQueue.shift();
+    if (rooms.has(q.roomId) && q.rec.analysis == null) { handleAnalyzeGame(q.ws, q.roomId, q.gameNo); break; }
+  }
+}
+
+// Analyse every finished game of the room's match (one after another).
+export function handleAnalyzeMatch(ws, roomId) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || sess.roomId !== roomId) return;
+  for (const rec of room.records ?? []) if (rec.analysis == null) handleAnalyzeGame(ws, roomId, rec.n);
+}
 
 // A finished game's player asks for the post-game report. Every decision of
 // every player is rolled out (in worker threads, so games keep running); the
 // report is cached on the room and sent to everyone who asked.
-export function handleAnalyzeGame(ws, roomId) {
+export function handleAnalyzeGame(ws, roomId, gameNo) {
   const room = rooms.get(roomId);
-  if (!room || room.state !== 'finished' || !room.game) return;
+  const rec = room && recordFor(room, gameNo);
+  if (!rec) return;
   const sess = sessions.get(ws._id);
   if (!sess || sess.roomId !== roomId) return;
 
-  const a = room.analysis;
-  if (a?.state === 'done') { sendTo(ws, { event: 'analysisResult', report: a.result }); return; }
+  const a = rec.analysis;
+  if (a?.state === 'done') { sendTo(ws, { event: 'analysisResult', game: rec.n, report: a.result }); return; }
   if (a?.state === 'running') { a.waiting.add(ws); return; }
 
-  const { game } = room;
+  const { game } = rec;
   finishRollRecord(game);
   const rolls = game._rolls ?? [];
   const decisions = rolls.map((r, idx) => ({ r, idx })).filter(x => !x.r.forced);
@@ -1300,35 +1351,41 @@ export function handleAnalyzeGame(ws, roomId) {
       rollIdx: c.rollIdx, v: c.state.cube?.value ?? 1, marbles: c.state.players.map(p => p.marbles), analysis: null, pending: true })),
   };
   const finish = report => {
-    room.analysis = { state: 'done', result: report };
-    saveRoomAnalysis(room, report);
-    for (const w of waiting) sendTo(w, { event: 'analysisResult', report });
+    rec.analysis = { state: 'done', result: report };
+    saveRecAnalysis(rec, report);
+    for (const w of waiting) sendTo(w, { event: 'analysisResult', game: rec.n, report });
   };
   const waiting = new Set([ws]);
   if (!decisions.length) {
     finish(base);
-    if (base.cube.length) { analysesRunning++; autoCheck(room, base, () => { analysesRunning--; }); }
+    if (base.cube.length) { analysesRunning++; autoCheck(room, rec, base, releaseAnalysis); }
     return;
   }
   if (analysesRunning >= MAX_ANALYSES) {
-    sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing another game. Try again in a minute.' });
+    // Wait in line (e.g. the games of a match, or another room's analysis).
+    if (analysisQueue.length >= 30) {
+      sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a minute.' });
+      return;
+    }
+    if (!analysisQueue.some(q => q.rec === rec)) analysisQueue.push({ ws, roomId, gameNo: rec.n, rec });
+    sendTo(ws, { event: 'analysisQueued', game: rec.n, ahead: analysisQueue.findIndex(q => q.rec === rec) });
     return;
   }
   analysesRunning++;
-  room.analysis = { state: 'running', waiting };
+  rec.analysis = { state: 'running', waiting };
 
   // Split the decisions over a few workers, interleaved so each gets a mix.
   const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, decisions.length));
   const chunks = Array.from({ length: nWorkers }, (_, w) => decisions.filter((_, k) => k % nWorkers === w));
   const results = new Map();
   let done = 0, live = nWorkers, failed = false;
-  const end = () => { analysesRunning--; };
+  const end = releaseAnalysis;
   const fail = err => {
     if (failed) return;
     failed = true;
     console.error('[analysis] worker failed', err);
     for (const w of workers) w.terminate();
-    room.analysis = null;
+    rec.analysis = null;
     for (const w of waiting) sendTo(w, { event: 'error', code: 'ANALYSIS_FAILED', message: 'Analysis failed.' });
     end();
   };
@@ -1341,12 +1398,12 @@ export function handleAnalyzeGame(ws, roomId) {
       if (msg.type === 'item') {
         results.set(msg.idx, msg.item);
         done++;
-        for (const w of waiting) sendTo(w, { event: 'analysisProgress', done, total: decisions.length });
+        for (const w of waiting) sendTo(w, { event: 'analysisProgress', game: rec.n, done, total: decisions.length });
       }
       if (msg.type === 'end' && --live === 0) {
         base.rolls.forEach((r, idx) => { if (results.has(idx)) r.analysis = results.get(idx); });
         finish(base);
-        autoCheck(room, base, end);
+        autoCheck(room, rec, base, end);
       }
     });
     worker.on('error', fail);
@@ -1360,7 +1417,7 @@ export function handleAnalyzeGame(ws, roomId) {
 // After the instant pass, every decision where the play differs from the
 // robot's choice, or the estimate calls it an error, is played out at level 1
 // in the background; each answer replaces the estimate as it arrives.
-function autoCheck(room, report, end, { level = 1, all = false } = {}) {
+function autoCheck(room, rec, report, end, { level = 1, all = false } = {}) {
   const opts = config.analysisLevels[level];
   // The automatic pass plays out EVERY decision at level 1 (and the cube):
   // the instant formula judges at about robot strength, so it can neither
@@ -1368,14 +1425,14 @@ function autoCheck(room, report, end, { level = 1, all = false } = {}) {
   // "Play out all" (all = true) redoes every decision below `level`.
   // Questionable ones (play differs from the robot, or flagged) go first.
   const todo = report.rolls.map((r, idx) => ({ r, idx })).filter(({ r, idx }) =>
-    r.analysis && !r._deepening && room.game?._rolls?.[idx]?.after && (r.analysis.level ?? 0) < level)
+    r.analysis && !r._deepening && rec.game?._rolls?.[idx]?.after && (r.analysis.level ?? 0) < level)
     .sort((x, y) => Number(x.r.analysis.robotAgrees && x.r.analysis.severity === 'ok') - Number(y.r.analysis.robotAgrees && y.r.analysis.severity === 'ok'));
-  const cubeLog = room.game?._cubeLog ?? [];
+  const cubeLog = rec.game?._cubeLog ?? [];
   const cubeTodo = all ? [] : (report.cube ?? []).map(c => c.i).filter(i => cubeLog[i]);
   if (!opts || (!todo.length && !cubeTodo.length)) { end(); return; }
   for (const { r, idx } of todo) {
     Object.defineProperty(r, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
-    broadcast(room, { event: 'analysisDeepening', idx, level, auto: true });
+    broadcast(room, { event: 'analysisDeepening', game: rec.n, idx, level, auto: true });
   }
   const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, todo.length + cubeTodo.length));
   let live = nWorkers, ended = false;
@@ -1392,17 +1449,17 @@ function autoCheck(room, report, end, { level = 1, all = false } = {}) {
       if (msg.type === 'item') {
         const roll = report.rolls[msg.idx];
         roll._deepening = false;
-        if (room.analysis?.result !== report) return;      // a rematch replaced the report
+        if (rec.analysis?.result !== report) return;      // a rematch replaced the report
         roll.analysis = msg.item;
-        broadcast(room, { event: 'analysisUpdate', idx: msg.idx, analysis: msg.item });
-        saveRoomAnalysis(room, report);
+        broadcast(room, { event: 'analysisUpdate', game: rec.n, idx: msg.idx, analysis: msg.item });
+        saveRecAnalysis(rec, report);
       }
       if (msg.type === 'cube') {
         const c = report.cube?.[msg.i];
-        if (!c || room.analysis?.result !== report) return;
+        if (!c || rec.analysis?.result !== report) return;
         c.analysis = msg.item; c.pending = false;
-        broadcast(room, { event: 'cubeUpdate', i: msg.i, analysis: msg.item });
-        saveRoomAnalysis(room, report);
+        broadcast(room, { event: 'cubeUpdate', game: rec.n, i: msg.i, analysis: msg.item });
+        saveRecAnalysis(rec, report);
       }
       if (msg.type === 'end' && --live === 0) stop();
     });
@@ -1414,21 +1471,23 @@ function autoCheck(room, report, end, { level = 1, all = false } = {}) {
 // A player asks for the whole game at the deep level (every decision played
 // out, not just the questionable ones). Runs in the background like the
 // automatic checks; each row updates as it finishes.
-export function handlePlayOutAll(ws, roomId) {
+export function handlePlayOutAll(ws, roomId, gameNo) {
   const room = rooms.get(roomId);
+  const rec = room && recordFor(room, gameNo);
+  if (!rec) return;
   const sess = sessions.get(ws._id);
-  if (!room || !sess || sess.roomId !== roomId || room.analysis?.state !== 'done') return;
-  if (room._playingOutAll) return;
+  if (!room || !sess || sess.roomId !== roomId || rec.analysis?.state !== 'done') return;
+  if (rec._playingOutAll) return;
   if (analysesRunning >= MAX_ANALYSES) {
     sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a minute.' });
     return;
   }
   analysesRunning++;
-  room._playingOutAll = true;
-  broadcast(room, { event: 'playOutAll', running: true });
-  autoCheck(room, room.analysis.result, () => {
-    analysesRunning--; room._playingOutAll = false;
-    broadcast(room, { event: 'playOutAll', running: false });
+  rec._playingOutAll = true;
+  broadcast(room, { event: 'playOutAll', game: rec.n, running: true });
+  autoCheck(room, rec, rec.analysis.result, () => {
+    releaseAnalysis(); rec._playingOutAll = false;
+    broadcast(room, { event: 'playOutAll', game: rec.n, running: false });
   }, { level: 2, all: true });
 }
 
@@ -1440,13 +1499,15 @@ const MAX_DEEPENS = 2;                 // at once, server-wide
 // A player asks for one analysed decision (report roll index) to be redone
 // at the next depth. The new answer replaces the old one in the room's
 // report and goes to everyone in the room.
-export function handleAnalyzeDeeper(ws, roomId, idx) {
+export function handleAnalyzeDeeper(ws, roomId, idx, gameNo) {
   const room = rooms.get(roomId);
+  const rec = room && recordFor(room, gameNo);
+  if (!rec) return;
   const sess = sessions.get(ws._id);
-  if (!room || !sess || sess.roomId !== roomId || room.analysis?.state !== 'done') return;
-  const report = room.analysis.result;
+  if (!room || !sess || sess.roomId !== roomId || rec.analysis?.state !== 'done') return;
+  const report = rec.analysis.result;
   const roll = report.rolls?.[idx];
-  const raw = room.game?._rolls?.[idx];
+  const raw = rec.game?._rolls?.[idx];
   if (!roll?.analysis || !raw?.after) return;
   const level = (roll.analysis.level ?? 0) + 1;
   const opts = config.analysisLevels[level];
@@ -1457,7 +1518,7 @@ export function handleAnalyzeDeeper(ws, roomId, idx) {
   }
   deepensRunning++;
   Object.defineProperty(roll, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
-  broadcast(room, { event: 'analysisDeepening', idx, level });
+  broadcast(room, { event: 'analysisDeepening', game: rec.n, idx, level });
   const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
     workerData: { decisions: [{ idx, before: raw.before, after: raw.after, pi: raw.pi }], options: { ...opts, level } },
   });
@@ -1465,12 +1526,12 @@ export function handleAnalyzeDeeper(ws, roomId, idx) {
   const finish = (item) => {
     if (done) return;
     done = true; deepensRunning--; roll._deepening = false;
-    if (item && room.analysis?.result === report) {
+    if (item && rec.analysis?.result === report) {
       roll.analysis = item;
-      broadcast(room, { event: 'analysisUpdate', idx, analysis: item });
-      saveRoomAnalysis(room, report);
+      broadcast(room, { event: 'analysisUpdate', game: rec.n, idx, analysis: item });
+      saveRecAnalysis(rec, report);
     } else if (!item) {
-      broadcast(room, { event: 'analysisUpdate', idx, analysis: roll.analysis, failed: true });
+      broadcast(room, { event: 'analysisUpdate', game: rec.n, idx, analysis: roll.analysis, failed: true });
     }
   };
   worker.on('message', msg => { if (msg.type === 'item') finish(msg.item); });
@@ -1481,13 +1542,15 @@ export function handleAnalyzeDeeper(ws, roomId, idx) {
 // Go deeper on one cube decision (report.cube index): more played-out games
 // (cubeLevels), or — for a no-double that was skipped as nowhere near the
 // window — analyse it anyway at the first level.
-export function handleAnalyzeDeeperCube(ws, roomId, i) {
+export function handleAnalyzeDeeperCube(ws, roomId, i, gameNo) {
   const room = rooms.get(roomId);
+  const rec = room && recordFor(room, gameNo);
+  if (!rec) return;
   const sess = sessions.get(ws._id);
-  if (!room || !sess || sess.roomId !== roomId || room.analysis?.state !== 'done') return;
-  const report = room.analysis.result;
+  if (!room || !sess || sess.roomId !== roomId || rec.analysis?.state !== 'done') return;
+  const report = rec.analysis.result;
   const c = report.cube?.[i];
-  const entry = room.game?._cubeLog?.[i];
+  const entry = rec.game?._cubeLog?.[i];
   if (!c || !entry || c.pending || c._deepening || c.analysis?.exact) return;
   const level = c.analysis?.skip ? 0 : (c.analysis?.level ?? 0) + 1;
   const games = config.cubeLevels[level];
@@ -1498,7 +1561,7 @@ export function handleAnalyzeDeeperCube(ws, roomId, i) {
   }
   deepensRunning++;
   Object.defineProperty(c, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
-  broadcast(room, { event: 'cubeDeepening', i, level });
+  broadcast(room, { event: 'cubeDeepening', game: rec.n, i, level });
   const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
     workerData: { decisions: [], cube: [{ i, entry }], cubeGames: games, cubeForce: true, cubeLevel: level, options: {} },
   });
@@ -1506,8 +1569,8 @@ export function handleAnalyzeDeeperCube(ws, roomId, i) {
   const finish = item => {
     if (done) return;
     done = true; deepensRunning--; c._deepening = false;
-    if (item && room.analysis?.result === report) { c.analysis = item; saveRoomAnalysis(room, report); }
-    broadcast(room, { event: 'cubeUpdate', i, analysis: c.analysis, failed: !item });
+    if (item && rec.analysis?.result === report) { c.analysis = item; saveRecAnalysis(rec, report); }
+    broadcast(room, { event: 'cubeUpdate', game: rec.n, i, analysis: c.analysis, failed: !item });
   };
   worker.on('message', msg => { if (msg.type === 'cube') finish(msg.item); });
   worker.on('error', err => { console.error('[analysis] cube deeper failed', err); finish(null); });

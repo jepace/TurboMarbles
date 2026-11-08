@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube,
+  handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS } from './Accounts.js';
@@ -57,6 +57,10 @@ function playName(ws, raw) {
   if (name && isNameTaken(name)) return null;
   return name;
 }
+
+// Which finished game of the room an analysis action is about (match play);
+// undefined = the latest.
+const gameNum = msg => (Number.isInteger(msg.game) && msg.game >= 1 && msg.game <= 500 ? msg.game : undefined);
 
 const isPlainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -168,7 +172,7 @@ const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube',
+  'double', 'take', 'drop', 'rematch', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
 ]);
 
 function dispatch(ws, msg) {
@@ -297,27 +301,33 @@ function dispatch(ws, msg) {
       if (!roomId) return;
       const idx = Number(msg.idx);
       if (!Number.isInteger(idx) || idx < 0 || idx > 10000) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Bad decision index' });
-      handleAnalyzeDeeper(ws, roomId, idx);
+      handleAnalyzeDeeper(ws, roomId, idx, gameNum(msg));
       break;
     }
 
     case 'analyzeDeeperCube': {
       const roomId = getRoomByWs(ws);
       const i = Number(msg.i);
-      if (roomId && Number.isInteger(i) && i >= 0 && i < 1000) handleAnalyzeDeeperCube(ws, roomId, i);
+      if (roomId && Number.isInteger(i) && i >= 0 && i < 1000) handleAnalyzeDeeperCube(ws, roomId, i, gameNum(msg));
+      break;
+    }
+
+    case 'analyzeMatch': {
+      const roomId = getRoomByWs(ws);
+      if (roomId) handleAnalyzeMatch(ws, roomId);
       break;
     }
 
     case 'playOutAll': {
       const roomId = getRoomByWs(ws);
-      if (roomId) handlePlayOutAll(ws, roomId);
+      if (roomId) handlePlayOutAll(ws, roomId, gameNum(msg));
       break;
     }
 
     case 'analyzeGame': {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
-      handleAnalyzeGame(ws, roomId);
+      handleAnalyzeGame(ws, roomId, gameNum(msg));
       break;
     }
 

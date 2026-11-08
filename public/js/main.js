@@ -699,23 +699,81 @@ function resetAnalyzeButton() {
   btn.disabled = false;
   btn.textContent = 'Analyze Game';
 }
+// ---- Several games (a match): one report per game, by game number ----
+const reports = new Map();         // game number → report
+let curGame = null;                // game shown on the analysis page (null = match view)
+let matchGames = [];               // finished games of this match/session: { n, score, result, winner }
+let lastGameNo = null;
+const inMatch = () => !!gameState?.match;
 $('btn-analyze').addEventListener('click', () => {
-  if (analysisReport) { openAnalysis(); return; }
+  if (reports.has(lastGameNo)) { showGame(lastGameNo); return; }
   const btn = $('btn-analyze');
   btn.disabled = true;
   btn.textContent = 'Analyzing…';
-  send({ action: 'analyzeGame' });
+  if (inMatch() && matchGames.length > 1) send({ action: 'analyzeMatch' });
+  else send({ action: 'analyzeGame', game: lastGameNo ?? undefined });
 });
-on('analysisProgress', ({ done, total }) => {
-  $('btn-analyze').textContent = `Analyzing… ${done}/${total}`;
+on('analysisProgress', ({ done, total, game }) => {
+  $('btn-analyze').textContent = matchGames.length > 1 ? `Analyzing game ${game}… ${done}/${total}` : `Analyzing… ${done}/${total}`;
 });
-on('analysisResult', ({ report }) => {
+on('analysisQueued', ({ game }) => { if (matchGames.length > 1) $('btn-analyze').textContent = `Game ${game} queued…`; });
+on('analysisResult', ({ report, game }) => {
+  const n = game ?? lastGameNo;
+  reports.set(n, report);
   const btn = $('btn-analyze');
   btn.disabled = false;
-  btn.textContent = 'Show Analysis';
-  analysisReport = report;
-  openAnalysis();
+  btn.textContent = matchGames.length > 1 ? 'Show Analysis' : 'Show Analysis';
+  // Open the page on the first report; later games of a match just appear in the tabs.
+  if (!$('game-layout').classList.contains('analysis-mode') || curGame === n || waitingFor === n) showGame(n);
+  else renderGameTabs();
 });
+let waitingFor = null;
+// Show one game's analysis (fetching it if needed), or the match view.
+function showGame(n) {
+  if (n === 'match') { curGame = null; openAnalysis(true); return; }
+  const rep = reports.get(n);
+  if (!rep) { waitingFor = n; send({ action: 'analyzeGame', game: n }); renderGameTabs(); return; }
+  waitingFor = null;
+  curGame = n;
+  analysisReport = rep;
+  deepening.clear(); cubeDeep.clear(); apSel = -1; apCube = null;
+  openAnalysis();
+}
+// Tabs: Game 1 · Game 2 · … · Match (only when there is more than one game).
+function renderGameTabs() {
+  const box = $('ap-games');
+  if (matchGames.length < 2 || viewingStored) { box.replaceChildren(); box.style.display = 'none'; return; }
+  box.style.display = 'flex';
+  const tab = (key, label, title) => {
+    const b = el('button', { class: 'tab' + ((key === 'match' ? curGame == null : curGame === key) ? ' on' : ''), title }, label);
+    b.addEventListener('click', () => showGame(key));
+    return b;
+  };
+  box.replaceChildren(...matchGames.map(g => tab(g.n, `Game ${g.n}`,
+    `${g.winner != null ? playerName(g.winner) + ' won' : ''}${g.result ? ` ${g.result.points} pt` : ''}${reports.has(g.n) ? '' : ' · not analysed yet'}`)),
+    tab('match', 'Match', 'All games together'));
+}
+// The match view: everyone's numbers over all analysed games, and the games.
+function renderMatchView() {
+  const reps = matchGames.map(g => reports.get(g.n)).filter(Boolean);
+  const base = reps[0];
+  $('ap-status').replaceChildren(el('span', {}, `${reps.length} of ${matchGames.length} games analysed` + (reps.length < matchGames.length ? ' · open a game to analyse it' : '')));
+  if (base) {
+    analysisReport = { players: base.players, winner: null, rolls: reps.flatMap(r => r.rolls), cube: reps.flatMap(r => r.cube ?? []) };
+    renderSummary();
+    $('ap-status').prepend(el('span', {}, 'Whole match · '));
+  } else $('ap-summary').replaceChildren();
+  $('ap-chart').replaceChildren();
+  $('ap-detail').replaceChildren();
+  $('ap-moves').replaceChildren(...matchGames.map(g => {
+    const row = el('div', { class: 'ap-row', style: 'grid-template-columns: 5em 1fr auto' },
+      el('span', {}, `Game ${g.n}`),
+      el('span', {}, `${g.winner != null ? playerName(g.winner) + ' won' : ''}${g.result ? ` · ${g.result.points} pt${g.result.points === 1 ? '' : 's'}${g.result.aggro ? ' (aggro)' : g.result.dropped ? ' (drop)' : ''}` : ''}${g.score ? ` · ${g.score.join('–')}` : ''}`),
+      el('span', { class: 'muted' }, reports.has(g.n) ? 'open ›' : 'analyse ›'));
+    row.addEventListener('click', () => showGame(g.n));
+    return row;
+  }));
+}
 
 // ---- Analysis page ----
 // Every roll of the game in a list; the board shows the position of the
@@ -776,11 +834,13 @@ function el(tag, props = {}, ...kids) {
   return e;
 }
 
-function openAnalysis() {
-  const rep = analysisReport;
-  if (!rep) return;
+function openAnalysis(matchView = false) {
   $('game-layout').classList.add('analysis-mode');
   $('analysis-panel').style.display = 'flex';
+  renderGameTabs();
+  if (matchView) { renderMatchView(); return; }
+  const rep = analysisReport;
+  if (!rep) return;
   renderSummary();
 
   const sel = $('ap-player');
@@ -813,12 +873,12 @@ function renderStatus() {
     const b = el('button', { class: 'secondary', title: 'Play out every decision at the deep level (minutes; runs in the background)' },
       playingOutAll ? 'Playing out all…' : 'Play out all');
     b.disabled = playingOutAll;
-    b.addEventListener('click', () => { send({ action: 'playOutAll' }); });
+    b.addEventListener('click', () => { send({ action: 'playOutAll', game: curGame ?? undefined }); });
     kids.push(b);
   }
   $('ap-status').replaceChildren(...kids);
 }
-on('playOutAll', ({ running }) => { playingOutAll = running; renderStatus(); });
+on('playOutAll', ({ running, game }) => { if (game != null && game !== curGame) return; playingOutAll = running; renderStatus(); });
 
 // Hover text splitting a combined number into moves and cube.
 function cubeSplit(s, f) { return (analysisReport?.cube ?? []).length ? f(s) : ''; }
@@ -852,14 +912,17 @@ const deepening = new Set();       // roll indexes being redone
 function analyzeDeeper(idx) {
   const a = analysisReport?.rolls[idx]?.analysis;
   if (!a || (a.level ?? 0) >= LEVEL_NAMES.length - 1 || deepening.has(idx)) return;
-  send({ action: 'analyzeDeeper', idx });
+  send({ action: 'analyzeDeeper', idx, game: curGame ?? undefined });
 }
-on('analysisDeepening', ({ idx }) => {
+on('analysisDeepening', ({ idx, game }) => {
+  if (game != null && game !== curGame) return;
   deepening.add(idx);
   if ($('game-layout').classList.contains('analysis-mode')) { renderMoveList(); renderStatus(); }
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
-on('cubeUpdate', ({ i, analysis, failed }) => {
+on('cubeUpdate', ({ i, analysis, failed, game }) => {
+  const rep0 = reports.get(game ?? curGame);
+  if (game != null && game !== curGame) { const c0 = rep0?.cube?.[i]; if (c0) { c0.analysis = analysis; c0.pending = false; } return; }
   cubeDeep.delete(i);
   if (failed) log('Deeper cube analysis failed — try again.');
   const c = analysisReport?.cube?.[i];
@@ -875,7 +938,8 @@ on('cubeFeedback', ({ playerIndex, text, agrees }) => {
   log(`↳ cube: ${text}`, null, `log-feedback ${agrees ? 'agree' : 'differ'}`);
 });
 
-on('analysisUpdate', ({ idx, analysis, failed }) => {
+on('analysisUpdate', ({ idx, analysis, failed, game }) => {
+  if (game != null && game !== curGame) { const r0 = reports.get(game)?.rolls?.[idx]; if (r0) r0.analysis = analysis; return; }
   deepening.delete(idx);
   if (!analysisReport?.rolls[idx]) return;
   analysisReport.rolls[idx].analysis = analysis;
@@ -1008,9 +1072,10 @@ function cubeBadge(c) {
 function analyzeDeeperCube(i) {
   const c = analysisReport?.cube?.[i];
   if (!c || viewingStored || cubeDeep.has(i) || c.analysis?.exact) return;
-  send({ action: 'analyzeDeeperCube', i });
+  send({ action: 'analyzeDeeperCube', i, game: curGame ?? undefined });
 }
-on('cubeDeepening', ({ i }) => {
+on('cubeDeepening', ({ i, game }) => {
+  if (game != null && game !== curGame) return;
   cubeDeep.add(i);
   if (!$('game-layout').classList.contains('analysis-mode')) return;
   renderMoveList();
@@ -1334,7 +1399,9 @@ on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
   pendingFeedback = null;
   resetAnalyzeButton();
-  analysisReport = null; apSel = -1;
+  analysisReport = null; apSel = -1; curGame = null; waitingFor = null;
+  // A match keeps its games' reports until a new match starts.
+  if (!gs.match || gs.match.score.every(x => x === 0)) { reports.clear(); if (!gs.match || !matchGames.length || matchGames.at(-1)?.score?.some(x => x >= gs.match.length)) matchGames = []; }
   if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
   show('screen-game');
   faceMyArm();
@@ -1621,7 +1688,7 @@ const cubeOwnerText = c => c.owner == null ? 'centred'
   : c.owner === myPlayerIndex ? 'your cube' : `${playerName(c.owner)}'s cube`;
 function canIDouble() {
   const g = gameState, c = g?.cube;
-  return !!c && !c.crawford && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
+  return !!c && !c.crawford && !(c.away && c.away[myPlayerIndex] <= c.value) && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
     (c.owner == null || c.owner === myPlayerIndex);
 }
 function renderCube() {
@@ -1629,12 +1696,18 @@ function renderCube() {
   $('cube-area').style.display = c ? 'flex' : 'none';
   if (c) {
     $('cube').textContent = String(c.value);
-    $('cube-owner').textContent = c.crawford ? 'Crawford game — no doubling' : cubeOwnerText(c);
-    $('btn-double').style.display = canIDouble() ? '' : 'none';
+    const dead = c.owner != null && c.away && c.away[c.owner] <= c.value;
+    $('cube-owner').textContent = c.crawford ? 'Crawford game — no doubling'
+      : cubeOwnerText(c) + (dead ? ' · dead (a win already takes the match)' : '');
+    const bd = $('btn-double');
+    bd.style.display = canIDouble() ? '' : 'none';
+    bd.textContent = String(c.value * 2);
+    bd.title = `Double to ${c.value * 2} (D)`;
     // A double waiting for my answer (also after a reconnect).
     const o = gameState.cubeOffer;
     if (o && o.to === myPlayerIndex && gameState.phase === 'CUBE_OFFERED') {
-      $('cube-offer-msg').textContent = `${playerName(o.from)} doubles to ${o.value}. Take, and play on for ${o.value}? Or drop, and lose ${c.value}?`;
+      $('cube-offer-msg').replaceChildren(el('div', { class: 'cube-face' }, String(o.value)),
+        el('div', {}, `${playerName(o.from)} doubles to ${o.value}. Take, and play on for ${o.value}? Or drop, and lose ${c.value}?`));
       $('cube-offer').style.display = 'flex';
     } else if (!o) $('cube-offer').style.display = 'none';
   }
@@ -1727,7 +1800,12 @@ on('doubleDropped', ({ playerIndex }) => {
   $('cube-offer').style.display = 'none';
   log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
 });
-on('gameResult', ({ winnerIndex, result, score, wins, match }) => {
+on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
+  if (game != null) {
+    lastGameNo = game;
+    if (!match) matchGames = [];
+    matchGames.push({ n: game, winner: winnerIndex, result, score: match ? match.score.slice() : null });
+  }
   if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; gameState.match = match ? { ...match, crawford: false } : null; }
   showGameOver(winnerIndex);
   if (result) {
