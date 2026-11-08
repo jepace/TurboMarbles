@@ -8,6 +8,7 @@ import {
 } from '../src/GameManager.js';
 import { shouldDouble, shouldTake, cubefulEquity } from '../src/CubeDecision.js';
 import { analyzeCube } from '../src/CubeAnalysis.js';
+import { matchCube, met } from '../src/MatchEquity.js';
 import { _stop } from '../src/RobotThinker.js';
 
 let passed = 0, failed = 0;
@@ -238,6 +239,56 @@ await describe('cube analysis — go deeper / analyse anyway', async () => {
   for (let t = 0; t < 200 && !host.find('cubeUpdate').length; t++) await sleep(50);
   const deeper = host.find('cubeUpdate')[0]?.analysis;
   assert(deeper?.level === 1 && deeper.n === 40, `go deeper: next level (${deeper?.n} games)`);
+});
+
+describe('Jacoby rule — aggros count only once the cube has been turned', () => {
+  const mk = () => { const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true, jacoby: true }); return g; };
+  const g = mk();
+  assert(gameResult(g, 0).points === 1 && !gameResult(g, 0).aggro, 'cube at 1: an aggro scores 1');
+  g.cube.value = 2;
+  assert(gameResult(g, 0).points === 4 && gameResult(g, 0).aggro, 'cube turned to 2: an aggro scores 4');
+});
+
+await describe('match play — score, Crawford game, post-Crawford, match over', async () => {
+  _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0;
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId, matchTo } = createRoom(host, 'Alice', 2, undefined, { cube: true, matchTo: 3 });
+  assert(matchTo === 3, 'match to 3 created');
+  joinRoom(guest, code, 'Bob');
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  const win = (pi, aggro = false) => {           // pi wins the current game
+    const g = room.game;
+    g.turnIndex = pi;
+    g.players[pi].marbles.forEach((m, i) => Object.assign(m, i < 3 ? { zone: 'home', slot: 4 - i } : { zone: 'track', space: g.players[pi].config.homeEntry }));
+    g.players[1 - pi].marbles.forEach((m, i) => Object.assign(m, aggro || i > 0 ? { zone: 'base', space: null, slot: null } : { zone: 'home', slot: 4 }));
+    g.phase = 'AWAITING_MOVE'; g.dice = [1, 2]; g.diceUsed = [false, true]; g._humanMadeMove = false; g._undoStack = [];
+    handleMove(pi === 0 ? host : guest, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
+  };
+  win(0);                                          // Alice 1–0
+  assert(room.match.score.join() === '1,0' && !room.match.over, 'a single game scores 1 in the match');
+  handleRematch(host, roomId); handleRematch(guest, roomId);
+  win(0);                                          // Alice 2–0: match point
+  handleRematch(host, roomId); handleRematch(guest, roomId);
+  assert(room.game.cube.crawford === true && !canDouble(room.game, room.game.turnIndex), 'next game is the Crawford game: no doubling');
+  assert(host.find('gameStarted').pop().gameState.match.crawford === true, 'clients are told it is the Crawford game');
+  win(1);                                          // Bob 2–1
+  handleRematch(host, roomId); handleRematch(guest, roomId);
+  assert(!room.game.cube.crawford && room.match.crawfordUsed, 'after it: post-Crawford, doubling allowed');
+  win(1, true);                                    // Bob aggro: 2 points → 2–3, Bob wins the match
+  const res = host.find('gameResult').pop();
+  assert(res.match.over && res.match.winner === 1 && res.match.score.join() === '2,3', `match over: Bob wins 3–2 (${res.match.score})`);
+  handleRematch(host, roomId); handleRematch(guest, roomId);
+  assert(room.match.score.join() === '0,0' && !room.match.over && !room.match.crawfordUsed, 'rematch after the match: a new match');
+});
+
+describe('match play — robot cube decisions follow the score', () => {
+  // Post-Crawford, the trailer should double at once (nothing to lose); the leader takes.
+  const r = matchCube({ p: 0.45, aggroWin: 0.03, aggroLoss: 0.03 }, { a: 4, b: 1, v: 1, crawfordUsed: true });
+  assert(r.double && r.take, 'post-Crawford: the trailer doubles even as the underdog, and it is a take');
+  const dmp = matchCube({ p: 0.9, aggroWin: 0, aggroLoss: 0 }, { a: 1, b: 1, v: 1, crawfordUsed: true });
+  assert(!dmp.double, 'both at match point: doubling is pointless');
+  assert(Math.abs(met(1, 1) - 0.5) < 1e-9 && met(1, 3) > met(1, 2) && met(2, 1) < 0.5, 'match equity table is consistent');
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

@@ -39,7 +39,13 @@
     </label>
     <div id="create-colors" class="color-picker-row"></div>
     <label id="create-cube-row" class="opt-row" title="Money play: double at the start of your turn; an aggro (loser has no marbles home) counts double">
-      <input type="checkbox" id="create-cube"> Doubling cube (money play) <span id="create-cube-note" class="muted"></span>
+      <input type="checkbox" id="create-cube"> Doubling cube <span id="create-cube-note" class="muted"></span>
+    </label>
+    <label id="create-match-row" class="opt-row" title="Play a match to this many points (Crawford rule applies). 0 = a money session that just keeps score.">
+      Match to <input type="number" id="create-match" min="0" max="25" value="0" style="width:4.5em"> points <span class="muted">(0 = money session)</span>
+    </label>
+    <label id="create-jacoby-row" class="opt-row" title="Money play: an aggro only counts double once the cube has been turned">
+      <input type="checkbox" id="create-jacoby"> Jacoby rule
     </label>
     <div class="btn-row">
       <button id="btn-create-confirm" class="btn-go">Create</button>
@@ -130,7 +136,6 @@
       <div class="ap-filters">
         <select id="ap-filter">
           <option value="all">All rolls</option>
-          <option value="choices">Real choices</option>
           <option value="errors">Errors only</option>
         </select>
         <select id="ap-player"></select>

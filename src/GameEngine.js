@@ -30,7 +30,7 @@ export function trackDistance(from, to) {
 
 // --- State factory ---
 
-export function createGame(players, armIndices, initialTurnIndex, { cube = false } = {}) {
+export function createGame(players, armIndices, initialTurnIndex, { cube = false, jacoby = false, crawford = false } = {}) {
   // players: array of { id, name, color, isRobot }
   // armIndices: optional explicit arm index per player (overrides ARM_MAP default)
   // Assign player indices and configs; use ARM_MAP so each player occupies the
@@ -64,7 +64,10 @@ export function createGame(players, armIndices, initialTurnIndex, { cube = false
     winner: null,         // playerIndex of the winner, or null
     // Doubling cube (two-player games only, when enabled): value, and owner
     // (null = centred). cubeOffer is set while a double awaits an answer.
-    cube: cube && gamePlayers.length === 2 ? { value: 1, owner: null } : null,
+    // crawford: this is the Crawford game of a match — no doubling.
+    cube: cube && gamePlayers.length === 2 ? { value: 1, owner: null, ...(crawford ? { crawford: true } : {}) } : null,
+    // Jacoby rule (money play): an aggro only counts double once the cube has been turned.
+    jacoby: !!jacoby,
     cubeOffer: null,
     // With a cube: { winner, points, aggro, dropped } once the game is over.
     result: null,
@@ -80,7 +83,7 @@ export function createGame(players, armIndices, initialTurnIndex, { cube = false
 // twice that for an aggro (the loser has no marbles home).
 export function canDouble(state, playerIndex) {
   const c = state.cube;
-  return !!c && state.phase === 'IN_TURN' && state.turnIndex === playerIndex && !state.dice &&
+  return !!c && !c.crawford && state.phase === 'IN_TURN' && state.turnIndex === playerIndex && !state.dice &&
     state.winner == null && !state.cubeOffer && (c.owner == null || c.owner === playerIndex);
 }
 
@@ -114,7 +117,8 @@ export function dropDouble(state, playerIndex) {
 // for an aggro — the loser has no marbles home.
 export function gameResult(state, winner) {
   const loser = state.players.find((_, i) => i !== winner);
-  const aggro = !!loser && loser.marbles.every(m => m.zone !== 'home');
+  // Jacoby: with the cube never turned (still at 1), an aggro counts as a single game.
+  const aggro = !!loser && loser.marbles.every(m => m.zone !== 'home') && !(state.jacoby && (state.cube?.value ?? 1) === 1);
   return { winner, points: (state.cube?.value ?? 1) * (aggro ? 2 : 1), aggro, dropped: false };
 }
 

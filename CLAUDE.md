@@ -118,6 +118,11 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   across Rematches (without the cube a win is 1 point, an aggro 2); 3+ players: games won. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
   Janowski money-play formulas). Cube decisions are analysed too (`src/CubeAnalysis.js`): in-game feedback
   (`cubeFeedback`) and post-game rows with no double / double-take / double-drop equities.
+- Jacoby rule (money play option): an aggro only counts double once the cube has been turned.
+- Matches to N points (2 players; Crawford rule: no doubling in the first game after someone reaches
+  N−1, then post-Crawford). Match score per room; Rematch continues the match, then starts a new one.
+  Cube decisions in a match use a match equity table for this game (`src/MatchEquity.js`, from the
+  measured 7.3% aggro rate; dead-cube decisions), shown in equity units (EMG).
 - Analysis numbers are all **equity** (decimals of the stake; losing a game = 1.0): a move's win-chance
   loss x shows as 2x; errors 0.06–0.20, blunders ≥ 0.20, for moves and cube alike. Plain chances
   (hit, finish next turn) stay percentages.

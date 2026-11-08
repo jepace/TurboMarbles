@@ -7,6 +7,7 @@ import {
   MARBLES_PER_PLAYER, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets, gameResult,
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
+import { matchCube, emg } from './MatchEquity.js';
 import { recordGame, saveAnalysis, storeEnabled } from './Store.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
@@ -83,7 +84,7 @@ function genId() {
 // the socket's current room. (Previously a socket could create several rooms
 // but was only tracked in the last, so the others leaked forever.)
 
-export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false } = {}) {
+export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false, jacoby = false, matchTo = 0 } = {}) {
   if (sessions.has(hostWs._id)) leaveRoom(hostWs);
   sweepStaleLobbies();
   if (rooms.size >= MAX_TOTAL_ROOMS) return { error: 'Server is full' };
@@ -129,16 +130,22 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     robotTurnTimer: null,
     skipTimer: null,
     analysis: null,     // post-game analysis: null | { state: 'running', waiting: Set<ws> } | { state: 'done', result }
-    cube: !!cube && totalPlayers === 2,   // doubling cube (money play), two players only
+    cube: !!cube && totalPlayers === 2,   // doubling cube, two players only
+    // A match to N points (two players), or null for a money session.
+    match: totalPlayers === 2 && Number.isInteger(matchTo) && matchTo >= 1 && matchTo <= 25
+      ? { length: matchTo, score: [0, 0], crawfordUsed: false, over: false, winner: null } : null,
+    jacoby: false,                        // set below (money play with the cube only)
     score: Array(totalPlayers).fill(0),   // money-session points across rematches (cube rooms)
     wins: Array(totalPlayers).fill(0),    // games won in this room
     gamesPlayed: 0,
   };
+  room.jacoby = !!jacoby && room.cube && !room.match;
   rooms.set(roomId, room);
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
   // The client must store this and send it back in any 'reconnect' action.
   return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers, cube: room.cube,
+    jacoby: room.jacoby, matchTo: room.match?.length ?? 0,
     slots: slots.map(s => ({ index: s.index, name: s.name, color: s.color, isRobot: s.isRobot, filled: !!s.playerId })) };
 }
 
@@ -240,7 +247,14 @@ export function startGame(ws, roomId) {
 }
 
 function beginGame(room, players) {
-  room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex, { cube: room.cube });
+  // Match play: a fresh match after one has ended; the Crawford game is the
+  // first game after someone reaches match point (no doubling in it).
+  const m = room.match;
+  if (m?.over) Object.assign(m, { score: [0, 0], crawfordUsed: false, over: false, winner: null });
+  const crawford = !!m && !m.crawfordUsed && m.score.some(x => x === m.length - 1);
+  if (crawford) m.crawfordUsed = true;
+  room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex,
+    { cube: room.cube, jacoby: room.jacoby, crawford });
   room.state = 'playing';
   room.analysis = null;
   room.robotPlan = null;
@@ -286,13 +300,18 @@ function finishGame(room) {
   // Two-player rooms keep a money score: a win is 1 point (2 for an aggro),
   // times the cube's value when playing with the cube.
   const r = game.result ?? (room.totalPlayers === 2 && game.winner != null ? gameResult(game, game.winner) : null);
-  if (r) {
+  const m = room.match;
+  if (r && m) {
+    m.score[r.winner] += r.points;
+    if (m.score[r.winner] >= m.length) { m.over = true; m.winner = r.winner; }
+  } else if (r) {
     room.score[r.winner] += r.points;
     room.score.forEach((_, i) => { if (i !== r.winner) room.score[i] -= r.points; });
   }
   storeFinishedGame(room, r);
   broadcast(room, { event: 'gameResult', winnerIndex: game.winner, result: r,
-    score: room.totalPlayers === 2 ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed });
+    score: room.totalPlayers === 2 && !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
+    match: m ? structuredClone(m) : null });
 }
 
 // ---------- Stats: store finished games and their analyses ----------
@@ -375,7 +394,8 @@ function recordCube(room, entry) {
   game._cubeLog ??= [];
   if (game._cubeLog.length >= 400) return;
   const rollIdx = (game._rolls?.length ?? 0) + (game._pendingRoll ? 1 : 0);
-  game._cubeLog.push({ ...entry, turn: game._turnNo ?? 1, rollIdx });
+  const dEntry = entry.kind === 'double' ? entry.pi : entry.doubler;
+  game._cubeLog.push({ ...entry, turn: game._turnNo ?? 1, rollIdx, match: matchCtx(room, dEntry), jacoby: !!room.jacoby });
   const slot = room.slots[entry.pi];
   if (!slot || slot.isRobot || !slot.ws) return;
   const d = entry.kind === 'double' ? entry.pi : entry.doubler;
@@ -383,17 +403,18 @@ function recordCube(room, entry) {
   // so the feedback waits for that (one estimate, and the robot's thinking
   // thread stays free for its own decision).
   if (entry.kind === 'double' && entry.action && room.slots[1 - entry.pi]?.isRobot) { game._feedbackWait = entry; return; }
-  cubeEstimate(entry.state, d).then(est => { if (est) sendCubeFeedback(slot.ws, entry, est); }).catch(() => {});
+  cubeEstimate(entry.state, d).then(est => { if (est) sendCubeFeedback(room, slot.ws, entry, est); }).catch(() => {});
 }
 
 // est: chances from the doubler's side.
-function sendCubeFeedback(ws, entry, est) {
+function sendCubeFeedback(room, ws, entry, est) {
   {
     const d = entry.kind === 'double' ? entry.pi : entry.doubler;
-    const owner = entry.state.cube.owner == null ? 'centre' : entry.state.cube.owner === d ? 'me' : 'opp';
-    const sd = shouldDouble(est, owner);
+    const sd = cubeDecision(room, room.game, est, d, entry.state.cube);
     const v = entry.state.cube.value;
-    const f = x => (v * x).toFixed(3);
+    // Money play: equity at this cube. Match play: match-winning chances,
+    // shown in the same equity units (EMG).
+    const f = room.match ? x => emg(x, sd).toFixed(3) : x => (v * x).toFixed(3);
     let agrees, text;
     if (entry.kind === 'double') {
       agrees = sd.double === entry.action;
@@ -403,16 +424,37 @@ function sendCubeFeedback(ws, entry, est) {
           + ` (no double ${f(sd.nd)} · double/take ${f(sd.dt)} · double/drop ${f(sd.dp)})`;
     } else {
       const takeEq = -sd.dt, dropEq = -sd.dp;
-      const shouldTakeIt = takeEq > dropEq;
+      const shouldTakeIt = room.match ? sd.take : takeEq > dropEq;
       agrees = shouldTakeIt === entry.action;
       text = agrees ? `✓ Robot agrees: ${entry.action ? 'take' : 'drop'}`
-        : `Robot would ${shouldTakeIt ? 'take' : 'drop'} (take ${f(takeEq)} · drop ${f(dropEq)})`;
+        : `Robot would ${shouldTakeIt ? 'take' : 'drop'} (take ${room.match ? (-emg(sd.dt, sd)).toFixed(3) : f(takeEq)} · drop ${room.match ? (-emg(sd.dp, sd)).toFixed(3) : f(dropEq)})`;
     }
     sendTo(ws, { event: 'cubeFeedback', playerIndex: entry.pi, kind: entry.kind, agrees, text, exact: !!est.exact });
   }
 }
 
 // ---------- Doubling cube ----------
+
+// The cube decision for doubler d (est = d's chances from the turn's start):
+// match play uses the match equity table at the current score; money play
+// the Janowski formulas (with the Jacoby rule if it applies).
+// → { double, take, nd, dt, dp } (take = the opponent should take).
+function cubeDecision(room, game, est, d, cube = game.cube) {
+  const m = room.match;
+  if (m) {
+    const r = matchCube(est, { a: m.length - m.score[d], b: m.length - m.score[1 - d], v: cube.value, crawfordUsed: m.crawfordUsed });
+    return r;
+  }
+  const owner = cube.owner == null ? 'centre' : cube.owner === d ? 'me' : 'opp';
+  const sd = shouldDouble(est, owner, { jacobyUnturned: !!room.jacoby && cube.value === 1 });
+  const st = shouldTake({ ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin });
+  return { ...sd, take: st.take };
+}
+// The match position for a cube decision (kept with the decision for the analysis).
+function matchCtx(room, d) {
+  const m = room.match;
+  return m ? { a: m.length - m.score[d], b: m.length - m.score[1 - d], crawfordUsed: m.crawfordUsed, length: m.length } : null;
+}
 
 const cubeStat = (game, pi) => ((game._cubeStats ??= {})[pi] ??= { doubles: 0, takes: 0, drops: 0 });
 const cubeOwnerFor = (game, pi) => game.cube.owner == null ? 'centre' : game.cube.owner === pi ? 'me' : 'opp';
@@ -496,13 +538,13 @@ function robotAnswerDouble(room) {
     if (fw && est && fw.pi === offer.from) {
       game._feedbackWait = null;
       const w = room.slots[fw.pi]?.ws;
-      if (w) sendCubeFeedback(w, fw, { ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin });
+      if (w) sendCubeFeedback(room, w, fw, { ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin });
     }
     const wait = Math.max(0, ROBOT_TURN_DELAY_MS - (Date.now() - started));
     room.robotTurnTimer = setTimeout(() => {
       room.robotTurnTimer = null;
       if (!rooms.has(room.id) || game.cubeOffer !== offer || !room.slots[pi]?.isRobot) return;
-      answerDouble(room, pi, est ? shouldTake(est).take : true);
+      answerDouble(room, pi, est ? cubeDecision(room, game, { ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin }, offer.from).take : true);
     }, wait);
   }).catch(() => answerDouble(room, pi, true));
 }
@@ -991,7 +1033,7 @@ function doRobotTurn(room) {
     game._cubeChecked = game._turnNo ?? 1;
     cubeEstimate(game, me).then(est => {
       if (!rooms.has(room.id) || room.game !== game || game.phase !== 'IN_TURN' || game.turnIndex !== me || !room.slots[me]?.isRobot) return;
-      if (est && shouldDouble(est, cubeOwnerFor(game, me)).double && doubleFor(room, me)) return;
+      if (est && cubeDecision(room, game, est, me).double && doubleFor(room, me)) return;
       recordCube(room, { kind: 'double', pi: me, action: false, state: cubeSnapshot(game) });
       doRobotTurn(room);
     }).catch(() => doRobotTurn(room));
@@ -1128,8 +1170,10 @@ function publicState(room) {
     diceUsed: game.diceUsed,
     cube: game.cube,
     cubeOffer: game.cubeOffer,
-    score: room.totalPlayers === 2 ? room.score.slice() : null,
+    score: room.totalPlayers === 2 && !room.match ? room.score.slice() : null,
     wins: room.wins.slice(),
+    match: room.match ? { ...structuredClone(room.match), crawford: !!game.cube?.crawford } : null,
+    jacoby: !!room.jacoby,
     gamesPlayed: room.gamesPlayed,
   };
 }

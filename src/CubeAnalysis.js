@@ -18,20 +18,27 @@
 // at both ends of the 95% range of the win chance — otherwise it is "close"
 // and not counted as an error.
 import { exactEstimate, rolloutEstimate, cubefulEquity } from './CubeDecision.js';
+import { matchCube, emg } from './MatchEquity.js';
 
 // Same bands as moves (in equity): error ≥ 0.06, blunder ≥ 0.20 (per unit of cube).
 export const CUBE_SEVERITY = [{ key: 'blunder', min: 0.20 }, { key: 'error', min: 0.06 }];
 
 const ownerFor = (cube, d) => cube.owner == null ? 'centre' : cube.owner === d ? 'me' : 'opp';
 
-// Equities for doubler d given an estimate (cube value 1; scale by v).
-function equities(est, owner) {
-  const nd = cubefulEquity(est, owner);
-  const dt = 2 * cubefulEquity(est, 'opp');
-  return { nd, dt, dp: 1 };
+// Values for doubler d (already at the decision's stakes, in equity units):
+// money play — Janowski cubeful equity × cube value (Jacoby: with the cube
+// unturned, no-double ignores aggros); match play — match-winning chances
+// from the match equity table at the score, shown as equity (EMG).
+function equities(est, owner, entry, v) {
+  if (entry.match) {
+    const r = matchCube(est, { ...entry.match, v });
+    return { nd: emg(r.nd, r), dt: emg(r.dt, r), dp: emg(r.dp, r) };
+  }
+  const nd = v * cubefulEquity(entry.jacoby && v === 1 ? { ...est, aggroWin: 0, aggroLoss: 0 } : est, owner);
+  return { nd, dt: 2 * v * cubefulEquity(est, 'opp'), dp: v };
 }
-function rightActions(est, owner) {
-  const { nd, dt, dp } = equities(est, owner);
+function rightActions(est, owner, entry, v) {
+  const { nd, dt, dp } = equities(est, owner, entry, v);
   return { double: Math.min(dt, dp) > nd, take: -dt > -dp };
 }
 
@@ -44,15 +51,15 @@ export function analyzeCube(entry, { games = 400 } = {}) {
   const v = st.cube?.value ?? 1;
   const owner = ownerFor(st.cube ?? { owner: null }, d);
   const est = exactEstimate(st, d) ?? rolloutEstimate(st, d, { budgetMs: 0, minGames: games });
-  const { nd, dt, dp } = equities(est, owner);
-  const right = rightActions(est, owner);
+  const { nd, dt, dp } = equities(est, owner, entry, v);
+  const right = rightActions(est, owner, entry, v);
 
   // Is the right action clear? Recheck at the ends of the win chance's 95% range.
   let close = false;
   if (!est.exact) {
     const se = Math.sqrt(Math.max(est.p * (1 - est.p), 0.0025) / est.n);
     for (const p of [est.p - 1.96 * se, est.p + 1.96 * se]) {
-      const r = rightActions({ ...est, p: Math.min(0.999, Math.max(0.001, p)) }, owner);
+      const r = rightActions({ ...est, p: Math.min(0.999, Math.max(0.001, p)) }, owner, entry, v);
       if (entry.kind === 'double' ? r.double !== right.double : r.take !== right.take) close = true;
     }
   }
@@ -60,15 +67,15 @@ export function analyzeCube(entry, { games = 400 } = {}) {
   let options, best, played;
   if (entry.kind === 'double') {
     const dbl = Math.min(dt, dp);
-    options = [{ key: 'nd', label: 'No double', eq: v * nd }, { key: 'dt', label: 'Double / take', eq: v * dt }, { key: 'dp', label: 'Double / drop', eq: v * dp }];
+    options = [{ key: 'nd', label: 'No double', eq: nd }, { key: 'dt', label: 'Double / take', eq: dt }, { key: 'dp', label: 'Double / drop', eq: dp }];
     best = right.double ? 'double' : 'no double';
     played = entry.action ? 'double' : 'no double';
-    var bestEq = v * Math.max(nd, dbl), playedEq = v * (entry.action ? dbl : nd);
+    var bestEq = Math.max(nd, dbl), playedEq = entry.action ? dbl : nd;
   } else {
-    options = [{ key: 'take', label: 'Take', eq: -v * dt }, { key: 'drop', label: 'Drop', eq: -v * dp }];
+    options = [{ key: 'take', label: 'Take', eq: -dt }, { key: 'drop', label: 'Drop', eq: -dp }];
     best = right.take ? 'take' : 'drop';
     played = entry.action ? 'take' : 'drop';
-    var bestEq = Math.max(-v * dt, -v * dp), playedEq = entry.action ? -v * dt : -v * dp;
+    var bestEq = Math.max(-dt, -dp), playedEq = entry.action ? -dt : -dp;
   }
   const loss = Math.max(0, bestEq - playedEq);
   const lossNorm = loss / v;
@@ -84,6 +91,6 @@ export function analyzeCube(entry, { games = 400 } = {}) {
     n: est.exact ? null : est.n, exact: !!est.exact,
     options: options.map(o => ({ ...o, eq: Math.round(o.eq * 1000) / 1000 })),
     loss: Math.round(loss * 1000) / 1000, lossNorm: Math.round(lossNorm * 1000) / 1000,
-    severity, close,
+    severity, close, match: entry.match ?? null,
   };
 }

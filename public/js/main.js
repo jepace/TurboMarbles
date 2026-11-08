@@ -137,7 +137,9 @@ $('btn-create-confirm').addEventListener('click', () => {
   const n = parseInt($('create-count').value, 10);
   if (n < 2 || n > 6) return;
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && $('create-cube').checked });
+  const matchTo = n === 2 ? Math.max(0, Math.min(25, parseInt($('create-match').value, 10) || 0)) : 0;
+  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && $('create-cube').checked,
+    matchTo, jacoby: n === 2 && !matchTo && $('create-cube').checked && $('create-jacoby').checked });
 });
 $('btn-create-back').addEventListener('click', () => show('screen-landing'));
 // Enter on player-count field → confirm create
@@ -154,7 +156,17 @@ function updateCubeOption(n) {
   if (!ok) $('create-cube').checked = false;
   $('create-cube-note').textContent = ok ? '' : '— 2 players only';
   $('create-cube-row').style.opacity = ok ? '1' : '0.55';
+  // Matches: two players. Jacoby: money play with the cube only.
+  $('create-match').disabled = !ok;
+  $('create-match-row').style.opacity = ok ? '1' : '0.55';
+  const match = ok && (parseInt($('create-match').value, 10) || 0) > 0;
+  const jok = ok && $('create-cube').checked && !match;
+  $('create-jacoby').disabled = !jok;
+  if (!jok) $('create-jacoby').checked = false;
+  $('create-jacoby-row').style.opacity = jok ? '1' : '0.55';
 }
+$('create-cube').addEventListener('change', () => updateCubeOption(parseInt($('create-count').value, 10)));
+$('create-match').addEventListener('input', () => updateCubeOption(parseInt($('create-count').value, 10)));
 updateCubeOption(parseInt($('create-count').value, 10));
 updateColorPicker(4); // initialize with default
 
@@ -1250,12 +1262,12 @@ $('opt-analysis').addEventListener('change', e => {
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
 });
 
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, jacoby, matchTo }) => {
   roomId = rid;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
-  $('lobby-size').textContent = `${totalPlayers} players` + (cube ? ' · doubling cube' : '');
+  $('lobby-size').textContent = `${totalPlayers} players` + (matchTo ? ` · match to ${matchTo}` : '') + (cube ? ' · doubling cube' : '') + (jacoby ? ' · Jacoby' : '');
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
   renderLobbySlots(slots ?? [{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);
@@ -1598,7 +1610,7 @@ const cubeOwnerText = c => c.owner == null ? 'centred'
   : c.owner === myPlayerIndex ? 'your cube' : `${playerName(c.owner)}'s cube`;
 function canIDouble() {
   const g = gameState, c = g?.cube;
-  return !!c && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
+  return !!c && !c.crawford && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
     (c.owner == null || c.owner === myPlayerIndex);
 }
 function renderCube() {
@@ -1606,7 +1618,7 @@ function renderCube() {
   $('cube-area').style.display = c ? 'flex' : 'none';
   if (c) {
     $('cube').textContent = String(c.value);
-    $('cube-owner').textContent = cubeOwnerText(c);
+    $('cube-owner').textContent = c.crawford ? 'Crawford game — no doubling' : cubeOwnerText(c);
     $('btn-double').style.display = canIDouble() ? '' : 'none';
     // A double waiting for my answer (also after a reconnect).
     const o = gameState.cubeOffer;
@@ -1626,6 +1638,8 @@ function sessionLine(you) {
   const g = gameState;
   if (!g) return '';
   const who = i => (you && i === myPlayerIndex) ? 'You' : g.players[i].name;
+  if (g.match) return `Match to ${g.match.length}: ` + g.players.map((_, i) => `${who(i)} ${g.match.score[i]}`).join(' · ')
+    + (g.match.crawford ? ' · Crawford game' : g.match.crawfordUsed ? ' · post-Crawford' : '');
   if (g.score) return 'Session: ' + g.players.map((_, i) => `${who(i)} ${g.score[i] > 0 ? '+' : ''}${g.score[i]}`).join(' · ');
   if (g.wins && g.wins.some(w => w > 0)) return 'Games won: ' + g.players.map((_, i) => `${who(i)} ${g.wins[i]}`).join(' · ');
   return '';
@@ -1702,16 +1716,20 @@ on('doubleDropped', ({ playerIndex }) => {
   $('cube-offer').style.display = 'none';
   log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
 });
-on('gameResult', ({ winnerIndex, result, score, wins }) => {
-  if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; }
+on('gameResult', ({ winnerIndex, result, score, wins, match }) => {
+  if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; gameState.match = match ? { ...match, crawford: false } : null; }
   showGameOver(winnerIndex);
   if (result) {
     const how = result.dropped ? 'double dropped' : result.aggro ? 'an aggro!' : 'single game';
     $('winner-msg').textContent = `${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} (${how}) 🎉`;
     log(`${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} — ${how}`);
   }
-  // Cube rooms: the money score. Otherwise: games won in this room.
-  const line = sessionLine(false);
+  // Match: the match score (and the match result); money: the session score.
+  let line = sessionLine(false);
+  if (match?.over) {
+    line = `${playerName(match.winner)} wins the match ${match.score[match.winner]}–${match.score[1 - match.winner]}! 🏆`;
+    $('btn-rematch').textContent = 'New match';
+  } else if (match) $('btn-rematch').textContent = 'Next game';
   $('score-msg').textContent = line;
   $('score-msg').style.display = line ? '' : 'none';
   renderCube();

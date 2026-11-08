@@ -94,8 +94,10 @@ export function cubefulEquity(est, owner, x = CUBE_EFFICIENCY) {
 
 // Should the player to roll double? owner = 'me' or 'centre' (cube value v
 // cancels out). Returns { double, nd, dt, dp }.
-export function shouldDouble(est, owner) {
-  const nd = cubefulEquity(est, owner);
+// jacobyUnturned: Jacoby rule with the cube still at 1 — if nobody doubles,
+// an aggro counts as a single game, so no-double values ignore aggros.
+export function shouldDouble(est, owner, { jacobyUnturned = false } = {}) {
+  const nd = cubefulEquity(jacobyUnturned ? { ...est, aggroWin: 0, aggroLoss: 0 } : est, owner);
   const dt = 2 * cubefulEquity(est, 'opp');
   const dp = 1;
   return { double: Math.min(dt, dp) > nd + 1e-9, nd, dt, dp };
