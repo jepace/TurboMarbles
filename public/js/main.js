@@ -2318,7 +2318,7 @@ function enableRoll() {
   $('turn-banner').textContent = choose ? 'Your turn — Roll (Enter) or Double (D)' : 'Your turn — Roll! (Enter)';
   $('turn-banner').style.color = '#f0c040';
   clearTimeout(autoRollTimer);
-  if (!choose) autoRollTimer = setTimeout(() => { if (isMyTurn() && !gameState.dice) doRoll(); }, 600);
+  if (!choose) autoRollTimer = setTimeout(() => { if (isMyTurn() && !$('btn-roll').disabled) doRoll(); }, 600);
 }
 
 function setHint(msg) {
