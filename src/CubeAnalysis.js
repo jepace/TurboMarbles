@@ -13,13 +13,14 @@
 // and the aggro shares: exact from the duel tables when they apply, else from
 // played-out games. Right action: double when min(DT, DP) > ND; take when
 // −DT > −DP. The loss is in points at the decision's cube; severity uses the
-// loss per point of cube (error ≥ 0.05, blunder ≥ 0.15). With played-out
+// loss per unit of cube (error ≥ 0.06, blunder ≥ 0.20, as for moves). With played-out
 // estimates, a decision counts as clear only if the right action is the same
 // at both ends of the 95% range of the win chance — otherwise it is "close"
 // and not counted as an error.
 import { exactEstimate, rolloutEstimate, cubefulEquity } from './CubeDecision.js';
 
-export const CUBE_SEVERITY = [{ key: 'blunder', min: 0.15 }, { key: 'error', min: 0.05 }];
+// Same bands as moves (in equity): error ≥ 0.06, blunder ≥ 0.20 (per unit of cube).
+export const CUBE_SEVERITY = [{ key: 'blunder', min: 0.20 }, { key: 'error', min: 0.06 }];
 
 const ownerFor = (cube, d) => cube.owner == null ? 'centre' : cube.owner === d ? 'me' : 'opp';
 

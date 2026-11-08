@@ -526,9 +526,9 @@ function renderProfile() {
     stat(`${s.aggro_wins} / ${s.aggro_losses}`, 'aggros won / lost'),
     stat(`${s.doubles} / ${s.takes} / ${s.drops}`, 'doubles / takes / drops'),
     stat(rating, 'rating', 'From the error rate in analysed games'),
-    stat(rate == null ? '—' : `${rate.toFixed(1)}%`, 'error rate per choice', 'Average equity lost per real choice, clear errors only'),
+    stat(rate == null ? '—' : (rate / 50).toFixed(3), 'error rate per choice', 'Average equity lost per real choice (clear errors only)'),
     stat(`${s.errors} / ${s.blunders}`, 'errors / blunders'),
-    stat(`${s.cube_errors} / ${s.cube_blunders}`, 'cube errors / blunders', `${s.cube_decisions} analysed cube decisions; ${(+s.cube_eq_lost).toFixed(2)} points lost`),
+    stat(`${s.cube_errors} / ${s.cube_blunders}`, 'cube errors / blunders', `${s.cube_decisions} analysed cube decisions; ${(+s.cube_eq_lost).toFixed(3)} equity lost`),
     stat(`${s.analysed} of ${s.games}`, 'games analysed'),
   ));
   // Error-rate trend (analysed games, this tab).
@@ -560,7 +560,7 @@ function renderProfile() {
         el('td', {}, g.seats.map((x, i) => (i === g.seat ? 'You' : x.name + (x.isRobot ? ' 🤖' : ''))).join(' · ') + (g.cube ? ' · cube' : '')),
         el('td', { class: g.won ? 'won' : 'lost' }, (g.won ? 'Won' : 'Lost') + (g.aggro ? ' (aggro)' : '')),
         el('td', {}, g.players === 2 ? `${g.points > 0 ? '+' : ''}${g.points}` : '—'),
-        el('td', {}, g.errorRate == null ? (g.analysed ? '—' : 'not analysed') : `${(100 * g.errorRate).toFixed(1)}%`));
+        el('td', {}, g.errorRate == null ? (g.analysed ? '—' : 'not analysed') : eqOf(g.errorRate)));
       tr.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
       return tr;
     })) : el('div', { class: 'muted' }, profileTab === 'robots' ? 'No games against robots yet.' : 'No games against people yet.'));
@@ -661,6 +661,10 @@ let apSel = -1;          // selected roll index
 let apOpt = null;        // selected option index within the roll, or null = position before the roll
 const SEV_LABEL = { error: 'Error', blunder: 'Blunder' };
 const pts = x => (100 * x).toFixed(1);
+// Everything evaluative is shown in equity: decimals of the stake (losing a
+// game = 1.0). A move's win-chance loss x is 2x in equity.
+const eqOf = x => (2 * x).toFixed(3);
+const eqv = x => x.toFixed(3);
 const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${c})`;
 
@@ -754,18 +758,18 @@ function renderSummary() {
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
     row('Rating', s => el('span', { class: 'rating' }, s.rating), 'From the error rate'),
-    row('Error rate', s => s.choices ? `${s.rate.toFixed(1)}% per choice` : '—', 'Average equity lost per real choice (clear losses only)'),
-    row('Equity lost', s => `${(100 * s.lost).toFixed(1)}%`,
+    row('Error rate', s => s.choices ? `${(s.rate / 50).toFixed(3)} per choice` : '—', 'Average equity lost per real choice (clear losses only); losing a game = 1.0'),
+    row('Equity lost', s => eqOf(s.lost),
       'Total over the game. Equity here is the chance to win (no doubling cube or gammons), so this is the sum of win chance lost by each clear error'),
     row('Errors / Blunders', s => el('span', {},
       el('span', { class: s.error ? 'sev-error' : '' }, String(s.error)), ' / ',
-      el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder))), 'Error: lost 3–10% equity. Blunder: lost 10% or more'),
+      el('span', { class: s.blunder ? 'sev-blunder' : '' }, String(s.blunder))), 'Error: 0.06–0.20 equity lost. Blunder: 0.20 or more'),
     ...((analysisReport.cube ?? []).length ? [
       row('Cube errors / blunders', s => s.cubePending && !s.cubeN ? 'checking…' : el('span', {},
         el('span', { class: s.cubeError ? 'sev-error' : '' }, String(s.cubeError)), ' / ',
         el('span', { class: s.cubeBlunder ? 'sev-blunder' : '' }, String(s.cubeBlunder))),
-        'Cube decisions (double / take / drop). Error: lost 0.05–0.15 points per point of cube. Blunder: 0.15 or more'),
-      row('Cube equity lost', s => `${s.cubeLost.toFixed(2)} pts`, 'Points lost by clear cube errors, at the cube value of each decision'),
+        'Cube decisions (double / take / drop). Error: 0.06–0.20 equity lost (per unit of cube). Blunder: 0.20 or more'),
+      row('Cube equity lost', s => eqv(s.cubeLost), 'Equity lost by clear cube errors, at the cube value of each decision'),
     ] : []),
   ));
   $('ap-summary').replaceChildren(table);
@@ -859,11 +863,11 @@ function badgeFor(r, idx) {
   if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
   const a = r.analysis;
   if (a.severity === 'ok' && a.loss >= 0.03) {
-    return el('span', { class: 'badge unclear', title: `Maybe −${pts(a.loss)}%, but within the noise (± ${pts(1.96 * a.se)}). Go deeper (+) to settle it.` }, `−${pts(a.loss)}%?`);
+    return el('span', { class: 'badge unclear', title: `Maybe −${eqOf(a.loss)}, but within the noise (± ${eqOf(1.96 * a.se)}). Go deeper (+) to settle it.` }, `−${eqOf(a.loss)}?`);
   }
-  if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${pts(a.loss)}% ± ${pts(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: win chance ${pts(a.loss)}% lower than the best play (± ${pts(1.96 * a.se)})` },
-    `${SEV_LABEL[a.severity]} −${pts(a.loss)}%`);
+  if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${eqOf(a.loss)} ± ${eqOf(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
+  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: ${eqOf(a.loss)} equity worse than the best play (± ${eqOf(1.96 * a.se)})` },
+    `${SEV_LABEL[a.severity]} −${eqOf(a.loss)}`);
 }
 
 function renderMoveList() {
@@ -928,7 +932,7 @@ function cubeBadge(c) {
   if (!a || cubeDeep.has(c.i)) return el('span', { class: 'badge unclear' }, 'checking…');
   if (a.skip) return el('span', { class: 'badge forced', title: 'Nowhere near a double (estimate under 60%): not analysed' }, 'not near');
   if (a.severity === 'ok') return el('span', { class: a.close ? 'badge unclear' : 'badge ok', title: a.close ? "Close call: within the estimate's noise" : 'Right decision' }, a.close ? 'close ✓' : '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${a.loss.toFixed(2)} points of stake` }, `${a.label ?? SEV_LABEL[a.severity]} −${a.loss.toFixed(2)} pts`);
+  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${eqv(a.loss)} equity` }, `${a.label ?? SEV_LABEL[a.severity]} −${eqv(a.loss)}`);
 }
 function analyzeDeeperCube(i) {
   const c = analysisReport?.cube?.[i];
@@ -973,28 +977,28 @@ function selectCube(i) {
   else if (a.skip) kids.push(el('div', { class: 'muted' }, `Nowhere near a double (the estimate gave ${p.name} ${a.p != null ? (100 * a.p).toFixed(0) + '%' : 'under 60%'}) — not analysed.`));
   else {
     const isDouble = c.kind === 'double';
-    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Expected points won (+) or lost (−), at this cube' }, 'Points'), el('span')));
+    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Equity: expected stake won (+) or lost (−), at this cube' }, 'Equity'), el('span')));
     for (const o of a.options) {
       // The double's own equity is the lower of take and drop (the opponent's best answer).
       const bestHere = isDouble ? (o.key === 'nd' ? a.best === 'no double' : false) : o.key === a.best;
       const playedHere = isDouble ? (o.key === 'nd' ? a.played === 'no double' : false) : o.key === a.played;
       const tag = [bestHere ? 'best' : '', playedHere ? 'played' : ''].filter(Boolean).join(' · ');
       kids.push(el('div', { class: 'ap-opt' }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
-        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + o.eq.toFixed(2) + ' pts'), el('span')));
+        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + eqv(o.eq)), el('span')));
     }
     if (isDouble) {
       const dbl = Math.min(a.options[1].eq, a.options[2].eq);
       kids.push(el('div', { class: 'ap-opt' }, el('span', {}, 'Double (opponent answers best)',
         el('span', { class: 'tags' }, [a.best === 'double' ? 'best' : '', a.played === 'double' ? 'played' : ''].filter(Boolean).join(' · '))),
-        el('span'), el('span', { class: 'num' }, (dbl > 0 ? '+' : '') + dbl.toFixed(2)), el('span')));
+        el('span'), el('span', { class: 'num' }, (dbl > 0 ? '+' : '') + eqv(dbl)), el('span')));
     }
     kids.push(el('div', { class: 'fact' }, `${p.name} wins ${(100 * a.p).toFixed(1)}%` +
       (a.aggroWin || a.aggroLoss ? ` (aggro wins ${(100 * a.aggroWin).toFixed(1)}%, aggro losses ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
       (a.exact ? ' — exact (duel table)' : ` — from ${a.n} played-out games`)));
-    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${a.loss.toFixed(2)} pts at cube ${c.v}.`
+    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${eqv(a.loss)} equity at cube ${c.v}.`
       : a.close ? "Close call — the estimate can't separate the options; counts as correct."
       : `✓ Right decision (${a.best}).`;
-    kids.push(el('div', { class: 'muted' }, verdict + ` Cube decisions are measured in points (expected points won or lost at cube ${c.v}, from ${p.name}'s side), not win chance: they change the stakes. Roughly, 0.1 points ≈ 5% win chance. Moves are measured in win chance (%). The cube formulas are an approximation (cube efficiency 0.68).`));
+    kids.push(el('div', { class: 'muted' }, verdict + ` Equity is the stake you expect to win (+) or lose (−) at cube ${c.v}, from ${p.name}'s side; losing a game at cube 1 is −1.0. The cube formulas are an approximation (cube efficiency 0.68).`));
   }
   // Depth, and going deeper (more games; or analyse a skipped no-double anyway).
   if (a && !a.exact) {
@@ -1047,25 +1051,25 @@ function selectRoll(idx, opt = null) {
     kids.push(el('div', { class: 'ap-opt head' },
       el('span', {}, 'Options (click to see on the board)'),
       el('span', { class: 'num', title: 'Chance an opponent can hit one of these marbles with their next roll' }, 'Hit'),
-      el('span', { class: 'num' }, 'Win'), el('span', { class: 'num' }, 'vs best')));
+      el('span', { class: 'num', title: 'Equity: the stake you expect to win (+) or lose (−); 2 × win chance − 1' }, 'Equity'), el('span', { class: 'num' }, 'vs best')));
     a.options.forEach((o, k) => {
       const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'robot'].filter(Boolean).join(' · ');
       const cls = o.played ? (a.severity === 'ok' ? ' good' : ` ${a.severity}`) : '';
       const line = el('div', { class: 'ap-opt' + cls + (view === k ? ' sel' : ''), title: `${o.n} playouts` },
         el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
         el('span', { class: 'num hit' }, o.facts && o.facts.anyHit > 0 ? pctTxt(o.facts.anyHit) : '—'),
-        el('span', { class: 'num' }, pctTxt(o.win)),
-        el('span', { class: 'num' }, o.loss > 0 ? `−${pts(o.loss)}%` : ''));
+        el('span', { class: 'num' }, `${o.win >= 0.5 ? '+' : ''}${(2 * o.win - 1).toFixed(3)}`),
+        el('span', { class: 'num' }, o.loss > 0 ? `−${eqOf(o.loss)}` : ''));
       line.addEventListener('click', () => selectRoll(idx, k));
       kids.push(line);
     });
     const verdict = a.estimate
       ? (a.severity === 'ok'
-        ? (a.loss > 0 ? `✓ Close to the best by the estimate (−${pts(a.loss)}%).` : '✓ Best play by the estimate.')
-        : `${SEV_LABEL[a.severity]} by the estimate: −${pts(a.loss)}% against the best. Go deeper to check it with played-out games.`)
+        ? (a.loss > 0 ? `✓ Close to the best by the estimate (−${eqOf(a.loss)}).` : '✓ Best play by the estimate.')
+        : `${SEV_LABEL[a.severity]} by the estimate: −${eqOf(a.loss)} against the best. Go deeper to check it with played-out games.`)
       : a.severity === 'ok'
-      ? (a.loss > 0 ? `✓ Within the noise (−${pts(a.loss)}% ± ${pts(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
-      : `${SEV_LABEL[a.severity]}: this play wins ${pts(a.loss)}% less often than the best (± ${pts(1.96 * a.se)}).`;
+      ? (a.loss > 0 ? `✓ Within the noise (−${eqOf(a.loss)} ± ${eqOf(1.96 * a.se)}) — counts as correct.` : '✓ Best play.')
+      : `${SEV_LABEL[a.severity]}: this play gives up ${eqOf(a.loss)} equity against the best (± ${eqOf(1.96 * a.se)}).`;
     kids.push(el('div', { class: 'muted' }, `${verdict} ${r.options} way${r.options === 1 ? '' : 's'} to play; the best few, yours and the robot's were played out.`));
     const lvl = a.level ?? 0;
     const games = Math.max(...a.options.map(o => o.n ?? 0));
@@ -1153,7 +1157,7 @@ function drawChart() {
     const big = a.severity === 'blunder';
     const c = add('circle', { cx: x(i), cy: y(v), r: big ? 6 : 4, stroke: big ? '#ff2040' : '#000', 'stroke-width': big ? 2 : 1, style: `cursor:pointer;fill:${colorVar(rep.players[r.pi].color)}` });
     const t = document.createElementNS(ns, 'title');
-    t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${pts(a.loss)}%`;
+    t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${eqOf(a.loss)}`;
     c.append(t);
     c.addEventListener('click', () => selectRoll(i));
   });

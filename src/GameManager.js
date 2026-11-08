@@ -393,7 +393,7 @@ function sendCubeFeedback(ws, entry, est) {
     const owner = entry.state.cube.owner == null ? 'centre' : entry.state.cube.owner === d ? 'me' : 'opp';
     const sd = shouldDouble(est, owner);
     const v = entry.state.cube.value;
-    const f = x => (v * x).toFixed(2);
+    const f = x => (v * x).toFixed(3);
     let agrees, text;
     if (entry.kind === 'double') {
       agrees = sd.double === entry.action;
