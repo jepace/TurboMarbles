@@ -8,7 +8,7 @@ import {
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { matchCube, emg } from './MatchEquity.js';
-import { recordGame, saveAnalysis, storeEnabled, rateGame } from './Store.js';
+import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked } from './Store.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
@@ -1322,6 +1322,30 @@ function publicState(room) {
     jacoby: !!room.jacoby,
     gamesPlayed: room.gamesPlayed,
   };
+}
+
+// ---------- In-game chat ----------
+// Short messages to everyone in the room (lobby, game, after the game).
+// At most 8 per 10 seconds per connection; 300 characters. Someone who has
+// blocked the sender (both with accounts) doesn't receive it.
+export const CHAT_MAX = 300;
+export function handleChat(ws, roomId, text) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || sess.roomId !== roomId) return;
+  const body = String(text ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, CHAT_MAX);
+  if (!body) return;
+  const t = Date.now();
+  ws._chatTimes = (ws._chatTimes ?? []).filter(x => t - x < 10_000);
+  if (ws._chatTimes.length >= 8) { sendTo(ws, { event: 'error', code: 'RATE_LIMITED', message: 'Slow down a little.' }); return; }
+  ws._chatTimes.push(t);
+  const from = room.slots[sess.playerIndex];
+  const msg = JSON.stringify({ event: 'chat', playerIndex: sess.playerIndex, name: from?.name, text: body, at: t });
+  for (const s of room.slots) {
+    if (!s.ws || s.ws.readyState !== 1) continue;
+    if (s.accountId && from?.accountId && storeEnabled() && isBlocked(s.accountId, from.accountId)) continue;
+    try { s.ws.send(msg); } catch { /* closed */ }
+  }
 }
 
 // The code of the lobby this connection is in (for invites), else null.

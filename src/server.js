@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
+  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleChat, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS, accountDisconnected } from './Accounts.js';
@@ -158,6 +158,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', (_code) => {
+    leaveQuickMatch(ws);
     handleDisconnect(ws);
     accountDisconnected(ws);
   });
@@ -169,11 +170,47 @@ wss.on('connection', (ws, req) => {
 
 // ---- Message dispatch -------------------------------------------------------
 
+// ---- Quick match: players waiting for the same kind of game are put in a
+// room together, and the game starts at once.
+const quickQueues = new Map();     // 'players:matchTo:cube' → [{ ws, name }]
+function leaveQuickMatch(ws) {
+  for (const [k, q] of quickQueues) {
+    const i = q.findIndex(e => e.ws === ws);
+    if (i >= 0) { q.splice(i, 1); if (!q.length) quickQueues.delete(k); }
+  }
+}
+function quickMatch(ws, name, n, matchTo, cube) {
+  leaveQuickMatch(ws);
+  const key = `${n}:${matchTo}:${cube ? 1 : 0}`;
+  const q = (quickQueues.get(key) ?? []).filter(e => e.ws.readyState === 1);
+  q.push({ ws, name });
+  quickQueues.set(key, q);
+  if (q.length < n) {
+    for (const e of q) send(e.ws, { event: 'quickMatchWaiting', waiting: q.length, need: n });
+    return;
+  }
+  const group = q.splice(0, n);
+  if (!q.length) quickQueues.delete(key);
+  const [host, ...rest] = group;
+  const room = createRoom(host.ws, host.name, n, undefined, { cube, matchTo });
+  if (room.error) { for (const e of group) send(e.ws, { event: 'error', code: 'CREATE_FAILED', message: room.error }); return; }
+  host.ws._room = room.code;
+  send(host.ws, { event: 'roomCreated', ...room });
+  for (const e of rest) {
+    const j = joinRoom(e.ws, room.code, e.name);
+    if (j.error) continue;
+    e.ws._room = j.code;
+    send(e.ws, { event: 'joinedRoom', ...j });
+  }
+  for (const e of group) send(e.ws, { event: 'quickMatchFound' });
+  startGame(host.ws, room.roomId);
+}
+
 const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'quit', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
+  'double', 'take', 'drop', 'rematch', 'quit', 'chat', 'quickMatch', 'quickMatchCancel', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
 ]);
 
 function dispatch(ws, msg) {
@@ -264,6 +301,24 @@ function dispatch(ws, msg) {
       if (roomId) handleResignAnswer(ws, roomId, msg.accept === true);
       return;
     }
+    case 'chat': {
+      const roomId = getRoomByWs(ws);
+      if (roomId) handleChat(ws, roomId, msg.text);
+      return;
+    }
+    case 'quickMatch': {
+      const name = playName(ws, msg.name);
+      if (name === null) return send(ws, { event: 'error', code: 'NAME_TAKEN', message: 'That name belongs to a registered player. Choose another, or sign in.' });
+      if (!name) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
+      const n = Number(msg.players);
+      if (!Number.isInteger(n) || n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
+      const matchTo = n === 2 && Number.isInteger(msg.matchTo) && msg.matchTo >= 1 && msg.matchTo <= 25 ? msg.matchTo : 0;
+      const cube = n === 2 && (matchTo ? matchTo >= 2 : msg.cube === true);
+      return quickMatch(ws, name, n, matchTo, cube);
+    }
+    case 'quickMatchCancel':
+      leaveQuickMatch(ws);
+      return send(ws, { event: 'quickMatchCancelled' });
     case 'quit': {
       const roomId = getRoomByWs(ws);
       if (roomId) handleQuit(ws, roomId);
