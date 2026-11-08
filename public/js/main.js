@@ -1903,7 +1903,7 @@ function showGameOver(winnerIndex) {
   $('winner-msg').textContent = `${name} wins! 🎉`;
   $('score-msg').style.display = 'none';
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
-  $('btn-rematch').style.display = gameState.players.length === 2 ? '' : 'none';
+  $('btn-rematch').style.display = '';
   $('btn-rematch').disabled = false;
   $('btn-rematch').textContent = 'Rematch';
   $('rematch-msg').style.display = 'none';
@@ -2058,9 +2058,20 @@ on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
   }
   showGameOver(winnerIndex);
   if (result) {
-    const how = result.dropped ? 'double dropped' : result.baggro ? 'a baggro!' : result.aggro ? 'an aggro!' : 'single game';
-    $('winner-msg').textContent = `${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} (${how}) 🎉`;
-    log(`${playerName(winnerIndex)} wins ${result.points} point${result.points === 1 ? '' : 's'} — ${how}`);
+    const how = result.dropped ? 'double dropped' : result.resigned ? 'resigned' : result.baggro ? 'a baggro!' : result.aggro ? 'an aggro!' : 'single game';
+    // Several losers: who paid what ("1 each from A, B and C · 2 from D (aggro)").
+    let detail = `(${how})`;
+    if ((result.losers?.length ?? 0) > 1) {
+      const kind = m => m === 3 ? ' (baggro)' : m === 2 ? ' (aggro)' : '';
+      const groups = new Map();
+      for (const l of result.losers) { const k = `${l.points}|${l.mult}`; groups.set(k, [...(groups.get(k) ?? []), playerName(l.pi)]); }
+      const list = a => a.length < 2 ? a[0] : `${a.slice(0, -1).join(', ')} and ${a.at(-1)}`;
+      detail = ': ' + [...groups].map(([k, names]) => { const [pts, m] = k.split('|').map(Number);
+        return `${names.length > 1 ? `${pts} each` : pts} from ${list(names)}${kind(m)}`; }).join(' · ');
+    }
+    const line = `${playerName(winnerIndex)} wins ${ptsTxt(result.points)}${detail.startsWith(':') ? detail : ' ' + detail}`;
+    $('winner-msg').textContent = line + ' 🎉';
+    log(line);
   }
   // Match: the match score (and the match result); money: the session score.
   let line = sessionLine(false);

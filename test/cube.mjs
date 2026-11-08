@@ -342,6 +342,20 @@ await describe('abandoning costs the most still losable', async () => {
   assert(g3.find('gameResult').pop()?.winnerIndex === 1, 'accepted: Bob wins');
 });
 
+describe('rematch with 3 players', () => {
+  _reset();
+  const a = mockWs(), b = mockWs(), c = mockWs();
+  const r = createRoom(a, 'A', 3);
+  joinRoom(b, r.code, 'B'); joinRoom(c, r.code, 'C');
+  startGame(a, r.roomId);
+  const room = _getRoom(r.roomId), g = room.game;
+  room.state = 'finished'; g.winner = 0; g.phase = 'GAME_OVER';
+  handleRematch(a, r.roomId); handleRematch(b, r.roomId);
+  assert(room.game === g, 'waits for every human');
+  handleRematch(c, r.roomId);
+  assert(room.state === 'playing' && room.game !== g && room.game.players.length === 3, 'all three agreed: a new 3-player game');
+});
+
 describe('a match always has the cube (a 1-point match never)', () => {
   _reset();
   const r3 = createRoom(mockWs(), 'A', 2, undefined, { cube: false, matchTo: 3 });
