@@ -350,14 +350,15 @@ function storeFinishedGame(room, r) {
   }
 }
 
-// Per-seat numbers from an analysis report (clear errors only, as on the page).
+// Per-seat numbers from an analysis report, counted as on the page: every
+// loss beyond the rollout noise; cube: every wrong action that isn't close, per unit of cube.
 function seatAnalysis(report) {
   return report.players.map((_, pi) => {
     const mine = report.rolls.filter(x => x.pi === pi && x.analysis);
     const bad = mine.filter(x => x.analysis.severity !== 'ok');
     return { choices: mine.length, errors: bad.filter(x => x.analysis.severity === 'error').length,
       blunders: bad.filter(x => x.analysis.severity === 'blunder').length,
-      eqLost: bad.reduce((sum, x) => sum + x.analysis.loss, 0),
+      eqLost: mine.reduce((sum, x) => sum + (x.analysis.loss > 1.96 * (x.analysis.se ?? 0) ? x.analysis.loss : 0), 0),
       ...cubeSeat(report, pi) };
   });
 }
@@ -366,7 +367,8 @@ function cubeSeat(report, pi) {
   const bad = mine.filter(c => c.analysis.severity !== 'ok');
   return { cubeDecisions: mine.length, cubeErrors: bad.filter(c => c.analysis.severity === 'error').length,
     cubeBlunders: bad.filter(c => c.analysis.severity === 'blunder').length,
-    cubeEqLost: bad.reduce((sum, c) => sum + c.analysis.loss, 0) };
+    cubeEqLost: mine.filter(c => !c.analysis.close && c.analysis.played !== c.analysis.best)
+      .reduce((sum, c) => sum + (c.analysis.lossNorm ?? c.analysis.loss), 0) };
 }
 function saveRecAnalysis(rec, report) {
   if (!rec.storedGameId || !storeEnabled()) return;

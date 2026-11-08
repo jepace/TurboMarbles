@@ -581,7 +581,7 @@ function renderProfile() {
   const nDec = s.choices + s.cube_decisions;
   const eqLostAll = 2 * s.eq_lost + (+s.cube_eq_lost);
   const rate = nDec ? eqLostAll / nDec : null;
-  const rating = rate == null ? '—' : RATINGS.find(([max]) => 50 * rate < max)[1];
+  const rating = rate == null ? '—' : RATINGS.find(([max]) => rate < max)[1];
   const stat = (v, k, title) => el('div', { class: 'stat', title: title ?? '' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'k' }, k));
   $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
     stat(s.games, 'games'),
@@ -791,8 +791,10 @@ const eqv = x => x.toFixed(3);
 const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${c})`;
 
-// Error-rate bands: average win-rate points lost per real choice.
-const RATINGS = [[0.5, 'World Class'], [1, 'Expert'], [2, 'Advanced'], [3.5, 'Intermediate'], [6, 'Casual'], [Infinity, 'Beginner']];
+// Error-rate bands: equity lost per decision (moves and cube). Calibrated by
+// tools/calibrate-ratings.mjs at the "checked" level: the robot ≈ 0.007,
+// robot with 20% random plays ≈ 0.019, 50% random ≈ 0.051, all random ≈ 0.057.
+const RATINGS = [[0.008, 'World Class'], [0.013, 'Expert'], [0.020, 'Advanced'], [0.030, 'Intermediate'], [0.045, 'Casual'], [Infinity, 'Beginner']];
 
 function playerStats(rep, pi) {
   const rolls = rep.rolls.filter(r => r.pi === pi);
@@ -814,7 +816,7 @@ function playerStats(rep, pi) {
     moveError: sev('error'), moveBlunder: sev('blunder'), moveEq,
     error: sev('error') + cube.cubeError, blunder: sev('blunder') + cube.cubeBlunder,
     decisions, eqLost, eqRate,
-    rating: decisions ? RATINGS.find(([max]) => 50 * eqRate < max)[1] : '—',
+    rating: decisions ? RATINGS.find(([max]) => eqRate < max)[1] : '—',
     ...cube,
   };
 }
