@@ -297,7 +297,7 @@ function rollsText(hitting) {
 export function positionFacts(game, pi) {
   const mine = game.players[pi].marbles;
   const exposed = mine.map((m, id) => ({ m, id })).filter(({ m }) => m.zone === 'track' || m.zone === 'center');
-  const perMarble = new Map(exposed.map(({ id }) => [id, { p: 0, rolls: [], miss: 1 }]));
+  const perMarble = new Map(exposed.map(({ id }) => [id, { p: 0, byOpp: [], miss: 1 }]));
   let anyMiss = 1;
   game.players.forEach((_, o) => {
     if (o === pi || !exposed.length || game.winner != null) return;
@@ -317,12 +317,12 @@ export function positionFacts(game, pi) {
     for (const [id, l] of local) {
       const pm = perMarble.get(id);
       pm.miss *= 1 - l.w / 36;
-      if (l.w) pm.rolls.push(game.players.length > 2 ? `${rollsText(l.rolls)} (player ${o + 1})` : rollsText(l.rolls));
+      if (l.w) pm.byOpp.push({ opp: o, rolls: rollsText(l.rolls) });   // the page adds the opponent's name
     }
   });
   const hits = exposed.map(({ m, id }) => {
     const pm = perMarble.get(id);
-    return { id, at: locName(m, armOfPlayer(game, pi)), p: 1 - pm.miss, rolls: pm.rolls.join('; ') };
+    return { id, at: locName(m, armOfPlayer(game, pi)), p: 1 - pm.miss, rolls: pm.byOpp.map(x => x.rolls).join('; '), byOpp: pm.byOpp };
   }).filter(h => h.p > 0);
   const race = [];
   game.players.forEach((p, i) => {

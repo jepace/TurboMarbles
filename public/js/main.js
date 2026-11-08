@@ -1171,7 +1171,10 @@ function renderFacts(rep, r, opt, facts) {
     lines.push(el('div', { class: 'facts-head' }, `After ${opt.moves}:`));
     if (!facts.hits?.length) lines.push(el('div', { class: 'fact safe' }, `✓ None of ${who}'s marbles can be hit next roll.`));
     for (const h of facts.hits ?? []) {
-      lines.push(el('div', { class: 'fact danger' }, el('b', {}, h.at), ` can be hit: ${pctTxt(h.p)} `, el('span', { class: 'muted' }, `(${h.rolls})`)));
+      // Which rolls hit, and by whom (named when there are several opponents).
+      const by = h.byOpp && rep.players.length > 2
+        ? h.byOpp.map(x => `${x.rolls} by ${rep.players[x.opp]?.name ?? 'player ' + (x.opp + 1)}`).join('; ') : h.rolls;
+      lines.push(el('div', { class: 'fact danger' }, el('b', {}, h.at), ` can be hit: ${pctTxt(h.p)} `, el('span', { class: 'muted' }, `(${by})`)));
     }
     if ((facts.hits?.length ?? 0) > 1) lines.push(el('div', { class: 'fact' }, `At least one hit: ${pctTxt(facts.anyHit)}`));
   }
