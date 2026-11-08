@@ -1726,9 +1726,15 @@ function showGameOver(winnerIndex) {
 // ---- Doubling cube (money play) ----
 const cubeOwnerText = c => c.owner == null ? 'centred'
   : c.owner === myPlayerIndex ? 'your cube' : `${playerName(c.owner)}'s cube`;
+// Dead cube (match play): its value already wins player pi the match.
+function cubeDead(pi) {
+  const c = gameState?.cube, m = gameState?.match;
+  const away = m ? m.length - m.score[pi] : c?.away?.[pi];
+  return !!c && away != null && away <= c.value;
+}
 function canIDouble() {
   const g = gameState, c = g?.cube;
-  return !!c && !c.crawford && !(c.away && c.away[myPlayerIndex] <= c.value) && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
+  return !!c && !c.crawford && !cubeDead(myPlayerIndex) && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
     (c.owner == null || c.owner === myPlayerIndex);
 }
 function renderCube() {
@@ -1736,7 +1742,7 @@ function renderCube() {
   $('cube-area').style.display = c ? 'flex' : 'none';
   if (c) {
     $('cube').textContent = String(c.value);
-    const dead = c.owner != null && c.away && c.away[c.owner] <= c.value;
+    const dead = c.owner != null && cubeDead(c.owner);
     $('cube-owner').textContent = c.crawford ? 'Crawford game — no doubling'
       : cubeOwnerText(c) + (dead ? ' · dead' : '');
     const bd = $('btn-double');

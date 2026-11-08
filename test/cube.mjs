@@ -278,6 +278,12 @@ await describe('match play — score, Crawford game, post-Crawford, match over',
   win(0);                                          // Alice 1–0
   assert(room.match.score.join() === '1,0' && !room.match.over, 'a single game scores 1 in the match');
   handleRematch(host, roomId); handleRematch(guest, roomId);
+  assert(room.game.cube.away?.join() === '2,3' && host.find('gameStarted').pop().gameState.cube.away?.join() === '2,3', 'cube knows the away scores (server and client)');
+  room.game.turnIndex = 1; room.game.phase = 'IN_TURN'; room.game.dice = null;
+  offerDouble(room.game, 1); takeDouble(room.game, 0);
+  room.game.turnIndex = 0; room.game.phase = 'IN_TURN';
+  assert(!canDouble(room.game, 0), 'Alice 2-away owning the cube at 2: dead, no redouble');
+  Object.assign(room.game.cube, { value: 1, owner: null });
   win(0);                                          // Alice 2–0: match point
   handleRematch(host, roomId); handleRematch(guest, roomId);
   assert(room.game.cube.crawford === true && !canDouble(room.game, room.game.turnIndex), 'next game is the Crawford game: no doubling');
