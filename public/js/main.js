@@ -477,6 +477,13 @@ $('board-canvas').addEventListener('mouseleave', () => { $('board-tip').style.di
 // ---- Socket events ----
 
 on('error', ({ code, message }) => {
+  // A reconnect to a game that is gone (closed, or the server restarted):
+  // stop trying, and say so quietly instead of a popup.
+  if (code === 'GAME_GONE' || code === 'RECONNECT_FAILED') {
+    setReconnectInfo(null);
+    log(code === 'GAME_GONE' ? 'This game is no longer on the server (it was closed, or the server restarted).' : 'Could not reconnect to this game.');
+    return;
+  }
   if (code && code.startsWith('ANALYSIS')) resetAnalyzeButton();
   if (code === 'NAME_TAKEN' || code === 'RATE_LIMITED' || code === 'BAD_LINK_CODE') pendingAfterRegister = null;
   if (code === 'STATS_UNAVAILABLE') { statsUnavailable = true; updateLanding(); if (pendingAfterRegister) { const f = pendingAfterRegister; pendingAfterRegister = null; f(); } return; }

@@ -26,6 +26,7 @@ const MAX_ROOMS_PER_WS       = 3;             // per-connection cap
 const LOBBY_TTL_MS           = 2 * 60 * 60 * 1000; // unstarted lobbies expire after 2 h
 const ILLEGAL_LOG_INTERVAL_MS = 10_000;        // at most one illegal-move warning per socket per 10 s
 const MAX_ANALYSES          = 1;              // post-game analyses running at once (CPU-heavy)
+const FINISHED_GRACE_MS   = 10 * 60 * 1000; // keep a finished room after a disconnect, for reconnecting
 const MAX_RECORDED_ROLLS    = 400;            // per game (all players), for post-game analysis
 export const config = {
   skipTurnDelayMs: 1500,  // show dice before auto-advancing a skipped turn
@@ -732,10 +733,19 @@ function leaveRoom(ws) {
   }
 
   if (room.state === 'finished') {
-    // A rematch can't happen without them: tell whoever is still there.
-    broadcast(room, { event: 'opponentLeft', playerIndex: sess.playerIndex });
-    // Nothing left to play; drop the room once nobody is looking at it.
-    if (!room.slots.some(s => s.ws)) deleteRoom(room);
+    // A dropped connection (a phone or iPad pausing the tab) usually comes
+    // straight back: keep the seat for FINISHED_GRACE_MS so the player can
+    // reconnect to the result, the analysis and Rematch. Only then tell the
+    // others they left, and close the room once nobody is connected.
+    const pi = sess.playerIndex;
+    const t = setTimeout(() => {
+      room.disconnectTimers.delete(pi);
+      if (!rooms.has(room.id) || slot.ws) return;
+      broadcast(room, { event: 'opponentLeft', playerIndex: pi });
+      if (!room.slots.some(s => s.ws)) deleteRoom(room);
+    }, FINISHED_GRACE_MS);
+    t.unref?.();
+    room.disconnectTimers.set(pi, t);
     return;
   }
 
@@ -763,7 +773,8 @@ function leaveRoom(ws) {
 
 export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
   const room = rooms.get(roomId);
-  if (!room || room.state !== 'playing') return { error: 'Invalid room' };
+  if (!room) return { error: 'GONE' };
+  if (room.state !== 'playing' && room.state !== 'finished') return { error: 'Invalid room' };
 
   const pi = Number(playerIndex);
   if (!Number.isInteger(pi) || pi < 0 || pi >= room.slots.length) return { error: 'Invalid player index' };
@@ -793,6 +804,13 @@ export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
 
   slot.ws = ws;
   sessions.set(ws._id, { roomId, playerIndex: pi });
+
+  // After the game: just re-attach (the page keeps showing the result or
+  // the analysis; nothing to redraw).
+  if (room.state === 'finished') {
+    sendTo(ws, { event: 'rejoined' });
+    return { ok: true };
+  }
 
   sendTo(ws, { event: 'reconnected', gameState: publicState(room) });
   // Re-send what the player needs to act if it's their turn mid-roll.

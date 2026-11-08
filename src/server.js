@@ -328,7 +328,7 @@ function dispatch(ws, msg) {
       }
       ws._room = roomId;
       const result = handleReconnect(ws, roomId, playerIndex, reconnectToken);
-      if (result && result.error) send(ws, { event: 'error', code: 'RECONNECT_FAILED', message: result.error });
+      if (result && result.error) send(ws, { event: 'error', code: result.error === 'GONE' ? 'GAME_GONE' : 'RECONNECT_FAILED', message: result.error === 'GONE' ? 'That game is no longer on the server.' : result.error });
       break;
     }
   }

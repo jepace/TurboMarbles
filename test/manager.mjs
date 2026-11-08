@@ -1079,6 +1079,23 @@ describe('addRobot — random names from the list, no duplicates', () => {
   assert(!names.includes('Alice'), "never the host's name");
 });
 
+describe('finished game — a dropped connection can come back (analysis, rematch)', () => {
+  setup();
+  const host = mockWs();
+  const { roomId, reconnectToken } = createRoom(host, 'Alice', 2);
+  addRobot(host, roomId);
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  room.state = 'finished'; room.game.phase = 'GAME_OVER'; room.game.winner = 0;
+  handleDisconnect(host);                                 // iPad pauses the tab
+  assert(_getRoom(roomId), 'the finished room is kept for a while');
+  const back = mockWs();
+  const r = handleReconnect(back, roomId, 0, reconnectToken);
+  assert(r?.ok && back.find('rejoined').length === 1 && room.slots[0].ws === back, 'reconnecting re-attaches quietly');
+  const gone = handleReconnect(mockWs(), 'no-such-room', 0, reconnectToken);
+  assert(gone?.error === 'GONE', 'a room that is gone is reported as gone');
+});
+
 // ---- Summary ----------------------------------------------------------------
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
