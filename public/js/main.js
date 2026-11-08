@@ -714,7 +714,7 @@ const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${c})`;
 
 // Error-rate bands: average win-rate points lost per real choice.
-const RATINGS = [[0.5, 'Robot-level'], [1, 'Expert'], [2, 'Advanced'], [3.5, 'Intermediate'], [6, 'Casual'], [Infinity, 'Beginner']];
+const RATINGS = [[0.5, 'World Class'], [1, 'Expert'], [2, 'Advanced'], [3.5, 'Intermediate'], [6, 'Casual'], [Infinity, 'Beginner']];
 
 function playerStats(rep, pi) {
   const rolls = rep.rolls.filter(r => r.pi === pi);
