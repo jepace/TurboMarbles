@@ -213,6 +213,7 @@ for (let i = 0; i < 2; i++) {
 
 function doRoll() {
   if ($('btn-roll').disabled) return;
+  hideRollPopup();
   send({ action: 'roll' });
   $('die-0').classList.add('rolling');
   $('die-1').classList.add('rolling');
@@ -1733,6 +1734,7 @@ function renderCube() {
       : cubeOwnerText(c) + (dead ? ' · dead (a win already takes the match)' : '');
     const bd = $('btn-double');
     bd.style.display = canIDouble() ? '' : 'none';
+    if ($('btn-roll').disabled) hideRollPopup();
     bd.title = `Double to ${c.value * 2} (D)`;
     // A double waiting for my answer (also after a reconnect).
     const o = gameState.cubeOffer;
@@ -1762,6 +1764,7 @@ function sessionLine(you) {
 function doDouble() {
   if (!canIDouble()) return;
   send({ action: 'double' });
+  hideRollPopup();
   $('btn-double').style.display = 'none';
   $('btn-roll').disabled = true;
 }
@@ -2318,8 +2321,17 @@ function enableRoll() {
   $('turn-banner').textContent = choose ? 'Your turn — Roll (Enter) or Double (D)' : 'Your turn — Roll! (Enter)';
   $('turn-banner').style.color = '#f0c040';
   clearTimeout(autoRollTimer);
-  if (!choose) autoRollTimer = setTimeout(() => { if (isMyTurn() && !$('btn-roll').disabled) doRoll(); }, 600);
+  if (choose) showRollPopup();
+  else autoRollTimer = setTimeout(() => {
+    if (!isMyTurn() || $('btn-roll').disabled) return;
+    doRoll();
+    // Safety net: if the roll didn't go through, offer the button.
+    autoRollTimer = setTimeout(() => { if (isMyTurn() && !$('btn-roll').disabled) showRollPopup(); }, 2500);
+  }, 600);
 }
+function showRollPopup() { renderCube(); $('roll-popup').style.display = 'flex'; }
+function hideRollPopup() { $('roll-popup').style.display = 'none'; }
+$('pop-roll').addEventListener('click', doRoll);
 
 function setHint(msg) {
   const el = $('move-hint');

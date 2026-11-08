@@ -162,8 +162,13 @@ button.secondary { background: #fff2; }
   align-items: center;
 }
 
-#btn-double { background: #c8920a; color: #111; font-weight: 700; }
+#roll-popup { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
+  display: flex; gap: 0.8rem; padding: 0.9rem 1.1rem; border-radius: 12px; background: #0d1530ee;
+  border: 1px solid #c8920a; box-shadow: 0 6px 24px #000a; animation: pop-in 0.15s ease-out; }
+#roll-popup button { font-size: 1.15rem; padding: 0.6rem 1.4rem; font-weight: 700; }
+#btn-double { background: #c8920a; color: #111; }
 #btn-double:hover { background: #e0a818; }
+@keyframes pop-in { from { opacity: 0; transform: translate(-50%, -50%) scale(0.85); } }
 
 /* ---- Commit / Undo area ---- */
 #commit-area {
