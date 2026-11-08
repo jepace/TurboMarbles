@@ -34,24 +34,24 @@ const COLORS = BASE_COLORS.slice();
 const DARK_C = BASE_DARK.slice();
 // Each viewer may see their own arm in a favourite colour: the colours turn
 // round the ring by `shift` arms, keeping their order (display only).
-// Marble look (contrast against a same-coloured track): 'classic', 'dark',
-// 'white', 'socket', 'socket-white'.
-let marbleStyle = 'classic';
-export function setMarbleStyle(s) { marbleStyle = s; }
-// Track strip look: 'full' (solid colour), 'muted' (colour blended toward the
-// background), 'dark' (deep shade), 'outline' (dark strip, coloured edge).
-let trackStyle = 'full';
-export function setTrackStyle(s) { trackStyle = s; }
+// Board look (a user preference). Track strips: 'muted' (default: colour
+// blended toward the background), 'solid', 'deep', 'outline'. Marbles:
+// 'socket' (default: in a dark socket), 'classic', 'dark' (black ring), 'white' (white ring).
+let trackStyle = 'muted', marbleStyle = 'socket';
+export function setBoardLook({ track, marbles } = {}) {
+  trackStyle = ['muted', 'solid', 'deep', 'outline'].includes(track) ? track : 'muted';
+  marbleStyle = ['socket', 'classic', 'dark', 'white'].includes(marbles) ? marbles : 'socket';
+}
 function mix(hex, toHex, t) {
   const c = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   const a = c(hex), b = c(toHex);
   return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }
 function trackPaint(color) {
-  if (trackStyle === 'muted')   return [mix(color, '#16203a', 0.45), null];
-  if (trackStyle === 'dark')    return [mix(color, '#000000', 0.6), null];
+  if (trackStyle === 'solid')   return [color + 'ff', null];
+  if (trackStyle === 'deep')    return [mix(color, '#000000', 0.6), null];
   if (trackStyle === 'outline') return [mix(color, '#0d1530', 0.85), color, Math.max(2, W * 0.004)];
-  return [color + 'ff', null];
+  return [mix(color, '#16203a', 0.45), null];
 }
 export function setColorShift(shift = 0) {
   for (let i = 0; i < 6; i++) { COLORS[i] = BASE_COLORS[(i + shift + 6) % 6]; DARK_C[i] = BASE_DARK[(i + shift + 6) % 6]; }
@@ -717,8 +717,8 @@ function drawMarbles(gameState) {
         ctx.fill();
       }
 
-      // Contrast backing: a dark disc a little larger than the marble.
-      if (marbleStyle === 'socket' || marbleStyle === 'socket-white') {
+      // Contrast backing: a dark socket a little larger than the marble.
+      if (marbleStyle === 'socket') {
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, r * 1.2, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(8,12,24,0.95)';
@@ -747,7 +747,7 @@ function drawMarbles(gameState) {
       } else if (marbleStyle === 'dark') {
         ctx.strokeStyle = 'rgba(0,0,0,0.9)';
         ctx.lineWidth   = Math.max(2, r * 0.16);
-      } else if (marbleStyle === 'white' || marbleStyle === 'socket-white') {
+      } else if (marbleStyle === 'white') {
         ctx.strokeStyle = 'rgba(255,255,255,0.9)';
         ctx.lineWidth   = Math.max(1.5, r * 0.12);
       } else if (inLowContrast) {

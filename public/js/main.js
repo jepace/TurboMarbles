@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -40,6 +40,8 @@ try {
   if (typeof saved.analysis === 'boolean') settings.analysis = saved.analysis;
   if (typeof saved.numbers === 'boolean') settings.numbers = saved.numbers;
   if (typeof saved.myColor === 'string') settings.myColor = saved.myColor;
+  if (typeof saved.boardTrack === 'string') settings.boardTrack = saved.boardTrack;
+  if (typeof saved.boardMarbles === 'string') settings.boardMarbles = saved.boardMarbles;
 } catch { /* storage unavailable: use defaults */ }
 function saveSettings() {
   try { localStorage.setItem('tm.settings', JSON.stringify(settings)); } catch { /* ignore */ }
@@ -154,7 +156,7 @@ $('btn-create-confirm').addEventListener('click', () => {
   if (n < 2 || n > 6) return;
   connect();
   const matchTo = n === 2 ? Math.max(0, Math.min(25, parseInt($('create-match').value, 10) || 0)) : 0;
-  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && $('create-cube').checked,
+  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && (matchTo ? matchTo >= 2 : $('create-cube').checked),
     matchTo, jacoby: n === 2 && !matchTo && $('create-cube').checked && $('create-jacoby').checked });
 });
 $('btn-create-back').addEventListener('click', () => show('screen-landing'));
@@ -175,21 +177,17 @@ function updateCubeOption(n) {
   // Matches: two players. Jacoby: money play with the cube only.
   $('create-match').disabled = !ok;
   $('create-match-row').style.opacity = ok ? '1' : '0.55';
-  const match = ok && (parseInt($('create-match').value, 10) || 0) > 0;
+  const mlen = ok ? (parseInt($('create-match').value, 10) || 0) : 0;
+  const match = mlen > 0;
+  // A match is played with the cube (a 1-point match without): not a choice.
+  if (match) { $('create-cube').checked = mlen >= 2; $('create-cube').disabled = true; }
   const jok = ok && $('create-cube').checked && !match;
   $('create-jacoby').disabled = !jok;
   if (!jok) $('create-jacoby').checked = false;
   $('create-jacoby-row').style.opacity = jok ? '1' : '0.55';
 }
 $('create-cube').addEventListener('change', () => updateCubeOption(parseInt($('create-count').value, 10)));
-// Setting a match length turns the cube on (matches are played with it; it can still be unticked).
-let matchWas = 0;
-$('create-match').addEventListener('input', () => {
-  const v = parseInt($('create-match').value, 10) || 0;
-  if (v > 0 && !matchWas && !$('create-cube').disabled) $('create-cube').checked = true;
-  matchWas = v;
-  updateCubeOption(parseInt($('create-count').value, 10));
-});
+$('create-match').addEventListener('input', () => updateCubeOption(parseInt($('create-count').value, 10)));
 updateCubeOption(parseInt($('create-count').value, 10));
 updateColorPicker(4); // initialize with default
 
@@ -629,6 +627,8 @@ on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
 on('identity', ({ player, prefs }) => {
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
   if (myPrefs.myColor && myPrefs.myColor !== settings.myColor) { settings.myColor = myPrefs.myColor; saveSettings(); $('opt-color').value = settings.myColor; }
+  for (const [k, id] of [['boardTrack', 'opt-track'], ['boardMarbles', 'opt-marbles']]) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); $(id).value = settings[k]; }
+  applyBoardLook();
   updateLanding();
   if (profileData && me) $('profile-name').textContent = me.name;
 });
@@ -736,12 +736,16 @@ function renderProfile() {
   renderAccountSection();
 }
 
+const TRACK_LOOKS = [['', 'muted track'], ['solid', 'solid track'], ['deep', 'deep track'], ['outline', 'outlined track']];
+const MARBLE_LOOKS = [['', 'socketed marbles'], ['classic', 'plain marbles'], ['dark', 'dark-ringed marbles'], ['white', 'white-ringed marbles']];
+function applyBoardLook() { setBoardLook({ track: settings.boardTrack, marbles: settings.boardMarbles }); if (gameState) drawBoard(gameState); }
 function prefSelect(key, opts) {
   const s = el('select', {}, ...opts.map(([v, t]) => el('option', { value: v, textContent: t })));
   s.value = myPrefs[key] ?? '';
   s.addEventListener('change', () => {
     myPrefs = { ...myPrefs, [key]: s.value || undefined }; send({ action: 'setPrefs', prefs: myPrefs });
     if (key === 'myColor') { settings.myColor = s.value || undefined; saveSettings(); $('opt-color').value = s.value; }
+    if (key === 'boardTrack' || key === 'boardMarbles') { settings[key] = s.value || undefined; saveSettings(); applyBoardLook(); }
   });
   return s;
 }
@@ -761,6 +765,8 @@ function renderAccountSection(extra) {
       prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']])),
     el('div', { class: 'acct-row' }, el('span', {}, 'My colour'),
       prefSelect('myColor', [['', 'as dealt'], ...['blue', 'pink', 'orange', 'yellow', 'green', 'white'].map(c => [c, c])])),
+    el('div', { class: 'acct-row' }, el('span', {}, 'Board'),
+      prefSelect('boardTrack', TRACK_LOOKS), prefSelect('boardMarbles', MARBLE_LOOKS)),
     el('div', { class: 'acct-row' },
       el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
       btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); })),
@@ -1502,6 +1508,14 @@ $('opt-feedback').checked = settings.feedback;
 $('opt-analysis').checked = settings.analysis;
 $('opt-numbers').checked = settings.numbers;
 $('opt-color').value = settings.myColor ?? '';
+for (const [id, key] of [['opt-track', 'boardTrack'], ['opt-marbles', 'boardMarbles']]) {
+  $(id).value = settings[key] ?? '';
+  $(id).addEventListener('change', e => {
+    settings[key] = e.target.value || undefined; saveSettings(); applyBoardLook();
+    if (me) { myPrefs = { ...myPrefs, [key]: settings[key] }; send({ action: 'setPrefs', prefs: myPrefs }); }
+  });
+}
+applyBoardLook();
 $('opt-color').addEventListener('change', e => {
   settings.myColor = e.target.value || undefined; saveSettings();
   if (me) { myPrefs = { ...myPrefs, myColor: settings.myColor }; send({ action: 'setPrefs', prefs: myPrefs }); }

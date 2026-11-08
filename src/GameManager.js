@@ -132,7 +132,8 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     robotTurnTimer: null,
     skipTimer: null,
     analysis: null,     // post-game analysis: null | { state: 'running', waiting: Set<ws> } | { state: 'done', result }
-    cube: !!cube && totalPlayers === 2,   // doubling cube, two players only
+    // Doubling cube: two players only; a match (to 2+) always has it, a 1-point match never.
+    cube: totalPlayers === 2 && (Number.isInteger(matchTo) && matchTo >= 1 ? matchTo >= 2 : !!cube),
     // A match to N points (two players), or null for a money session.
     match: totalPlayers === 2 && Number.isInteger(matchTo) && matchTo >= 1 && matchTo <= 25
       ? { length: matchTo, score: [0, 0], crawfordUsed: false, over: false, winner: null } : null,

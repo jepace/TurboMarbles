@@ -342,6 +342,13 @@ await describe('abandoning costs the most still losable', async () => {
   assert(g3.find('gameResult').pop()?.winnerIndex === 1, 'accepted: Bob wins');
 });
 
+describe('a match always has the cube (a 1-point match never)', () => {
+  _reset();
+  const r3 = createRoom(mockWs(), 'A', 2, undefined, { cube: false, matchTo: 3 });
+  const r1 = createRoom(mockWs(), 'B', 2, undefined, { cube: true, matchTo: 1 });
+  assert(_getRoom(r3.roomId).cube === true && _getRoom(r1.roomId).cube === false, 'match to 3: cube on; match to 1: cube off');
+});
+
 await describe('quitting — resign a match; 3+ players: a robot takes the seat', async () => {
   _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0;
   const host = mockWs(), guest = mockWs();
