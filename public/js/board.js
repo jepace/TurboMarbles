@@ -38,6 +38,21 @@ const DARK_C = BASE_DARK.slice();
 // 'white', 'socket', 'socket-white'.
 let marbleStyle = 'classic';
 export function setMarbleStyle(s) { marbleStyle = s; }
+// Track strip look: 'full' (solid colour), 'muted' (colour blended toward the
+// background), 'dark' (deep shade), 'outline' (dark strip, coloured edge).
+let trackStyle = 'full';
+export function setTrackStyle(s) { trackStyle = s; }
+function mix(hex, toHex, t) {
+  const c = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const a = c(hex), b = c(toHex);
+  return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+function trackPaint(color) {
+  if (trackStyle === 'muted')   return [mix(color, '#16203a', 0.45), null];
+  if (trackStyle === 'dark')    return [mix(color, '#000000', 0.6), null];
+  if (trackStyle === 'outline') return [mix(color, '#0d1530', 0.85), color, Math.max(2, W * 0.004)];
+  return [color + 'ff', null];
+}
 export function setColorShift(shift = 0) {
   for (let i = 0; i < 6; i++) { COLORS[i] = BASE_COLORS[(i + shift + 6) % 6]; DARK_C[i] = BASE_DARK[(i + shift + 6) % 6]; }
 }
@@ -358,21 +373,21 @@ function drawAllArms(n) {
       pt(COL_TOP,          COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW, COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW, COL_OFF - COL_HW),
-    ], color + 'ff', null);
+    ], ...trackPaint(color));
 
     fillQuad([
       pt(COL_TOP,          -COL_OFF + COL_HW),
       pt(COL_TOP,          -COL_OFF - COL_HW),
       pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
       pt(R_OUTER + COL_HW, -COL_OFF + COL_HW),
-    ], color + 'ff', null);
+    ], ...trackPaint(color));
 
     fillQuad([
       pt(R_OUTER - COL_HW, -COL_OFF - COL_HW),
       pt(R_OUTER - COL_HW,  COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW,  COL_OFF + COL_HW),
       pt(R_OUTER + COL_HW, -COL_OFF - COL_HW),
-    ], color + 'ff', null);
+    ], ...trackPaint(color));
 
     // Home corridor strip: dimmed for non-playing arms
     const homeIn  = COL_TOP - HOME_HW;
