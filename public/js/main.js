@@ -182,7 +182,14 @@ function updateCubeOption(n) {
   $('create-jacoby-row').style.opacity = jok ? '1' : '0.55';
 }
 $('create-cube').addEventListener('change', () => updateCubeOption(parseInt($('create-count').value, 10)));
-$('create-match').addEventListener('input', () => updateCubeOption(parseInt($('create-count').value, 10)));
+// Setting a match length turns the cube on (matches are played with it; it can still be unticked).
+let matchWas = 0;
+$('create-match').addEventListener('input', () => {
+  const v = parseInt($('create-match').value, 10) || 0;
+  if (v > 0 && !matchWas && !$('create-cube').disabled) $('create-cube').checked = true;
+  matchWas = v;
+  updateCubeOption(parseInt($('create-count').value, 10));
+});
 updateCubeOption(parseInt($('create-count').value, 10));
 updateColorPicker(4); // initialize with default
 
