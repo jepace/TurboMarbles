@@ -928,7 +928,7 @@ function cubeBadge(c) {
   if (!a || cubeDeep.has(c.i)) return el('span', { class: 'badge unclear' }, 'checking…');
   if (a.skip) return el('span', { class: 'badge forced', title: 'Nowhere near a double (estimate under 60%): not analysed' }, 'not near');
   if (a.severity === 'ok') return el('span', { class: a.close ? 'badge unclear' : 'badge ok', title: a.close ? "Close call: within the estimate's noise" : 'Right decision' }, a.close ? 'close ✓' : '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${a.loss.toFixed(2)} points` }, `${a.label ?? SEV_LABEL[a.severity]} −${a.loss.toFixed(2)}`);
+  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${a.loss.toFixed(2)} points of stake` }, `${a.label ?? SEV_LABEL[a.severity]} −${a.loss.toFixed(2)} pts`);
 }
 function analyzeDeeperCube(i) {
   const c = analysisReport?.cube?.[i];
@@ -973,14 +973,14 @@ function selectCube(i) {
   else if (a.skip) kids.push(el('div', { class: 'muted' }, `Nowhere near a double (the estimate gave ${p.name} ${a.p != null ? (100 * a.p).toFixed(0) + '%' : 'under 60%'}) — not analysed.`));
   else {
     const isDouble = c.kind === 'double';
-    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num' }, 'Equity'), el('span')));
+    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Expected points won (+) or lost (−), at this cube' }, 'Points'), el('span')));
     for (const o of a.options) {
       // The double's own equity is the lower of take and drop (the opponent's best answer).
       const bestHere = isDouble ? (o.key === 'nd' ? a.best === 'no double' : false) : o.key === a.best;
       const playedHere = isDouble ? (o.key === 'nd' ? a.played === 'no double' : false) : o.key === a.played;
       const tag = [bestHere ? 'best' : '', playedHere ? 'played' : ''].filter(Boolean).join(' · ');
       kids.push(el('div', { class: 'ap-opt' }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
-        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + o.eq.toFixed(2)), el('span')));
+        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + o.eq.toFixed(2) + ' pts'), el('span')));
     }
     if (isDouble) {
       const dbl = Math.min(a.options[1].eq, a.options[2].eq);
@@ -991,10 +991,10 @@ function selectCube(i) {
     kids.push(el('div', { class: 'fact' }, `${p.name} wins ${(100 * a.p).toFixed(1)}%` +
       (a.aggroWin || a.aggroLoss ? ` (aggro wins ${(100 * a.aggroWin).toFixed(1)}%, aggro losses ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
       (a.exact ? ' — exact (duel table)' : ` — from ${a.n} played-out games`)));
-    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${a.loss.toFixed(2)} points at cube ${c.v}.`
+    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${a.loss.toFixed(2)} pts at cube ${c.v}.`
       : a.close ? "Close call — the estimate can't separate the options; counts as correct."
       : `✓ Right decision (${a.best}).`;
-    kids.push(el('div', { class: 'muted' }, verdict + ` Equities in points at cube ${c.v}, from ${p.name}'s side. The cube formulas are an approximation (cube efficiency 0.68).`));
+    kids.push(el('div', { class: 'muted' }, verdict + ` Cube decisions are measured in points (expected points won or lost at cube ${c.v}, from ${p.name}'s side), not win chance: they change the stakes. Roughly, 0.1 points ≈ 5% win chance. Moves are measured in win chance (%). The cube formulas are an approximation (cube efficiency 0.68).`));
   }
   // Depth, and going deeper (more games; or analyse a skipped no-double anyway).
   if (a && !a.exact) {

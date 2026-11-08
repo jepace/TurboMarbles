@@ -242,9 +242,17 @@ function candidateMoves(game, playerIndex) {
   const out = [];
   for (const dieIdx of [0, 1]) {
     if (game.diceUsed[dieIdx]) continue;
-    for (const m of (legal[dieIdx] || [])) if (!m.optional) out.push(m);
+    // Optional moves (going round past your own home) only when they hit
+    // someone — e.g. hopping round the star track into an occupied hub.
+    for (const m of (legal[dieIdx] || [])) if (!m.optional || landsOnOpponent(game, playerIndex, m)) out.push(m);
   }
   return out;
+}
+
+function landsOnOpponent(game, playerIndex, move) {
+  if (move.toZone !== 'track' && move.toZone !== 'center') return false;
+  return game.players.some((p, o) => o !== playerIndex && p.marbles.some(m =>
+    move.toZone === 'center' ? m.zone === 'center' : m.zone === 'track' && m.space === move.toSpace));
 }
 
 function scoreMove(game, playerIndex, move) {

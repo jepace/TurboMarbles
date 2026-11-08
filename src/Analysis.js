@@ -66,20 +66,34 @@ function applyRecorded(game, pi, mv, record) {
 
 const realMoves = (g, pi, d) => (allLegalMoves(g, pi)[d] ?? []).filter(m => !m.optional);
 
+// The choices for one die: every legal move, plus skipping the die when it
+// has no move or only optional ones (passing your own home is never forced).
+// null = skip.
+function dieChoices(g, pi, d) {
+  if (g.winner != null || g.diceUsed[d]) return [];
+  const moves = allLegalMoves(g, pi)[d] ?? [];
+  return moves.every(m => m.optional) ? [...moves, null] : moves;
+}
+
 // Every distinct way to play the roll in `game` (dice set, none used):
-// [{ game, moves, key }], deduplicated by resulting board.
+// [{ game, moves, key }], deduplicated by resulting board. Optional moves
+// count (a player may choose to go round, e.g. to hit), and so does skipping
+// a die whose moves are all optional.
 export function allPlays(game, pi) {
   const out = new Map();
   const add = (g, moves) => { const key = boardKey(g, pi); if (!out.has(key)) out.set(key, { game: g, moves, key }); };
+  const play = (g, d, mv, rec) => {
+    const g2 = structuredClone(g), r2 = rec.slice();
+    if (mv) applyRecorded(g2, pi, mv, r2); else g2.diceUsed[d] = true;
+    return [g2, r2];
+  };
   for (const d of [0, 1]) {
-    for (const m1 of realMoves(game, pi, d)) {
-      const g1 = structuredClone(game), rec1 = [];
-      applyRecorded(g1, pi, m1, rec1);
-      const second = g1.winner != null ? [] : realMoves(g1, pi, 1 - d);
+    for (const m1 of dieChoices(game, pi, d)) {
+      const [g1, rec1] = play(game, d, m1, []);
+      const second = dieChoices(g1, pi, 1 - d);
       if (!second.length) { add(g1, rec1); continue; }
       for (const m2 of second) {
-        const g2 = structuredClone(g1), rec2 = rec1.slice();
-        applyRecorded(g2, pi, m2, rec2);
+        const [g2, rec2] = play(g1, 1 - d, m2, rec1);
         add(g2, rec2);
       }
     }

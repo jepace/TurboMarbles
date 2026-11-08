@@ -70,15 +70,21 @@ function playerSpace(arm, otherArm, seeds) {
         const ls = lands.filter(x => x > 0).sort((x, y) => x - y);
         out.set(`${to}#${ls}`, { to, lands: ls });
       };
+      // Each die: any legal move, or skip it when it has none or only
+      // optional ones (passing your own home is never forced) — the same
+      // choices as Analysis.allPlays.
+      const choices = (gg, d) => {
+        if (gg.winner != null || gg.diceUsed[d]) return [];
+        const ms = allLegalMoves(gg, 0)[d] ?? [];
+        return ms.every(m => m.optional) ? [...ms, null] : ms;
+      };
+      const step = (gg, d, mv) => { const g2 = structuredClone(gg); if (mv) applyMove(g2, 0, mv); else g2.diceUsed[d] = true; return g2; };
       for (const di of [0, 1]) {
-        for (const m1 of realMoves(g, 0, di)) {
-          const g1 = structuredClone(g); applyMove(g1, 0, m1);
-          const second = g1.winner != null ? [] : realMoves(g1, 0, 1 - di);
-          if (!second.length) { push(g1, [landOf(m1)]); continue; }
-          for (const m2 of second) {
-            const g2 = structuredClone(g1); applyMove(g2, 0, m2);
-            push(g2, [landOf(m1), landOf(m2)]);
-          }
+        for (const m1 of choices(g, di)) {
+          const g1 = step(g, di, m1);
+          const second = choices(g1, 1 - di);
+          if (!second.length) { push(g1, [m1 ? landOf(m1) : -1]); continue; }
+          for (const m2 of second) push(step(g1, 1 - di, m2), [m1 ? landOf(m1) : -1, m2 ? landOf(m2) : -1]);
         }
       }
       rolls.push([...out.values()].map(o => ({ to: o.to === -1 ? -1 : add(o.to), lands: o.lands })));

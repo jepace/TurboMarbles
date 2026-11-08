@@ -127,5 +127,17 @@ describe('robot — uses the table near home', () => {
   assert(g.players[0].marbles[2].zone === 'base', `robot hits the marble in the hub (G↑4 + 4 → hub): ${moves.map(m => m.type).join(', ')}`);
 }
 
+// Hit chances count optional moves: a marble on a star can reach the hub
+// with any die (a 1 straight in, or hop round the star track and step in —
+// optional when it passes the mover's approach star, but allowed).
+{
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
+  g.players[0].marbles.forEach((m, i) => { delete m.space; delete m.slot; Object.assign(m, i === 0 ? { zone: 'center' } : { zone: 'base' }); });
+  g.players[1].marbles.forEach((m, i) => { delete m.space; delete m.slot;
+    Object.assign(m, i === 0 ? { zone: 'track', space: 36, starEligible: true } : { zone: 'home', slot: i + 1 }); });
+  const f = positionFacts(g, 0);
+  assert(Math.abs(f.anyHit - 1) < 1e-9, `a marble in the hub next to an opponent on a star is hit 100% (${(100 * f.anyHit).toFixed(1)}%)`);
+}
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

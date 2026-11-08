@@ -176,10 +176,11 @@ export function joinRoom(ws, code, playerName) {
   return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room), reconnectToken: playerId };
 }
 
-// Robot names: 10 female, 10 male, picked at random when a robot is added.
+// Robot names: Star Trek (TNG, TOS, DS9) surnames, 12 women and 12 men,
+// picked at random when a robot is added.
 export const ROBOT_NAMES = [
-  'Alice', 'Beatrice', 'Clara', 'Daisy', 'Eleanor', 'Fiona', 'Grace', 'Hazel', 'Ivy', 'Maggie',
-  'Arthur', 'Benny', 'Charlie', 'Dexter', 'Felix', 'Gus', 'Hank', 'Oscar', 'Reggie', 'Walter',
+  'Crusher', 'Troi', 'Yar', 'Guinan', 'Ro', 'Pulaski', 'Uhura', 'Chapel', 'Rand', 'Kira', 'Dax', 'Leeta',
+  'Picard', 'Riker', 'Data', 'La Forge', 'Worf', 'Kirk', 'Spock', 'McCoy', 'Sulu', 'Sisko', 'Odo', 'Bashir',
 ];
 
 export function addRobot(ws, roomId) {
