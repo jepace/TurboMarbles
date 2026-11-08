@@ -105,8 +105,16 @@
     <div id="board-area">
       <canvas id="board-canvas"></canvas>
       <div id="board-tip" style="display:none"></div>
+      <!-- Doubled: Take / Drop -->
+      <div id="cube-offer" class="board-popup" style="display:none">
+        <div id="cube-offer-msg"></div>
+        <div class="btn-row">
+          <button id="btn-take" class="btn-go" title="Take (T)">Take</button>
+          <button id="btn-drop" class="secondary" title="Drop">Drop</button>
+        </div>
+      </div>
       <!-- Turn start: Roll / Double, only when there is a choice (else it rolls itself) -->
-      <div id="roll-popup" style="display:none">
+      <div id="roll-popup" class="board-popup" style="display:none">
         <button id="pop-roll" title="Roll (Enter)">Roll</button>
         <button id="btn-double" title="Offer a double before rolling (D)">Double</button>
       </div>
@@ -159,13 +167,6 @@
       <div id="cube-area" style="display:none">
         <div id="cube" title="Doubling cube">1</div>
         <span id="cube-owner"></span>
-      </div>
-      <div id="cube-offer" style="display:none">
-        <div id="cube-offer-msg"></div>
-        <div class="btn-row">
-          <button id="btn-take" class="btn-go" title="Take (T)">Take (T)</button>
-          <button id="btn-drop" class="secondary">Drop</button>
-        </div>
       </div>
       <div id="score-line" style="display:none"></div>
       <div id="commit-area">

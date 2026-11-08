@@ -1812,7 +1812,8 @@ on('doubleOffered', ({ playerIndex, value }) => {
   log(`${playerName(playerIndex)} doubles to ${value}`, gameState.players[playerIndex]?.color);
   $('btn-roll').disabled = true;
   if (playerIndex !== myPlayerIndex) {
-    $('cube-offer-msg').textContent = `${playerName(playerIndex)} doubles to ${value}. Take, and play on for ${value}? Or drop, and lose ${gameState.cube.value}?`;
+    $('cube-offer-msg').replaceChildren(el('div', { class: 'cube-face' }, String(value)),
+      el('div', {}, `${playerName(playerIndex)} doubles to ${value}. Take, and play on for ${value}? Or drop, and lose ${gameState.cube.value}?`));
     $('cube-offer').style.display = 'flex';
     $('turn-banner').textContent = 'Take or drop?';
   } else {
