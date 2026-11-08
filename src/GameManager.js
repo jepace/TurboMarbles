@@ -46,7 +46,7 @@ export const config = {
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   cubeAnalysisGames: 400, // played-out games per cube decision (when no exact table applies)
   cubeLevels: [400, 1600, 6400],
-  dropNextGameMs: 600,   // match play: pause after a dropped double before the next game starts   // games per cube decision: first pass, then 'Go deeper'
+  dropNextGameMs: 1500,  // match play: pause after a game (not the last) before the next one starts
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   robotThinkMs: 1500,
@@ -316,6 +316,16 @@ function finishGame(room) {
     score: m ? m.score.slice() : null, result: r, players: room.slots.map((s, i) => ({ name: s.name, color: game.players[i]?.color, isRobot: !!s.isRobot })) };
   room.records.push(rec);
   room.storedGameId = null;
+  // In a match, every game goes straight on to the next (after a moment) —
+  // no Next game step. Only the end of the match stops.
+  if (m && !m.over) {
+    const t = setTimeout(() => {
+      if (rooms.has(room.id) && room.state === 'finished' && room.game === game && !room.slots.every(s => s.isRobot)) {
+        beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+      }
+    }, config.dropNextGameMs);
+    t.unref?.();
+  }
   broadcast(room, { event: 'gameResult', game: rec.n, winnerIndex: game.winner, result: r,
     score: !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
@@ -590,16 +600,6 @@ function answerDouble(room, pi, take) {
     cubeStat(game, pi).drops++;
     broadcast(room, { event: 'doubleDropped', playerIndex: pi, winnerIndex: game.winner, result: game.result });
     finishGame(room);
-    // In a match, a drop goes straight on to the next game (after a moment to
-    // see the result) — no Next game step. Not when it ended the match.
-    if (room.match && !room.match.over) {
-      const t = setTimeout(() => {
-        if (rooms.has(room.id) && room.state === 'finished' && room.game === game) {
-          beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
-        }
-      }, config.dropNextGameMs);
-      t.unref?.();
-    }
   }
 }
 

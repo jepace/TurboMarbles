@@ -1988,10 +1988,11 @@ on('gameResult', ({ winnerIndex, result, score, wins, match, game }) => {
     if (!$('btn-analyze').disabled) resetAnalyzeButton();
   }
   if (gameState) { gameState.score = score ?? null; if (wins) gameState.wins = wins; gameState.match = match ? { ...match, crawford: false } : null; }
-  // A dropped double in a match: no game-over screen — the next game starts at once.
-  if (result?.dropped && match && !match.over) {
+  // Mid-match: no game-over screen — the next game starts at once.
+  if (match && !match.over) {
     flushTurnLog(); turnLogPlayer = null; gameState.phase = 'GAME_OVER';
-    log(`${playerName(winnerIndex)} wins ${ptsTxt(result.points)} — double dropped · ${sessionLine(false)}`);
+    const how = result?.dropped ? 'double dropped' : result?.baggro ? 'baggro' : result?.aggro ? 'aggro' : result?.resigned ? 'resigned' : 'single game';
+    log(`${playerName(winnerIndex)} wins ${ptsTxt(result?.points ?? 1)} — ${how} · ${sessionLine(false)}`);
     renderCube();
     return;
   }
