@@ -1211,6 +1211,15 @@ function renderStatus() {
   const parts = [`${dec.length} decisions`, `${dec.length - played.length} estimated`,
     `${played.length} played out (${(games + cubeGames).toLocaleString()} games)`];
   if (deepening.size) parts.push(`checking ${deepening.size}…`);
+  // Clocks: the quick pass, the base play-outs, Play out all.
+  const t = rep.timing ?? {}, clock = ms => ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)}:${String(Math.round(ms / 1000) % 60).padStart(2, '0')}`;
+  const tp = [];
+  if (t.quickMs != null) tp.push(`quick ${clock(t.quickMs)}`);
+  if (t.playoutMs != null) tp.push(`play-outs ${clock(t.playoutMs)}`);
+  else if (apPhase.playout) tp.push(`play-outs ${clock(Date.now() - apPhase.playout)}…`);
+  if (t.playOutAllMs != null) tp.push(`play out all ${clock(t.playOutAllMs)}`);
+  else if (apPhase.all) tp.push(`play out all ${clock(Date.now() - apPhase.all)}…`);
+  if (tp.length) parts.push('⏱ ' + tp.join(' · '));
   const kids = [el('span', { title: 'Estimated = judged instantly by the formula (one roll ahead). Played out = options played to the end many times.' }, parts.join(' · '))];
   if (!viewingStored && dec.some(r => (r.analysis.level ?? 0) < 2)) {
     const b = el('button', { class: 'secondary', title: 'Play out every decision at the deep level (minutes; runs in the background)' },
@@ -1221,7 +1230,22 @@ function renderStatus() {
   }
   $('ap-status').replaceChildren(...kids);
 }
-on('playOutAll', ({ running, game }) => { if (game != null && game !== curGame) return; playingOutAll = running; renderStatus(); });
+on('playOutAll', ({ running, game, started, timing }) => {
+  if (game != null && game !== curGame) return;
+  playingOutAll = running;
+  if (started) apPhase.all = Date.now();
+  if (!running) { apPhase.all = null; if (timing && analysisReport) analysisReport.timing = timing; }
+  renderStatus();
+});
+// Analysis clocks (client-side tick while something runs).
+const apPhase = { playout: null, all: null };
+on('analysisPhase', ({ game, phase }) => { if (game != null && game !== curGame) return; if (phase === 'playout') apPhase.playout = Date.now(); renderStatus(); });
+on('analysisTiming', ({ game, timing }) => {
+  const rep = reports.get(game) ?? (game === curGame ? analysisReport : null);
+  if (rep) rep.timing = timing;
+  if (game == null || game === curGame) { apPhase.playout = null; renderStatus(); }
+});
+setInterval(() => { if ((apPhase.playout || apPhase.all) && $('game-layout').classList.contains('analysis-mode')) renderStatus(); }, 1000);
 
 // Hover text splitting a combined number into moves and cube.
 function cubeSplit(s, f) { return (analysisReport?.cube ?? []).length ? f(s) : ''; }
@@ -1257,9 +1281,11 @@ function analyzeDeeper(idx) {
   if (!a || (a.level ?? 0) >= LEVEL_NAMES.length - 1 || deepening.has(idx)) return;
   send({ action: 'analyzeDeeper', idx, game: curGame ?? undefined });
 }
-on('analysisDeepening', ({ idx, game }) => {
+const deepQueued = new Set();       // Go deeper requests waiting for the base analysis
+on('analysisDeepening', ({ idx, game, queued }) => {
   if (game != null && game !== curGame) return;
   deepening.add(idx);
+  if (queued) deepQueued.add(idx); else deepQueued.delete(idx);
   if ($('game-layout').classList.contains('analysis-mode')) { renderMoveList(); renderStatus(); }
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
@@ -1283,7 +1309,7 @@ on('cubeFeedback', ({ playerIndex, text, agrees }) => {
 
 on('analysisUpdate', ({ idx, analysis, failed, game }) => {
   if (game != null && game !== curGame) { const r0 = reports.get(game)?.rolls?.[idx]; if (r0) r0.analysis = analysis; return; }
-  deepening.delete(idx);
+  deepening.delete(idx); deepQueued.delete(idx);
   if (!analysisReport?.rolls[idx]) return;
   analysisReport.rolls[idx].analysis = analysis;
   if (!$('game-layout').classList.contains('analysis-mode')) return;
@@ -1342,7 +1368,9 @@ function visibleRolls() {
 const isInaccuracy = a => a && a.severity === 'ok' && 2 * a.loss >= 0.01 && a.loss > 1.96 * (a.se ?? 0);
 const cubeInaccuracy = a => a && !a.skip && a.severity === 'ok' && !a.close && a.played !== a.best && a.lossNorm >= 0.01;
 function badgeFor(r, idx) {
-  if (deepening.has(idx)) return el('span', { class: 'badge unclear', title: 'Being played out to check the estimate' }, 'checking…');
+  if (deepening.has(idx)) return deepQueued.has(idx)
+    ? el('span', { class: 'badge unclear', title: 'Go deeper starts when the base analysis finishes' }, 'queued')
+    : el('span', { class: 'badge unclear', title: 'Being played out to check the estimate' }, 'checking…');
   if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
   const a = r.analysis;
   if (a.severity === 'ok' && a.loss >= 0.03) {
@@ -1585,8 +1613,8 @@ function selectRoll(idx, opt = null) {
     const depth = el('div', { class: 'ap-depth' },
       el('span', { class: 'muted' }, a.estimate
         ? 'Depth: instant estimate (a formula, no games played)'
-        : `Depth: ${LEVEL_NAMES[lvl] ?? lvl} · up to ${games} games per option`));
-    if (deepening.has(idx)) depth.append(el('span', { class: 'muted' }, ' · going deeper…'));
+        : `Depth: ${LEVEL_NAMES[lvl] ?? lvl} · up to ${games} games per option${a.ms ? ` · ${(a.ms / 1000).toFixed(1)} s` : ''}`));
+    if (deepening.has(idx)) depth.append(el('span', { class: 'muted' }, deepQueued.has(idx) ? ' · queued: starts when the base analysis finishes' : ' · going deeper…'));
     else if (lvl < LEVEL_NAMES.length - 1 && !viewingStored) {
       const b = el('button', { class: 'secondary ap-view', title: 'Redo this decision with more games (+)' }, `Go deeper (+) → ${LEVEL_NAMES[lvl + 1]}`);
       b.addEventListener('click', () => analyzeDeeper(idx));

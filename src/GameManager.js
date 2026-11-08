@@ -1470,7 +1470,22 @@ function scheduleCheck(job) {
     while (checkQueue.length) { const j = checkQueue.shift(); if (rooms.has(j.roomId)) { scheduleCheck(j); break; } }
   });
 }
-const autoCheckJob = (room, rec, report) => ({ roomId: room.id, run: done => autoCheck(room, rec, report, done) });
+// The base play-out of a game. Timed; Go deeper requests made meanwhile wait
+// for it (the base analysis comes first) and run when it ends.
+const autoCheckJob = (room, rec, report) => {
+  rec._basePending = true;
+  return { roomId: room.id, run: done => {
+    const t0 = Date.now();
+    broadcast(room, { event: 'analysisPhase', game: rec.n, phase: 'playout' });
+    autoCheck(room, rec, report, () => {
+      done();
+      rec._basePending = false;
+      report.timing = { ...(report.timing ?? {}), playoutMs: Date.now() - t0 };
+      broadcast(room, { event: 'analysisTiming', game: rec.n, timing: report.timing });
+      for (const idx of rec._deeperQueue?.splice(0) ?? []) runDeeper(room, rec, idx);
+    });
+  } };
+};
 
 // Analyse every finished game of the room's match (one after another).
 export function handleAnalyzeMatch(ws, roomId) {
@@ -1546,6 +1561,7 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
   }
   analysesRunning++;
   rec.analysis = { state: 'running', waiting };
+  const tQuick = Date.now();
 
   // Split the decisions over a few workers, interleaved so each gets a mix.
   const nWorkers = Math.max(1, Math.min(config.analysisWorkers ?? 4, availableParallelism() - 1, decisions.length));
@@ -1575,6 +1591,7 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
       }
       if (msg.type === 'end' && --live === 0) {
         base.rolls.forEach((r, idx) => { if (results.has(idx)) r.analysis = results.get(idx); });
+        base.timing = { quickMs: Date.now() - tQuick };
         finish(base);
         end();
         check(base);
@@ -1614,7 +1631,7 @@ function autoCheck(room, rec, report, end, { level = 1, all = false } = {}) {
   for (let w = 0; w < nWorkers; w++) {
     const chunk = todo.filter((_, k) => k % nWorkers === w);
     const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
-      workerData: { decisions: chunk.map(({ idx }) => { const raw = room.game._rolls[idx]; return { idx, before: raw.before, after: raw.after, pi: raw.pi }; }),
+      workerData: { decisions: chunk.map(({ idx }) => { const raw = rec.game._rolls[idx]; return { idx, before: raw.before, after: raw.after, pi: raw.pi }; }),
         cube: cubeTodo.filter((_, k) => k % nWorkers === w).map(i => ({ i, entry: cubeLog[i] })),
         cubeGames: config.cubeAnalysisGames,
         options: { ...opts, level } },
@@ -1654,10 +1671,16 @@ export function handlePlayOutAll(ws, roomId, gameNo) {
   if (rec._playingOutAll) return;
   rec._playingOutAll = true;
   broadcast(room, { event: 'playOutAll', game: rec.n, running: true });
-  scheduleCheck({ roomId: room.id, run: done => autoCheck(room, rec, rec.analysis.result, () => {
-    done(); rec._playingOutAll = false;
-    broadcast(room, { event: 'playOutAll', game: rec.n, running: false });
-  }, { level: 2, all: true }) });
+  scheduleCheck({ roomId: room.id, run: done => {
+    const t0 = Date.now();
+    broadcast(room, { event: 'playOutAll', game: rec.n, running: true, started: true });
+    autoCheck(room, rec, rec.analysis.result, () => {
+      done(); rec._playingOutAll = false;
+      const r = rec.analysis?.result;
+      if (r) r.timing = { ...(r.timing ?? {}), playOutAllMs: Date.now() - t0 };
+      broadcast(room, { event: 'playOutAll', game: rec.n, running: false, timing: r?.timing });
+    }, { level: 2, all: true });
+  } });
 }
 
 // ---------- Go deeper on one decision ----------
@@ -1678,13 +1701,27 @@ export function handleAnalyzeDeeper(ws, roomId, idx, gameNo) {
   const roll = report.rolls?.[idx];
   const raw = rec.game?._rolls?.[idx];
   if (!roll?.analysis || !raw?.after) return;
-  const level = (roll.analysis.level ?? 0) + 1;
-  const opts = config.analysisLevels[level];
-  if (!opts || roll._deepening) return;
+  if (roll._deepening || rec._deeperQueue?.includes(idx)) return;
+  // The base analysis comes first: wait for its play-outs to finish.
+  if (rec._basePending) {
+    (rec._deeperQueue ??= []).push(idx);
+    broadcast(room, { event: 'analysisDeepening', game: rec.n, idx, queued: true });
+    return;
+  }
   if (deepensRunning >= MAX_DEEPENS) {
     sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a moment.' });
     return;
   }
+  runDeeper(room, rec, idx);
+}
+function runDeeper(room, rec, idx) {
+  const report = rec.analysis?.result;
+  const roll = report?.rolls?.[idx];
+  const raw = rec.game?._rolls?.[idx];
+  if (!roll?.analysis || !raw?.after) return;
+  const level = (roll.analysis.level ?? 0) + 1;
+  const opts = config.analysisLevels[level];
+  if (!opts || roll._deepening) return;
   deepensRunning++;
   Object.defineProperty(roll, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
   broadcast(room, { event: 'analysisDeepening', game: rec.n, idx, level });
@@ -1692,9 +1729,11 @@ export function handleAnalyzeDeeper(ws, roomId, idx, gameNo) {
     workerData: { decisions: [{ idx, before: raw.before, after: raw.after, pi: raw.pi }], options: { ...opts, level } },
   });
   let done = false;
+  const t0 = Date.now();
   const finish = (item) => {
     if (done) return;
     done = true; deepensRunning--; roll._deepening = false;
+    if (item) item.ms = Date.now() - t0;
     if (item && rec.analysis?.result === report) {
       roll.analysis = item;
       broadcast(room, { event: 'analysisUpdate', game: rec.n, idx, analysis: item });
