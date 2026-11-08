@@ -981,7 +981,7 @@ const cubeDeep = new Set();        // cube decisions being redone deeper
 function cubeBadge(c) {
   const a = c.analysis;
   if (!a || cubeDeep.has(c.i)) return el('span', { class: 'badge unclear' }, 'checking…');
-  if (a.skip) return el('span', { class: 'badge forced', title: 'Nowhere near a double (estimate under 60%): not analysed' }, 'not near');
+  if (a.skip) return el('span', { class: 'badge forced', title: 'Nowhere near a double (estimate under 60% to win), so not analysed. Click the row to analyse it anyway.' }, '—');
   if (a.severity === 'ok') return el('span', { class: a.close ? 'badge unclear' : 'badge ok', title: a.close ? "Close call: within the estimate's noise" : 'Right decision' }, a.close ? 'close ✓' : '✓');
   return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${eqv(a.loss)} equity` }, `${a.label ?? SEV_LABEL[a.severity]} −${eqv(a.loss)}`);
 }
