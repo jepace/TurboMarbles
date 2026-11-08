@@ -2308,8 +2308,8 @@ function renderDice(dice, color) {
   }
 }
 
-// With a cube: Roll and Double side by side when doubling is possible; when
-// it isn't (cube not mine, dead, Crawford, extra roll), roll automatically.
+// Roll and Double side by side when doubling is possible; otherwise (no cube,
+// cube not mine, dead, Crawford, extra roll) roll automatically.
 let autoRollTimer = null;
 function enableRoll() {
   $('btn-roll').disabled = false;
@@ -2318,7 +2318,7 @@ function enableRoll() {
   $('turn-banner').textContent = choose ? 'Your turn — Roll (Enter) or Double (D)' : 'Your turn — Roll! (Enter)';
   $('turn-banner').style.color = '#f0c040';
   clearTimeout(autoRollTimer);
-  if (gameState?.cube && !choose) autoRollTimer = setTimeout(() => { if (isMyTurn() && !gameState.dice) doRoll(); }, 600);
+  if (!choose) autoRollTimer = setTimeout(() => { if (isMyTurn() && !gameState.dice) doRoll(); }, 600);
 }
 
 function setHint(msg) {
