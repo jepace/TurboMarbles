@@ -244,6 +244,7 @@ function doSkipDie() {
   if (i < 0) return;
   send({ action: 'forfeitDie', dieIndex: i });
   $('btn-skip').style.display = 'none';
+  setUndoVisible(true);             // a skip is undoable; the turn ends with Commit
 }
 
 function doCommit() {

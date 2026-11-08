@@ -430,7 +430,9 @@ describe('handleForfeitDie — broadcasts dieForfeit and lets both optional dice
   handleForfeitDie(host, roomId, 1);
   assert(host.find('dieForfeit').some(e => e.dieIndex === 1),
     'skipping die 1 broadcasts dieForfeit(1)');
-  assert(host.find('turnChanged').length === 1, 'turn advances after both optional dice skipped');
+  assert(host.find('turnChanged').length === 0 && host.find('readyToCommit').length > 0, 'both dice skipped: waits for Commit');
+  handleCommit(host, roomId);
+  assert(host.find('turnChanged').length === 1, 'turn advances after both optional dice skipped and Commit');
 
   gmConfig.skipTurnDelayMs = origDelay;
 });

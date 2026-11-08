@@ -758,6 +758,11 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
     return;
   }
 
+  // A deliberate skip is part of the turn like a move: it can be undone, and
+  // the turn ends with Commit.
+  game._undoStack ??= [];
+  game._undoStack.push({ marbles: game.players.map(p => p.marbles.map(m => ({ ...m }))), diceUsed: [...game.diceUsed] });
+  game._humanMadeMove = true;
   game.diceUsed[idx] = true;
   // Tell everyone the die was skipped so the client updates its dice state and
   // re-evaluates the Skip button for the other die (otherwise the player can be
