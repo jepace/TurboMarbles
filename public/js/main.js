@@ -1013,7 +1013,17 @@ function badgeFor(r, idx) {
 function renderMoveList() {
   const rep = analysisReport;
   const box = $('ap-moves');
-  const list = visibleItems();
+  // Cube decisions sit on the roll that follows them, as a small cube (like
+  // backgammon apps); only one with no roll after it (a drop) gets its own row.
+  const list = [];
+  for (const it of visibleItems()) {
+    const prev = list.at(-1);
+    if (it.type === 'roll' && prev?.type === 'cube' && prev.c.rollIdx === it.idx) {
+      const cubes = [];
+      while (list.at(-1)?.type === 'cube' && list.at(-1).c.rollIdx === it.idx) cubes.unshift(list.pop().c);
+      list.push({ ...it, cubes });
+    } else list.push(it);
+  }
   box.replaceChildren(...list.map(it => {
     if (it.type === 'cube') return cubeRow(it.c);
     const { r, idx } = it;
@@ -1022,10 +1032,11 @@ function renderMoveList() {
       el('span', { class: 'turn' }, `${r.turn}.`),
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
       el('span', {}, r.dice.join('-')),
-      el('span', { class: 'play' }, r.played),
+      el('span', { class: 'play' }, r.played, ...(it.cubes ?? []).map(inlineCube).filter(Boolean)),
       badgeFor(r, idx));
     rowEl.dataset.idx = idx;
     rowEl.dataset.key = 'r' + idx;
+    if (it.cubes) rowEl.dataset.cubes = it.cubes.map(c => 'c' + c.i).join(' ');
     rowEl.addEventListener('click', () => selectRoll(idx));
     return rowEl;
   }));
@@ -1086,6 +1097,21 @@ on('cubeDeepening', ({ i, game }) => {
   renderMoveList();
   if (apCube === i) selectCube(i);
 });
+// A cube decision on its roll's row: a small cube with the value at stake,
+// red for a blunder, amber for an error. Plain right no-doubles aren't shown.
+function inlineCube(c) {
+  const a = c.analysis;
+  const bad = a && !a.skip && a.severity !== 'ok';
+  if (!c.action && !bad && !(apCube === c.i)) return null;
+  const p = analysisReport.players[c.pi];
+  const what = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` to ${c.v * 2}` : '');
+  const tip = `${p.name}: ${what}` + (!a ? ' · being worked out' : bad ? ` · ${a.label ?? SEV_LABEL[a.severity]}, −${eqv(a.loss)}` : a.close ? ' · close call' : ' · right') + ' · click for details';
+  const b = el('span', { class: 'cube-ico inline' + (bad ? ' ' + a.severity : '') + (apCube === c.i ? ' sel' : ''), title: tip },
+    String(c.kind === 'double' && !c.action ? c.v : c.v * 2));
+  b.dataset.key = 'c' + c.i;
+  b.addEventListener('click', e => { e.stopPropagation(); selectCube(c.i); });
+  return b;
+}
 function cubeRow(c) {
   const p = analysisReport.players[c.pi];
   const label = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` → ${c.v * 2}` : '');
@@ -1100,7 +1126,8 @@ function cubeRow(c) {
   return rowEl;
 }
 function markSelected(key) {
-  for (const rowEl of $('ap-moves').children) rowEl.classList.toggle('sel', rowEl.dataset.key === key);
+  for (const rowEl of $('ap-moves').children) rowEl.classList.toggle('sel', rowEl.dataset.key === key || (rowEl.dataset.cubes ?? '').split(' ').includes(key));
+  for (const b of $('ap-moves').querySelectorAll('.cube-ico.inline')) b.classList.toggle('sel', b.dataset.key === key);
   $('ap-moves').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
 }
 function selectCube(i) {
