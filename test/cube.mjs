@@ -2,11 +2,12 @@
 // session score and rematch. No server needed.
 import { createGame, canDouble, offerDouble, takeDouble, dropDouble, gameResult, applyMove } from '../src/GameEngine.js';
 import {
-  createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove, handleAnalyzeGame,
+  createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove, handleAnalyzeGame, handleAnalyzeDeeperCube,
   handleDouble, handleTake, handleDrop, handleRematch,
   _reset, _getRoom, config as gmConfig,
 } from '../src/GameManager.js';
 import { shouldDouble, shouldTake, cubefulEquity } from '../src/CubeDecision.js';
+import { analyzeCube } from '../src/CubeAnalysis.js';
 import { _stop } from '../src/RobotThinker.js';
 
 let passed = 0, failed = 0;
@@ -190,6 +191,53 @@ await describe('cube analysis — feedback in the game, decisions in the report'
   assert(dbl?.best === 'no double' && dbl.severity === 'blunder' && dbl.exact, `the double is a blunder (exact; loss ${dbl?.loss})`);
   assert(tk?.best === 'take' && tk.severity === 'ok', 'the take was right');
   await _stop();
+});
+
+describe('cube analysis — named mistakes', () => {
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 1, { cube: true });
+  for (const p of g.players) p.marbles.forEach((m, i) => { if (i < 3) Object.assign(m, { zone: 'home', slot: 4 - i }); });
+  const pos = (a, b, turn) => { Object.assign(g.players[0].marbles[3], { zone: 'track', space: a }); Object.assign(g.players[1].marbles[3], { zone: 'track', space: b });
+    return structuredClone({ players: g.players, turnIndex: turn, phase: 'IN_TURN', dice: null, diceUsed: [false, false], winner: null, cube: { value: 1, owner: null } }); };
+  const far = pos(10, 36, 1);                         // Yellow far ahead, to roll
+  const strong = analyzeCube({ kind: 'double', pi: 1, action: false, state: far });
+  assert(strong.best === 'double' && strong.label === 'Missed double' && strong.severity !== 'ok', `not doubling when far ahead: "${strong.label}" (${strong.severity}, −${strong.loss})`);
+  const weak = pos(30, 60, 0);                        // Blue behind (31%)
+  assert(analyzeCube({ kind: 'double', pi: 0, action: true, state: weak }).label === 'Wrong double', 'doubling when behind: "Wrong double"');
+  assert(analyzeCube({ kind: 'take', pi: 1, action: false, doubler: 0, state: weak }).label === 'Wrong drop', 'dropping a take: "Wrong drop"');
+  assert(analyzeCube({ kind: 'take', pi: 0, action: true, doubler: 1, state: far }).label === 'Wrong take', 'taking a drop: "Wrong take"');
+});
+
+await describe('cube analysis — go deeper / analyse anyway', async () => {
+  _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0; gmConfig.cubeAnalysisGames = 20;
+  gmConfig.cubeLevels = [20, 40, 80];
+  gmConfig.analysis = { mode: 'eval', keep: 2 };
+  gmConfig.analysisLevels = [gmConfig.analysis, { screenBy: 'eval', deep: 8, keep: 2, maxDeep: 8 }];
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Alice', 2, undefined, { cube: true });
+  joinRoom(guest, code, 'Bob');
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  handleRoll(host, roomId);                           // rolls without doubling: a no-double at the start
+  const g = room.game;
+  g.players[0].marbles.forEach((m, i) => Object.assign(m, i < 3 ? { zone: 'home', slot: 4 - i } : { zone: 'track', space: 84 }));
+  Object.assign(g.players[1].marbles[0], { zone: 'home', slot: 4 });
+  g.phase = 'AWAITING_MOVE'; g.dice = [1, 2]; g.diceUsed = [false, true]; g._humanMadeMove = false; g._undoStack = [];
+  handleMove(host, roomId, { type: 'move', dieIndex: 0, marbleId: 3, toZone: 'home', toSlot: 1 });
+  host.sent = [];
+  handleAnalyzeGame(host, roomId);
+  for (let t = 0; t < 200 && !host.find('cubeUpdate').length; t++) await sleep(50);
+  const first = host.find('cubeUpdate')[0]?.analysis;
+  assert(first?.skip === true, 'opening no-double is skipped (nowhere near a double)');
+  host.sent = [];
+  handleAnalyzeDeeperCube(host, roomId, 0);
+  for (let t = 0; t < 200 && !host.find('cubeUpdate').length; t++) await sleep(50);
+  const anyway = host.find('cubeUpdate')[0]?.analysis;
+  assert(host.find('cubeDeepening').length === 1 && anyway && !anyway.skip && anyway.n === 20 && anyway.level === 0, `"Analyse anyway" works it out (${anyway?.n} games, best ${anyway?.best})`);
+  host.sent = [];
+  handleAnalyzeDeeperCube(host, roomId, 0);
+  for (let t = 0; t < 200 && !host.find('cubeUpdate').length; t++) await sleep(50);
+  const deeper = host.find('cubeUpdate')[0]?.analysis;
+  assert(deeper?.level === 1 && deeper.n === 40, `go deeper: next level (${deeper?.n} games)`);
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

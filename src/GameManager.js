@@ -43,6 +43,7 @@ export const config = {
   ],
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   cubeAnalysisGames: 400, // played-out games per cube decision (when no exact table applies)
+  cubeLevels: [400, 1600, 6400],   // games per cube decision: first pass, then 'Go deeper'
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   robotThinkMs: 1500,
@@ -1407,6 +1408,42 @@ export function handleAnalyzeDeeper(ws, roomId, idx) {
   };
   worker.on('message', msg => { if (msg.type === 'item') finish(msg.item); });
   worker.on('error', err => { console.error('[analysis] deeper failed', err); finish(null); });
+  worker.on('exit', () => finish(null));
+}
+
+// Go deeper on one cube decision (report.cube index): more played-out games
+// (cubeLevels), or — for a no-double that was skipped as nowhere near the
+// window — analyse it anyway at the first level.
+export function handleAnalyzeDeeperCube(ws, roomId, i) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || sess.roomId !== roomId || room.analysis?.state !== 'done') return;
+  const report = room.analysis.result;
+  const c = report.cube?.[i];
+  const entry = room.game?._cubeLog?.[i];
+  if (!c || !entry || c.pending || c._deepening || c.analysis?.exact) return;
+  const level = c.analysis?.skip ? 0 : (c.analysis?.level ?? 0) + 1;
+  const games = config.cubeLevels[level];
+  if (!games) return;
+  if (deepensRunning >= MAX_DEEPENS) {
+    sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a moment.' });
+    return;
+  }
+  deepensRunning++;
+  Object.defineProperty(c, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
+  broadcast(room, { event: 'cubeDeepening', i, level });
+  const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
+    workerData: { decisions: [], cube: [{ i, entry }], cubeGames: games, cubeForce: true, cubeLevel: level, options: {} },
+  });
+  let done = false;
+  const finish = item => {
+    if (done) return;
+    done = true; deepensRunning--; c._deepening = false;
+    if (item && room.analysis?.result === report) { c.analysis = item; saveRoomAnalysis(room, report); }
+    broadcast(room, { event: 'cubeUpdate', i, analysis: c.analysis, failed: !item });
+  };
+  worker.on('message', msg => { if (msg.type === 'cube') finish(msg.item); });
+  worker.on('error', err => { console.error('[analysis] cube deeper failed', err); finish(null); });
   worker.on('exit', () => finish(null));
 }
 

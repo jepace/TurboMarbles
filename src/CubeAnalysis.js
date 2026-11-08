@@ -73,8 +73,12 @@ export function analyzeCube(entry, { games = 400 } = {}) {
   const lossNorm = loss / v;
   const severity = close || played === best ? 'ok' : (CUBE_SEVERITY.find(s => lossNorm >= s.min)?.key ?? 'ok');
   const forDecider = entry.kind === 'double' ? est : { ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin };
+  // Name the mistake the way backgammon players do.
+  const label = played === best ? null
+    : entry.kind === 'double' ? (entry.action ? 'Wrong double' : 'Missed double')
+    : (entry.action ? 'Wrong take' : 'Wrong drop');
   return {
-    kind: entry.kind, action: entry.action, v, best, played,
+    kind: entry.kind, action: entry.action, v, best, played, label,
     p: forDecider.p, aggroWin: forDecider.aggroWin, aggroLoss: forDecider.aggroLoss,
     n: est.exact ? null : est.n, exact: !!est.exact,
     options: options.map(o => ({ ...o, eq: Math.round(o.eq * 1000) / 1000 })),

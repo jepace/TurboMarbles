@@ -784,7 +784,9 @@ on('analysisDeepening', ({ idx }) => {
   if ($('game-layout').classList.contains('analysis-mode')) { renderMoveList(); renderStatus(); }
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
-on('cubeUpdate', ({ i, analysis }) => {
+on('cubeUpdate', ({ i, analysis, failed }) => {
+  cubeDeep.delete(i);
+  if (failed) log('Deeper cube analysis failed — try again.');
   const c = analysisReport?.cube?.[i];
   if (!c) return;
   c.analysis = analysis; c.pending = false;
@@ -829,7 +831,8 @@ $('ap-player').addEventListener('change', renderMoveList);
 // preceded. Items: { type: 'roll', r, idx } | { type: 'cube', c }.
 function visibleItems() {
   const f = $('ap-filter').value, who = $('ap-player').value;
-  const cubeOk = c => c.analysis?.skip !== true && (who === 'all' || c.pi === Number(who)) &&
+  // Skipped no-doubles (nowhere near the window) only show under "All rolls".
+  const cubeOk = c => (c.analysis?.skip !== true || f === 'all') && (who === 'all' || c.pi === Number(who)) &&
     (f === 'all' || f === 'choices' || (f === 'errors' && c.analysis && c.analysis.severity !== 'ok'));
   const cubes = (analysisReport.cube ?? []).filter(cubeOk);
   const out = [];
@@ -919,12 +922,25 @@ function diceEl(dice, color) {
 
 // ---- Cube decisions on the analysis page ----
 const CUBE_ACTION = { double: a => (a ? 'Doubles' : 'No double'), take: a => (a ? 'Takes' : 'Drops') };
+const cubeDeep = new Set();        // cube decisions being redone deeper
 function cubeBadge(c) {
   const a = c.analysis;
-  if (!a) return el('span', { class: 'badge unclear' }, 'checking…');
+  if (!a || cubeDeep.has(c.i)) return el('span', { class: 'badge unclear' }, 'checking…');
+  if (a.skip) return el('span', { class: 'badge forced', title: 'Nowhere near a double (estimate under 60%): not analysed' }, 'not near');
   if (a.severity === 'ok') return el('span', { class: a.close ? 'badge unclear' : 'badge ok', title: a.close ? "Close call: within the estimate's noise" : 'Right decision' }, a.close ? 'close ✓' : '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${a.loss.toFixed(2)} points` }, `${SEV_LABEL[a.severity]} −${a.loss.toFixed(2)}`);
+  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${a.loss.toFixed(2)} points` }, `${a.label ?? SEV_LABEL[a.severity]} −${a.loss.toFixed(2)}`);
 }
+function analyzeDeeperCube(i) {
+  const c = analysisReport?.cube?.[i];
+  if (!c || viewingStored || cubeDeep.has(i) || c.analysis?.exact) return;
+  send({ action: 'analyzeDeeperCube', i });
+}
+on('cubeDeepening', ({ i }) => {
+  cubeDeep.add(i);
+  if (!$('game-layout').classList.contains('analysis-mode')) return;
+  renderMoveList();
+  if (apCube === i) selectCube(i);
+});
 function cubeRow(c) {
   const p = analysisReport.players[c.pi];
   const label = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` → ${c.v * 2}` : '');
@@ -954,7 +970,7 @@ function selectCube(i) {
   const kids = [el('div', { class: 'ap-title' }, el('span', { class: 'cube-ico big' }, String(c.v)),
     el('b', {}, `Turn ${c.turn} · ${p.name}`), el('span', { class: 'muted' }, ` ${CUBE_ACTION[c.kind](c.action).toLowerCase()} (cube at ${c.v})`))];
   if (!a) kids.push(el('div', { class: 'muted' }, 'Being worked out…'));
-  else if (a.skip) kids.push(el('div', { class: 'muted' }, 'Nowhere near a double — not analysed.'));
+  else if (a.skip) kids.push(el('div', { class: 'muted' }, `Nowhere near a double (the estimate gave ${p.name} ${a.p != null ? (100 * a.p).toFixed(0) + '%' : 'under 60%'}) — not analysed.`));
   else {
     const isDouble = c.kind === 'double';
     kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num' }, 'Equity'), el('span')));
@@ -975,10 +991,24 @@ function selectCube(i) {
     kids.push(el('div', { class: 'fact' }, `${p.name} wins ${(100 * a.p).toFixed(1)}%` +
       (a.aggroWin || a.aggroLoss ? ` (aggro wins ${(100 * a.aggroWin).toFixed(1)}%, aggro losses ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
       (a.exact ? ' — exact (duel table)' : ` — from ${a.n} played-out games`)));
-    const verdict = a.severity !== 'ok' ? `${SEV_LABEL[a.severity]}: the right decision was “${a.best}”; this cost ${a.loss.toFixed(2)} points at cube ${c.v}.`
+    const verdict = a.severity !== 'ok' ? `${a.label ?? SEV_LABEL[a.severity]} (${SEV_LABEL[a.severity].toLowerCase()}): the right decision was “${a.best}”; this cost ${a.loss.toFixed(2)} points at cube ${c.v}.`
       : a.close ? "Close call — the estimate can't separate the options; counts as correct."
       : `✓ Right decision (${a.best}).`;
     kids.push(el('div', { class: 'muted' }, verdict + ` Equities in points at cube ${c.v}, from ${p.name}'s side. The cube formulas are an approximation (cube efficiency 0.68).`));
+  }
+  // Depth, and going deeper (more games; or analyse a skipped no-double anyway).
+  if (a && !a.exact) {
+    const depth = el('div', { class: 'ap-depth' }, el('span', { class: 'muted' }, a.skip ? 'Not analysed' : `Depth: ${a.n} games`));
+    const LV = [400, 1600, 6400];
+    const next = a.skip ? LV[0] : LV[(a.level ?? 0) + 1];
+    if (cubeDeep.has(i)) depth.append(el('span', { class: 'muted' }, ' · going deeper…'));
+    else if (next && !viewingStored) {
+      const b = el('button', { class: 'secondary ap-view', title: 'Redo this cube decision with more games (+)' },
+        a.skip ? `Analyse anyway (${next} games)` : `Go deeper (+) → ${next.toLocaleString()} games`);
+      b.addEventListener('click', () => analyzeDeeperCube(i));
+      depth.append(b);
+    }
+    kids.push(depth);
   }
   $('ap-detail').replaceChildren(...kids);
   showPosition(c.marbles);
@@ -1136,7 +1166,7 @@ document.addEventListener('keydown', e => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   if (e.key === 'Escape') { closeAnalysis(); return; }
   if (e.key === 'b' || e.key === 'B') { selectRoll(apSel, 'before'); return; }
-  if (e.key === '+' || e.key === '=') { analyzeDeeper(apSel); return; }
+  if (e.key === '+' || e.key === '=') { if (apCube != null) analyzeDeeperCube(apCube); else analyzeDeeper(apSel); return; }
   if (e.key === 'p' || e.key === 'P') { selectRoll(apSel, null); return; }
   if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
   e.preventDefault();

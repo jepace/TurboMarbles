@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper, handlePlayOutAll,
+  handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS } from './Accounts.js';
@@ -168,7 +168,7 @@ const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'analyzeDeeper', 'playOutAll',
+  'double', 'take', 'drop', 'rematch', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube',
 ]);
 
 function dispatch(ws, msg) {
@@ -297,6 +297,13 @@ function dispatch(ws, msg) {
       const idx = Number(msg.idx);
       if (!Number.isInteger(idx) || idx < 0 || idx > 10000) return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Bad decision index' });
       handleAnalyzeDeeper(ws, roomId, idx);
+      break;
+    }
+
+    case 'analyzeDeeperCube': {
+      const roomId = getRoomByWs(ws);
+      const i = Number(msg.i);
+      if (roomId && Number.isInteger(i) && i >= 0 && i < 1000) handleAnalyzeDeeperCube(ws, roomId, i);
       break;
     }
 

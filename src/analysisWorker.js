@@ -10,7 +10,7 @@ import { analyzeDecision } from './Analysis.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { evaluate1 } from './Evaluator.js';
 
-const { decisions, options, cube = [], cubeGames = 400 } = workerData;
+const { decisions, options, cube = [], cubeGames = 400, cubeForce = false, cubeLevel = 0 } = workerData;
 for (const d of decisions) {
   // Each depth uses fresh dice streams (seed depends on the level), so a deeper
   // answer is independent of the quick one.
@@ -23,7 +23,7 @@ for (const { i, entry } of cube) {
   let item;
   try {
     const p = entry.kind === 'double' && !entry.action ? evaluate1(entry.state, entry.pi)?.[entry.pi] : null;
-    item = p != null && p < 0.6 ? { skip: true, p } : analyzeCube(entry, { games: cubeGames });
+    item = !cubeForce && p != null && p < 0.6 ? { skip: true, p } : { ...analyzeCube(entry, { games: cubeGames }), level: cubeLevel };
   } catch (err) { console.error('[analysis] cube', err); item = { skip: true }; }
   parentPort.postMessage({ type: 'cube', i, item });
 }
