@@ -1316,6 +1316,19 @@ function releaseAnalysis() {
     if (rooms.has(q.roomId) && q.rec.analysis == null) { handleAnalyzeGame(q.ws, q.roomId, q.gameNo); break; }
   }
 }
+// The slow played-out checks run in their own line (one at a time), so a
+// game's instant report never waits behind another game's checks.
+let checksRunning = 0;
+const checkQueue = [];
+function scheduleCheck(job) {
+  if (checksRunning >= MAX_ANALYSES) { checkQueue.push(job); return; }
+  checksRunning++;
+  job.run(() => {
+    checksRunning--;
+    while (checkQueue.length) { const j = checkQueue.shift(); if (rooms.has(j.roomId)) { scheduleCheck(j); break; } }
+  });
+}
+const autoCheckJob = (room, rec, report) => ({ roomId: room.id, run: done => autoCheck(room, rec, report, done) });
 
 // Analyse every finished game of the room's match (one after another).
 export function handleAnalyzeMatch(ws, roomId) {
@@ -1360,7 +1373,7 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
   const waiting = new Set([ws]);
   if (!decisions.length) {
     finish(base);
-    if (base.cube.length) { analysesRunning++; autoCheck(room, rec, base, releaseAnalysis); }
+    if (base.cube.length) scheduleCheck(autoCheckJob(room, rec, base));
     return;
   }
   if (analysesRunning >= MAX_ANALYSES) {
@@ -1405,7 +1418,8 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
       if (msg.type === 'end' && --live === 0) {
         base.rolls.forEach((r, idx) => { if (results.has(idx)) r.analysis = results.get(idx); });
         finish(base);
-        autoCheck(room, rec, base, end);
+        end();
+        scheduleCheck(autoCheckJob(room, rec, base));
       }
     });
     worker.on('error', fail);
@@ -1480,17 +1494,12 @@ export function handlePlayOutAll(ws, roomId, gameNo) {
   const sess = sessions.get(ws._id);
   if (!room || !sess || sess.roomId !== roomId || rec.analysis?.state !== 'done') return;
   if (rec._playingOutAll) return;
-  if (analysesRunning >= MAX_ANALYSES) {
-    sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a minute.' });
-    return;
-  }
-  analysesRunning++;
   rec._playingOutAll = true;
   broadcast(room, { event: 'playOutAll', game: rec.n, running: true });
-  autoCheck(room, rec, rec.analysis.result, () => {
-    releaseAnalysis(); rec._playingOutAll = false;
+  scheduleCheck({ roomId: room.id, run: done => autoCheck(room, rec, rec.analysis.result, () => {
+    done(); rec._playingOutAll = false;
     broadcast(room, { event: 'playOutAll', game: rec.n, running: false });
-  }, { level: 2, all: true });
+  }, { level: 2, all: true }) });
 }
 
 // ---------- Go deeper on one decision ----------

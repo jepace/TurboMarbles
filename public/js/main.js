@@ -715,9 +715,11 @@ $('btn-analyze').addEventListener('click', () => {
   else send({ action: 'analyzeGame', game: lastGameNo ?? undefined });
 });
 on('analysisProgress', ({ done, total, game }) => {
+  if (game === waitingFor) $('ap-status').replaceChildren(el('span', {}, `Game ${game}: analysing… ${done}/${total}`));
   $('btn-analyze').textContent = matchGames.length > 1 ? `Analyzing game ${game}… ${done}/${total}` : `Analyzing… ${done}/${total}`;
 });
-on('analysisQueued', ({ game }) => { if (matchGames.length > 1) $('btn-analyze').textContent = `Game ${game} queued…`; });
+on('analysisQueued', ({ game, ahead }) => {
+  if (game === waitingFor) $('ap-status').replaceChildren(el('span', {}, `Game ${game}: queued${ahead > 0 ? ` (${ahead} ahead)` : ''}…`)); if (matchGames.length > 1) $('btn-analyze').textContent = `Game ${game} queued…`; });
 on('analysisResult', ({ report, game }) => {
   const n = game ?? lastGameNo;
   reports.set(n, report);
@@ -733,7 +735,11 @@ let waitingFor = null;
 function showGame(n) {
   if (n === 'match') { curGame = null; openAnalysis(true); return; }
   const rep = reports.get(n);
-  if (!rep) { waitingFor = n; send({ action: 'analyzeGame', game: n }); renderGameTabs(); return; }
+  if (!rep) {
+    waitingFor = n; send({ action: 'analyzeGame', game: n }); renderGameTabs();
+    $('ap-status').replaceChildren(el('span', {}, `Game ${n}: analysing…`));
+    return;
+  }
   waitingFor = null;
   curGame = n;
   analysisReport = rep;
