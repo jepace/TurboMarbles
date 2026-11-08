@@ -1,5 +1,5 @@
 // test/store.mjs — players, device keys, link codes, games and stats (in-memory SQLite).
-import { openStore, closeStore, register, authenticate, rename, isNameTaken, createLinkCode, redeemLinkCode,
+import { getPrefs, setPrefs, openStore, closeStore, register, authenticate, rename, isNameTaken, createLinkCode, redeemLinkCode,
   deviceCount, revokeOtherDevices, deletePlayer, recordGame, saveAnalysis, getGame, playerStats, playerGames, playedIn } from '../src/Store.js';
 
 let passed = 0, failed = 0;
@@ -31,6 +31,13 @@ describe('identity — link codes and devices', () => {
   assert(redeemLinkCode('ABCDE-FGHJK') === null, 'a made-up code does not work');
   assert(deviceCount(a.player.id) === 2, 'two devices');
   assert(revokeOtherDevices(a.player.id, a.key) === 1 && authenticate(d2.key) === null && authenticate(a.key), 'sign out other devices');
+});
+
+describe('preferences', () => {
+  const p = register('PrefTester').player;
+  assert(JSON.stringify(getPrefs(p.id)) === '{}', 'no preferences at first');
+  setPrefs(p.id, { apFilter: 'all', apPlayer: 'bogus', evil: 1 });
+  assert(JSON.stringify(getPrefs(p.id)) === '{"apFilter":"all"}', 'only known keys and values are kept');
 });
 
 describe('games and stats', () => {

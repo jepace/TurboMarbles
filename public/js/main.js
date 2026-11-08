@@ -526,14 +526,16 @@ function updateLanding() {
 }
 updateLanding();
 
-on('identity', ({ player }) => {
-  if (!player) { saveKey(null); me = null; } else me = player;
+let myPrefs = {};                  // account preferences (signed in)
+on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
+on('identity', ({ player, prefs }) => {
+  if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
   updateLanding();
   if (profileData && me) $('profile-name').textContent = me.name;
 });
-on('registered', ({ player, key, linked }) => {
+on('registered', ({ player, key, linked, prefs }) => {
   saveKey(key);
-  me = player;
+  me = player; myPrefs = prefs ?? {};
   updateLanding();
   if (linked) alert(`Signed in as ${player.name} on this device.`);
   const next = pendingAfterRegister; pendingAfterRegister = null;
@@ -633,6 +635,12 @@ function renderProfile() {
   renderAccountSection();
 }
 
+function prefSelect(key, opts) {
+  const s = el('select', {}, ...opts.map(([v, t]) => el('option', { value: v, textContent: t })));
+  s.value = myPrefs[key] ?? '';
+  s.addEventListener('change', () => { myPrefs = { ...myPrefs, [key]: s.value || undefined }; send({ action: 'setPrefs', prefs: myPrefs }); });
+  return s;
+}
 function renderAccountSection(extra) {
   const box = $('profile-account');
   const btn = (label, fn, cls = 'secondary') => { const b = el('button', { class: cls }, label); b.addEventListener('click', fn); return b; };
@@ -644,6 +652,9 @@ function renderAccountSection(extra) {
       btn('Show recovery key', () => renderAccountSection(el('div', {},
         el('div', { class: 'muted' }, 'Your recovery key signs in as you on any device ("Use a link code" on the start screen, then paste it). Keep it somewhere safe and private — anyone with it can play as you.'),
         el('div', { class: 'keybox' }, loadKey() ?? '(not stored in this browser)'))))),
+    el('div', { class: 'acct-row' }, el('span', {}, 'Analysis opens on'),
+      prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['all', 'all rolls']]),
+      prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']])),
     el('div', { class: 'acct-row' },
       el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
       btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); })),
@@ -857,7 +868,8 @@ function el(tag, props = {}, ...kids) {
 }
 
 function loadApView() { try { return JSON.parse(localStorage.getItem('apView') ?? '{}'); } catch { return {}; } }
-function saveApView() { try { localStorage.setItem('apView', JSON.stringify({ filter: $('ap-filter').value, player: $('ap-player').value })); } catch {} }
+const apSession = {};
+function saveApView() { apSession.filter = $('ap-filter').value; apSession.player = $('ap-player').value; try { localStorage.setItem('apView', JSON.stringify({ filter: $('ap-filter').value, player: $('ap-player').value })); } catch {} }
 for (const id of ['ap-filter', 'ap-player']) $(id).addEventListener('change', saveApView);
 function openAnalysis(matchView = false) {
   $('game-layout').classList.add('analysis-mode');
@@ -876,9 +888,12 @@ function openAnalysis(matchView = false) {
   if (myPlayerIndex != null && rep.players[myPlayerIndex]) { sel.value = String(myPlayerIndex); $('ap-filter').value = analysed ? 'errors' : 'all'; }
   else { sel.value = 'all'; $('ap-filter').value = 'all'; }
   // Sticky: once chosen, the filter and player stay across games (and visits).
-  const stick = loadApView();
-  if (stick.filter) $('ap-filter').value = stick.filter;
-  if (stick.player && [...sel.options].some(o => o.value === stick.player)) sel.value = stick.player;
+  // This session's choice, else the account's preference, else the last choice in this browser.
+  const last = loadApView();
+  const filter = apSession.filter ?? myPrefs.apFilter ?? last.filter;
+  const player = apSession.player ?? (myPrefs.apPlayer === 'all' ? 'all' : myPrefs.apPlayer === 'me' && myPlayerIndex != null ? String(myPlayerIndex) : null) ?? last.player;
+  if (filter) $('ap-filter').value = filter;
+  if (player && [...sel.options].some(o => o.value === player)) sel.value = player;
   drawChart();
   renderMoveList();
   const firstErr = rep.rolls.findIndex(r => r.pi === myPlayerIndex && r.analysis && r.analysis.severity !== 'ok');

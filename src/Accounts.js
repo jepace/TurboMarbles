@@ -26,7 +26,7 @@ function limited(kind, ip) {
 function hit(kind, ip) { const k = `${kind}:${ip}`; (hits.get(k) ?? hits.set(k, []).get(k)).push(Date.now()); }
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some(x => t - x < WINDOW_MS)) hits.delete(k); }, 10 * 60 * 1000).unref();
 
-export const ACCOUNT_ACTIONS = new Set(['identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
+export const ACCOUNT_ACTIONS = new Set(['setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
   'deleteAccount', 'profile', 'history', 'openGame']);
 
 // send(ws, msg); cleanName(raw) → '' if unusable; onOpenGame(ws, game) shows a stored game.
@@ -44,7 +44,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       if (!p) { hit('identifyFail', ip); return send(ws, { event: 'identity', player: null }); }
       ws._player = p;
       ws._key = msg.key;
-      return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id) });
+      return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id) });
     }
     case 'register': {
       const name = cleanName(msg.name);
@@ -66,6 +66,10 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       me.name = name;
       return send(ws, { event: 'identity', player: me, devices: store.deviceCount(me.id) });
     }
+    case 'setPrefs': {
+      if (!needMe()) return;
+      return send(ws, { event: 'prefs', prefs: store.setPrefs(me.id, msg.prefs) });
+    }
     case 'linkCode': {
       if (!needMe()) return;
       return send(ws, { event: 'linkCode', ...store.createLinkCode(me.id) });
@@ -75,7 +79,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame }) {
       const r = store.redeemLinkCode(msg.code);
       if (!r) { hit('linkFail', ip); return err('BAD_LINK_CODE', 'That code is wrong or has expired.'); }
       ws._player = r.player; ws._key = r.key;
-      return send(ws, { event: 'registered', player: r.player, key: r.key, linked: true });
+      return send(ws, { event: 'registered', player: r.player, key: r.key, linked: true, prefs: store.getPrefs(r.player.id) });
     }
     case 'signOutOthers': {
       if (!needMe() || !ws._key) return;

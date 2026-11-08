@@ -113,6 +113,8 @@ function migrate() {
   for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL']]) {
     if (!cols.has(c)) db.exec(`ALTER TABLE seats ADD COLUMN ${c} ${t}`);
   }
+  const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
+  if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
   db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema', '2')").run();
 }
 
@@ -145,6 +147,25 @@ export function authenticate(key) {
   if (!row) return null;
   db.prepare('UPDATE devices SET last_used = ? WHERE key_hash = ?').run(now(), sha(key));
   return { id: row.id, name: row.name };
+}
+
+// ---- Preferences ---------------------------------------------------------------
+// Only known keys with known values are kept.
+const PREFS = { apFilter: ['errors', 'all'], apPlayer: ['me', 'all'] };
+export function cleanPrefs(p) {
+  const out = {};
+  if (p && typeof p === 'object') for (const [k, ok] of Object.entries(PREFS)) if (ok.includes(p[k])) out[k] = p[k];
+  return out;
+}
+export function getPrefs(id) {
+  if (!db) return {};
+  try { return cleanPrefs(JSON.parse(db.prepare('SELECT prefs FROM players WHERE id = ?').get(id)?.prefs ?? '{}')); } catch { return {}; }
+}
+export function setPrefs(id, prefs) {
+  if (!db) return {};
+  const p = cleanPrefs(prefs);
+  db.prepare('UPDATE players SET prefs = ? WHERE id = ?').run(JSON.stringify(p), id);
+  return p;
 }
 
 export function isNameTaken(name, exceptId = null) {

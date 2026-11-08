@@ -381,7 +381,8 @@ button.secondary { background: #fff2; }
 .ap-opt.good { box-shadow: inset 3px 0 0 #5fd35f; }
 .ap-opt.error { box-shadow: inset 3px 0 0 #ff7070; }
 .ap-opt.blunder { box-shadow: inset 3px 0 0 #ff3048; }
-#ap-detail { border-top: 1px solid #fff1; padding-top: 6px; display: flex; flex-direction: column; gap: 5px; flex: 0 0 auto; max-height: 45%; overflow-y: auto; }
+/* Fixed size whatever is selected (a move, a cube decision or nothing), so the list doesn't jump. */
+#ap-detail { border-top: 1px solid #fff1; padding-top: 6px; display: flex; flex-direction: column; gap: 5px; flex: 0 0 45%; height: 45%; overflow-y: auto; }
 .ap-opt { display: grid; grid-template-columns: 1fr 3.6em 3.6em 4.4em; gap: 6px; padding: 3px 6px; border-radius: 4px; cursor: pointer;
   font-family: ui-monospace, monospace; }
 .ap-opt:hover, .ap-opt.sel { background: #fff1; }
