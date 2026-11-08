@@ -8,7 +8,7 @@ import {
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { matchCube, emg } from './MatchEquity.js';
-import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked } from './Store.js';
+import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked, applyRatingBonus } from './Store.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
@@ -328,7 +328,10 @@ function finishGame(room) {
     t.unref?.();
   }
   const ratings = room._ratings ? room.slots.map(s => (s.accountId && room._ratings[s.accountId]) || null) : null;
+  rec.ratingPairs = room._ratings?.pairs ?? null;
   room._ratings = null;
+  // A rated game is analysed at once (quick level) for the played-better bonus.
+  if (rec.ratingPairs?.length) setImmediate(() => { if (rooms.has(room.id)) handleAnalyzeGame(null, room.id, rec.n); });
   broadcast(room, { event: 'gameResult', game: rec.n, ratings, winnerIndex: game.winner, result: r,
     score: !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
@@ -360,6 +363,24 @@ function storeFinishedGame(room, r) {
     room._ratings = rateGame(seats, game.winner);
   } catch (err) {
     console.error('[store] could not record game', err);
+  }
+}
+
+// Played better as well as won: when a rated game's analysis shows the winner
+// with a lower error rate (equity lost per decision, moves and cube) than a
+// loser, that pair's rating exchange counts twice. Once per game.
+function ratingBonus(room, rec, report) {
+  if (!rec.ratingPairs?.length || rec._bonusDone || !storeEnabled()) return;
+  rec._bonusDone = true;
+  const per = seatAnalysis(report);
+  const rate = i => { const s = per[i], n = (s?.choices ?? 0) + (s?.cubeDecisions ?? 0); return n ? (2 * s.eqLost + (s.cubeEqLost ?? 0)) / n : null; };
+  for (const p of rec.ratingPairs) {
+    const rw = rate(p.winSeat), rl = rate(p.loseSeat);
+    if (rw == null || rl == null || !(rw < rl)) continue;
+    const r = applyRatingBonus(p);
+    if (!r) continue;
+    broadcast(room, { event: 'ratingBonus', game: rec.n, winSeat: p.winSeat, loseSeat: p.loseSeat,
+      ratings: { [p.winSeat]: { rating: r[p.winId]?.rating, change: Math.round(p.dw) }, [p.loseSeat]: { rating: r[p.loseId]?.rating, change: Math.round(p.dl) } } });
   }
 }
 
@@ -1466,12 +1487,21 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
   const room = rooms.get(roomId);
   const rec = room && recordFor(room, gameNo);
   if (!rec) return;
-  const sess = sessions.get(ws._id);
-  if (!sess || sess.roomId !== roomId) return;
+  // ws = null: the server's own quick analysis of a rated game (no play-outs).
+  const sess = ws ? sessions.get(ws._id) : null;
+  if (ws && (!sess || sess.roomId !== roomId)) return;
+  const tell = m => { if (ws) sendTo(ws, m); };
 
   const a = rec.analysis;
-  if (a?.state === 'done') { sendTo(ws, { event: 'analysisResult', game: rec.n, report: a.result }); return; }
-  if (a?.state === 'running') { a.waiting.add(ws); return; }
+  if (a?.state === 'done') {
+    if (!ws) return;
+    sendTo(ws, { event: 'analysisResult', game: rec.n, report: a.result });
+    // Analysed quickly for the rating: a player now wants it, so play it out.
+    if (rec._checkPending) { rec._checkPending = false; scheduleCheck(autoCheckJob(room, rec, a.result)); }
+    return;
+  }
+  if (a?.state === 'running') { if (ws) a.waiting.add(ws); return; }
+  const system = !ws;
 
   const { game } = rec;
   finishRollRecord(game);
@@ -1490,21 +1520,28 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
     rec.analysis = { state: 'done', result: report };
     saveRecAnalysis(rec, report);
     for (const w of waiting) sendTo(w, { event: 'analysisResult', game: rec.n, report });
+    ratingBonus(room, rec, report);
   };
-  const waiting = new Set([ws]);
+  // Play-outs follow the quick pass, unless only the server asked (then they
+  // wait until a player opens the analysis).
+  const check = report => {
+    if (system && !waiting.size) { rec._checkPending = true; return; }
+    scheduleCheck(autoCheckJob(room, rec, report));
+  };
+  const waiting = new Set(ws ? [ws] : []);
   if (!decisions.length) {
     finish(base);
-    if (base.cube.length) scheduleCheck(autoCheckJob(room, rec, base));
+    if (base.cube.length) check(base);
     return;
   }
   if (analysesRunning >= MAX_ANALYSES) {
     // Wait in line (e.g. the games of a match, or another room's analysis).
     if (analysisQueue.length >= 30) {
-      sendTo(ws, { event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a minute.' });
+      tell({ event: 'error', code: 'ANALYSIS_BUSY', message: 'The server is busy analysing. Try again in a minute.' });
       return;
     }
     if (!analysisQueue.some(q => q.rec === rec)) analysisQueue.push({ ws, roomId, gameNo: rec.n, rec });
-    sendTo(ws, { event: 'analysisQueued', game: rec.n, ahead: analysisQueue.findIndex(q => q.rec === rec) });
+    tell({ event: 'analysisQueued', game: rec.n, ahead: analysisQueue.findIndex(q => q.rec === rec) });
     return;
   }
   analysesRunning++;
@@ -1540,7 +1577,7 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
         base.rolls.forEach((r, idx) => { if (results.has(idx)) r.analysis = results.get(idx); });
         finish(base);
         end();
-        scheduleCheck(autoCheckJob(room, rec, base));
+        check(base);
       }
     });
     worker.on('error', fail);

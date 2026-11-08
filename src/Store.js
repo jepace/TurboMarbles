@@ -115,8 +115,11 @@ function migrate() {
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
   if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
-  if (!pcols.has('rating')) db.exec('ALTER TABLE players ADD COLUMN rating REAL NOT NULL DEFAULT 1500');
+  if (!pcols.has('rating')) db.exec('ALTER TABLE players ADD COLUMN rating REAL NOT NULL DEFAULT 1400');
   if (!pcols.has('rated_games')) db.exec('ALTER TABLE players ADD COLUMN rated_games INTEGER NOT NULL DEFAULT 0');
+  // Everyone starts at 1400 (players not yet rated, from when it was 1500).
+  db.exec('UPDATE players SET rating = 1400 WHERE rated_games = 0 AND rating = 1500');
+
   // Social: friends (one row per pair, a < b), blocks, direct messages.
   db.exec(`
     CREATE TABLE IF NOT EXISTS friends (
@@ -160,7 +163,7 @@ export function register(name) {
   const key = randomBytes(32).toString('base64url');
   const id = newId();
   try {
-    db.prepare('INSERT INTO players (id, name, name_key, created_at) VALUES (?, ?, ?, ?)').run(id, name, nameKey(name), now());
+    db.prepare('INSERT INTO players (id, name, name_key, created_at, rating) VALUES (?, ?, ?, ?, ?)').run(id, name, nameKey(name), now(), RATING_START);
   } catch {
     return { error: 'NAME_TAKEN' };
   }
@@ -254,13 +257,16 @@ export function deletePlayer(playerId) {
   return true;
 }
 
-// ---- Rating (Elo, games against people) -------------------------------------------
+// ---- Rating (Elo, games against people; everyone starts at 1400) ------------------
 //
 // Only seats with an account, and only games with no robot seat, are rated.
 // The winner scores 1 against each loser (and each loser 0 against the
 // winner); with several losers K is shared out, so a 6-player win isn't worth
 // five 2-player wins. K = 32 for a player's first 30 rated games, then 20.
-export const RATING_START = 1500;
+// Played better too: once the game's quick analysis shows the winner had the
+// lower error rate than a loser, that pair's exchange counts twice
+// (applyRatingBonus).
+export const RATING_START = 1400;
 export function rateGame(seats, winnerSeat) {
   if (!db || winnerSeat == null || seats.some(s => s.isRobot)) return null;
   const ids = seats.map(s => s.playerId);
@@ -281,7 +287,20 @@ export function rateGame(seats, winnerSeat) {
   const up = db.prepare('UPDATE players SET rating = rating + ?, rated_games = rated_games + 1 WHERE id = ?');
   const out = {};
   for (const i of [w, ...losers]) { up.run(delta[i], ids[i]); out[ids[i]] = { rating: Math.round(cur[i].rating + delta[i]), change: Math.round(delta[i]) }; }
+  // Each pair's exchange, for the played-better bonus.
+  const pairs = losers.map(l => {
+    const ew = 1 / (1 + 10 ** ((cur[l].rating - cur[w].rating) / 400));
+    return { winSeat: w, loseSeat: l, winId: ids[w], loseId: ids[l], dw: K(w) * (1 - ew), dl: -(cur[l].rated_games < 30 ? 32 : 20) * (1 - ew) };
+  });
+  Object.defineProperty(out, 'pairs', { value: pairs });
   return out;
+}
+// The winner outplayed this loser: their exchange counts again (×2 in all).
+export function applyRatingBonus(pair) {
+  if (!db) return null;
+  const up = db.prepare('UPDATE players SET rating = rating + ? WHERE id = ?');
+  up.run(pair.dw, pair.winId); up.run(pair.dl, pair.loseId);
+  return { [pair.winId]: ratingOf(pair.winId), [pair.loseId]: ratingOf(pair.loseId) };
 }
 export function leaderboard({ limit = 50, minGames = 1 } = {}) {
   if (!db) return [];

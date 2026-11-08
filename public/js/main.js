@@ -153,6 +153,13 @@ on('quickMatchWaiting', ({ waiting, need }) => { $('qm-status').textContent = `W
 on('quickMatchCancelled', resetQuick);
 on('quickMatchFound', resetQuick);
 
+// Played better too: the rating exchange counted twice.
+on('ratingBonus', ({ winSeat, loseSeat, ratings }) => {
+  log(`📈 Analysis: ${playerName(winSeat)} also outplayed ${playerName(loseSeat)} — rating exchange ×2`);
+  const mine = ratings?.[myPlayerIndex];
+  if (mine?.rating) { myRating = { ...(myRating ?? {}), rating: mine.rating }; renderNavMe();
+    log(`Your rating: ${mine.rating} (${mine.change >= 0 ? '+' : ''}${mine.change} more)`); }
+});
 // ---- Leaderboard ----
 on('leaderboard', ({ players, me: mine }) => {
   if (mine) { myRating = mine; renderNavMe(); }

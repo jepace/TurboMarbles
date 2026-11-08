@@ -124,6 +124,12 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   N−1, then post-Crawford). Match score per room; Rematch continues the match, then starts a new one.
   Cube decisions in a match use a match equity table for this game (`src/MatchEquity.js`, from the
   measured 7.3% aggro rate; cube ownership valued like money play where the cube is alive), shown in equity units (EMG).
+- Rating (`src/Store.js` rateGame): Elo from rated games (accounts only, no robot seats), start 1400; the
+  winner takes points from each loser. Every rated game is analysed at once at the quick level; if the
+  winner also had the lower error rate than a loser, that pair's exchange counts twice (applyRatingBonus).
+- Platform: side-nav pages (Play with quick match, Leaderboard, Friends, Messages, Stats, Board, Settings);
+  friends by request/accept with presence and invites; direct messages between friends; in-game chat;
+  blocks. Account actions in `src/Accounts.js`; quick match and chat in `src/server.js` / GameManager.
 - Analysis numbers are all **equity** (decimals of the stake; losing a game = 1.0): a move's win-chance
   loss x shows as 2x; errors 0.06–0.20, blunders ≥ 0.20, for moves and cube alike. Plain chances
   (hit, finish next turn) stay percentages.
