@@ -1360,6 +1360,7 @@ on('rolled', ({ playerIndex, dice, moves, combos }) => {
   setCommitVisible(false); setUndoVisible(false);
   renderDice(dice, gameState.players[playerIndex]?.color);
   $('btn-roll').disabled = true;
+  renderCube();                       // rolled: no more doubling this turn
 
   // Capture dice for backgammon notation (extra roll starts a fresh move list)
   if (turnLogPlayer !== playerIndex) {
