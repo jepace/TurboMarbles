@@ -39,7 +39,7 @@ export const config = {
   analysis: { mode: 'eval', keep: 3 },
   analysisLevels: [
     { mode: 'eval', keep: 3 },                             // 0: instant (1-ply estimate)
-    { screenBy: 'eval', deep: 150, keep: 3, maxDeep: 300 },// 1: checked — the best few by the estimate, yours and the robot's, played out
+    { screen: 16, deep: 150, keep: 3, maxDeep: 300 },      // 1: checked — every option screened by playouts, the best few + yours + the robot's played out
     { screen: 60, deep: 400, keep: 4, maxDeep: 1600 },     // 2: deep
     { screen: 120, deep: 1200, keep: 5, maxDeep: 4800 },   // 3: deepest
   ],
@@ -1362,11 +1362,14 @@ export function handleAnalyzeGame(ws, roomId) {
 // in the background; each answer replaces the estimate as it arrives.
 function autoCheck(room, report, end, { level = 1, all = false } = {}) {
   const opts = config.analysisLevels[level];
-  // The automatic pass checks the questionable decisions (and the cube);
-  // "play out all" (all = true) redoes every decision below `level`.
+  // The automatic pass plays out EVERY decision at level 1 (and the cube):
+  // the instant formula judges at about robot strength, so it can neither
+  // find errors the robot would also make nor be trusted with the verdicts.
+  // "Play out all" (all = true) redoes every decision below `level`.
+  // Questionable ones (play differs from the robot, or flagged) go first.
   const todo = report.rolls.map((r, idx) => ({ r, idx })).filter(({ r, idx }) =>
-    r.analysis && !r._deepening && room.game?._rolls?.[idx]?.after &&
-    (all ? (r.analysis.level ?? 0) < level : (!r.analysis.robotAgrees || r.analysis.severity !== 'ok')));
+    r.analysis && !r._deepening && room.game?._rolls?.[idx]?.after && (r.analysis.level ?? 0) < level)
+    .sort((x, y) => Number(x.r.analysis.robotAgrees && x.r.analysis.severity === 'ok') - Number(y.r.analysis.robotAgrees && y.r.analysis.severity === 'ok'));
   const cubeLog = room.game?._cubeLog ?? [];
   const cubeTodo = all ? [] : (report.cube ?? []).map(c => c.i).filter(i => cubeLog[i]);
   if (!opts || (!todo.length && !cubeTodo.length)) { end(); return; }
