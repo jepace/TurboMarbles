@@ -34,6 +34,10 @@ const COLORS = BASE_COLORS.slice();
 const DARK_C = BASE_DARK.slice();
 // Each viewer may see their own arm in a favourite colour: the colours turn
 // round the ring by `shift` arms, keeping their order (display only).
+// Marble look (contrast against a same-coloured track): 'classic', 'dark',
+// 'white', 'socket', 'socket-white'.
+let marbleStyle = 'classic';
+export function setMarbleStyle(s) { marbleStyle = s; }
 export function setColorShift(shift = 0) {
   for (let i = 0; i < 6; i++) { COLORS[i] = BASE_COLORS[(i + shift + 6) % 6]; DARK_C[i] = BASE_DARK[(i + shift + 6) % 6]; }
 }
@@ -698,6 +702,13 @@ function drawMarbles(gameState) {
         ctx.fill();
       }
 
+      // Contrast backing: a dark disc a little larger than the marble.
+      if (marbleStyle === 'socket' || marbleStyle === 'socket-white') {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r * 1.2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(8,12,24,0.95)';
+        ctx.fill();
+      }
       // Main marble body with radial gradient (dark at edge, bright at highlight)
       const grad = ctx.createRadialGradient(
         pos.x - r * 0.32, pos.y - r * 0.32, r * 0.04,
@@ -718,6 +729,12 @@ function drawMarbles(gameState) {
       if (isAnimating) {
         ctx.strokeStyle = '#ffffcc';
         ctx.lineWidth   = 2;
+      } else if (marbleStyle === 'dark') {
+        ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+        ctx.lineWidth   = Math.max(2, r * 0.16);
+      } else if (marbleStyle === 'white' || marbleStyle === 'socket-white') {
+        ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.lineWidth   = Math.max(1.5, r * 0.12);
       } else if (inLowContrast) {
         ctx.strokeStyle = 'rgba(255,255,255,0.85)';
         ctx.lineWidth   = 2;
