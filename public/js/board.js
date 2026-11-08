@@ -692,6 +692,8 @@ function drawCenter() {
 
 function drawMarbles(gameState) {
   const R = W * 0.019;
+  // Two passes: the moving marble last, so it travels over the marbles it passes.
+  for (const pass of [0, 1])
   for (const player of gameState.players) {
     const ai    = playerToArm[player.index] ?? player.index;
     const color = COLORS[ai];
@@ -701,6 +703,7 @@ function drawMarbles(gameState) {
       const isAnimating = animatingMarble &&
         animatingMarble.playerIndex === player.index &&
         animatingMarble.marbleId   === marble.id;
+      if (!!isAnimating !== (pass === 1)) continue;
       const r = isAnimating ? R * 1.25 : R;
 
       // Drop shadow
