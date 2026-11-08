@@ -1829,7 +1829,7 @@ on('doubleOffered', ({ playerIndex, value }) => {
   renderCube();
 });
 on('doubleTaken', ({ playerIndex, value, owner }) => {
-  gameState.cube = { value, owner };
+  gameState.cube = { ...gameState.cube, value, owner };
   gameState.cubeOffer = null;
   gameState.phase = 'IN_TURN';
   $('cube-offer').style.display = 'none';
