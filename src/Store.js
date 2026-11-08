@@ -182,7 +182,7 @@ export function authenticate(key) {
 
 // ---- Preferences ---------------------------------------------------------------
 // Only known keys with known values are kept.
-const PREFS = { apFilter: ['errors', 'all'], apPlayer: ['me', 'all'], myColor: ['blue', 'pink', 'orange', 'yellow', 'green', 'white'],
+const PREFS = { apFilter: ['errors', 'inacc', 'all'], apPlayer: ['me', 'all'], myColor: ['blue', 'pink', 'orange', 'yellow', 'green', 'white'],
   boardTrack: ['muted', 'solid', 'deep', 'outline'], boardMarbles: ['socket', 'classic', 'dark', 'white'] };
 export function cleanPrefs(p) {
   const out = {};

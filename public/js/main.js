@@ -949,7 +949,7 @@ function renderAccountSection(extra) {
       row('Change it', el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
         btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); }))),
     section('Analysis',
-      row('Opens on', prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['all', 'all rolls']]),
+      row('Opens on', prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['inacc', 'inaccuracies and worse'], ['all', 'all rolls']]),
         prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']]))),
     section('Devices',
       row('Signed in on', el('span', {}, `${profileData?.devices ?? 1} device${profileData?.devices === 1 ? '' : 's'}`)),
@@ -1315,7 +1315,8 @@ function visibleItems() {
   const f = $('ap-filter').value, who = $('ap-player').value;
   // Skipped no-doubles (nowhere near the window) only show under "All rolls".
   const cubeOk = c => (c.analysis?.skip !== true || f === 'all') && (who === 'all' || c.pi === Number(who)) &&
-    (f === 'all' || f === 'choices' || (f === 'errors' && c.analysis && c.analysis.severity !== 'ok'));
+    (f === 'all' || f === 'choices' || (f === 'errors' && c.analysis && c.analysis.severity !== 'ok')
+      || (f === 'inacc' && c.analysis && (c.analysis.severity !== 'ok' || cubeInaccuracy(c.analysis))));
   const cubes = (analysisReport.cube ?? []).filter(cubeOk);
   const out = [];
   let k = 0;
@@ -1333,9 +1334,13 @@ function visibleRolls() {
   const f = $('ap-filter').value, who = $('ap-player').value;
   return analysisReport.rolls.map((r, idx) => ({ r, idx })).filter(({ r }) =>
     (who === 'all' || r.pi === Number(who)) &&
-    (f === 'all' || (f === 'choices' && r.analysis) || (f === 'errors' && r.analysis && r.analysis.severity !== 'ok')));
+    (f === 'all' || (f === 'choices' && r.analysis) || (f === 'errors' && r.analysis && r.analysis.severity !== 'ok')
+      || (f === 'inacc' && r.analysis && (r.analysis.severity !== 'ok' || isInaccuracy(r.analysis)))));
 }
 
+// Inaccuracy: a real loss (clear of the noise, at least 0.01 equity) below the error threshold.
+const isInaccuracy = a => a && a.severity === 'ok' && 2 * a.loss >= 0.01 && a.loss > 1.96 * (a.se ?? 0);
+const cubeInaccuracy = a => a && !a.skip && a.severity === 'ok' && !a.close && a.played !== a.best && a.lossNorm >= 0.01;
 function badgeFor(r, idx) {
   if (deepening.has(idx)) return el('span', { class: 'badge unclear', title: 'Being played out to check the estimate' }, 'checking…');
   if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
@@ -1343,6 +1348,7 @@ function badgeFor(r, idx) {
   if (a.severity === 'ok' && a.loss >= 0.03) {
     return el('span', { class: 'badge unclear', title: `Maybe −${eqOf(a.loss)}, but within the noise (± ${eqOf(1.96 * a.se)}). Go deeper (+) to settle it.` }, `−${eqOf(a.loss)}?`);
   }
+  if (isInaccuracy(a)) return el('span', { class: 'badge inacc', title: `Inaccuracy: −${eqOf(a.loss)} equity against the best play (below the error threshold of 0.06)` }, `−${eqOf(a.loss)}`);
   if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${eqOf(a.loss)} ± ${eqOf(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
   return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: ${eqOf(a.loss)} equity worse than the best play (± ${eqOf(1.96 * a.se)})` },
     `${SEV_LABEL[a.severity]} −${eqOf(a.loss)}`);
@@ -1440,7 +1446,7 @@ on('cubeDeepening', ({ i, game }) => {
 function inlineCube(c) {
   const a = c.analysis;
   const bad = a && !a.skip && a.severity !== 'ok';
-  if (!c.action && !bad && !(apCube === c.i)) return null;
+  if (!c.action && !bad && !cubeInaccuracy(a) && !(apCube === c.i)) return null;
   const p = analysisReport.players[c.pi];
   const what = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` to ${c.v * 2}` : '');
   const tip = `${p.name}: ${what}` + (!a ? ' · being worked out' : bad ? ` · ${a.label ?? SEV_LABEL[a.severity]}, −${eqv(a.loss)}` : a.close ? ' · close call' : ' · right') + ' · click for details';
