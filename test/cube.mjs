@@ -3,7 +3,7 @@
 import { createGame, canDouble, offerDouble, takeDouble, dropDouble, gameResult, applyMove } from '../src/GameEngine.js';
 import {
   createRoom, joinRoom, addRobot, startGame, handleRoll, handleCommit, handleMove, handleAnalyzeGame, handleAnalyzeDeeperCube,
-  handleDouble, handleTake, handleDrop, handleRematch,
+  handleDouble, handleTake, handleDrop, handleRematch, handleQuit,
   _reset, _getRoom, config as gmConfig,
 } from '../src/GameManager.js';
 import { shouldDouble, shouldTake, cubefulEquity } from '../src/CubeDecision.js';
@@ -307,6 +307,28 @@ await describe('match play — score, Crawford game, post-Crawford, match over',
   assert(res.match.over && res.match.winner === 1 && res.match.score.join() === '2,3', `match over: Bob wins 3–2 (${res.match.score})`);
   handleRematch(host, roomId); handleRematch(guest, roomId);
   assert(room.match.score.join() === '0,0' && !room.match.over && !room.match.crawfordUsed, 'rematch after the match: a new match');
+});
+
+await describe('quitting — resign a match; 3+ players: a robot takes the seat', async () => {
+  _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0;
+  const host = mockWs(), guest = mockWs();
+  const { code, roomId } = createRoom(host, 'Alice', 2, undefined, { cube: true, matchTo: 5 });
+  joinRoom(guest, code, 'Bob');
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  handleQuit(guest, roomId);
+  const res = host.find('gameResult').pop();
+  assert(res && res.winnerIndex === 0 && res.result.resigned && res.match.over && res.match.score[0] === 5, 'Bob resigns: Alice wins the match');
+  assert(room.slots[1].isRobot, 'the quitter\'s seat is a robot now');
+
+  _reset();
+  const a = mockWs(), b = mockWs(), c = mockWs();
+  const r3 = createRoom(a, 'A', 3);
+  joinRoom(b, r3.code, 'B'); joinRoom(c, r3.code, 'C');
+  startGame(a, r3.roomId);
+  const room3 = _getRoom(r3.roomId);
+  handleQuit(b, r3.roomId);
+  assert(room3.state === 'playing' && room3.slots[1].isRobot && room3.game.winner == null, '3 players: B quits, a robot plays on');
 });
 
 describe('match play — robot cube decisions follow the score', () => {

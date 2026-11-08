@@ -726,6 +726,45 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   advanceTurnIfDone(room);
 }
 
+// ---------- Quitting ----------
+//
+// Quit a room for good. During a game:
+//   2 players — a resignation: the other player wins the cube's value (a
+//               single game); in a match, they win the match.
+//   3+ players — a robot takes over the seat and the game goes on.
+// Robots-only games just end. After the game (or in the lobby) it is a plain leave.
+export function handleQuit(ws, roomId) {
+  const room = rooms.get(roomId);
+  const sess = sessions.get(ws._id);
+  if (!room || !sess || sess.roomId !== roomId) return;
+  const pi = sess.playerIndex, slot = room.slots[pi], game = room.game;
+  if (room.state === 'playing' && game && game.winner == null && slot && !slot.isRobot) {
+    const others = room.slots.filter((s, i) => i !== pi && s.playerId && !s.isRobot).length;
+    if (room.totalPlayers === 2 && others > 0) {
+      const w = 1 - pi, m = room.match;
+      const points = m ? m.length - m.score[w] : (game.cube?.value ?? 1);
+      game.cubeOffer = null; game.phase = 'GAME_OVER'; game.winner = w;
+      game.result = { winner: w, points, losers: [{ pi, points, mult: 1 }], aggro: false, baggro: false, dropped: false, resigned: true };
+      broadcast(room, { event: 'playerQuit', playerIndex: pi, resigned: true });
+      finishGame(room);
+    } else if (others > 0) {
+      slot.isRobot = true;
+      broadcast(room, { event: 'playerQuit', playerIndex: pi });
+      broadcast(room, { event: 'robotTookOver', playerIndex: pi });
+      if (game.turnIndex === pi || game.cubeOffer?.to === pi) scheduleCurrentTurn(room);
+    }
+  } else if (room.state === 'finished') {
+    broadcast(room, { event: 'playerQuit', playerIndex: pi });
+  }
+  if (room.state === 'lobby') { leaveRoom(ws); return; }
+  // Gone for good: no reconnecting, and a robot plays the seat in any rematch.
+  sessions.delete(ws._id);
+  if (slot) { slot.ws = null; slot.isRobot = true; }
+  const t = room.disconnectTimers.get(pi);
+  if (t) { clearTimeout(t); room.disconnectTimers.delete(pi); }
+  cleanupIfAbandoned(room);
+}
+
 // ---------- Disconnect handling ----------
 
 export function handleDisconnect(ws) {

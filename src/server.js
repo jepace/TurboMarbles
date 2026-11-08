@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
+  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS } from './Accounts.js';
@@ -172,7 +172,7 @@ const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
+  'double', 'take', 'drop', 'rematch', 'quit', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
 ]);
 
 function dispatch(ws, msg) {
@@ -253,6 +253,11 @@ function dispatch(ws, msg) {
       break;
     }
 
+    case 'quit': {
+      const roomId = getRoomByWs(ws);
+      if (roomId) handleQuit(ws, roomId);
+      return;
+    }
     case 'rematch': {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;

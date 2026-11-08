@@ -352,9 +352,32 @@ document.addEventListener('keydown', e => {
 });
 
 // ---- Play again ----
-$('btn-play-again').addEventListener('click', () => {
+// Leave the room for good (after a game: back to the start screen to set up
+// a different game; during one: quit — against people, a resignation).
+function leaveForGood() {
+  send({ action: 'quit' });
+  setReconnectInfo(null);
+  clearTimeout(autoRollTimer);
   $('win-overlay').style.display = 'none';
+  if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
+  gameState = null;
   show('screen-landing');
+}
+$('btn-play-again').addEventListener('click', leaveForGood);
+$('btn-quit').addEventListener('click', () => {
+  const g = gameState;
+  if (g && g.winner == null && g.phase !== 'GAME_OVER') {
+    const people = g.players.filter((p, i) => i !== myPlayerIndex && !p.isRobot).length;
+    const msg = !people ? 'Quit this game?'
+      : g.players.length > 2 ? 'Quit? A robot will play your marbles.'
+      : g.match ? `Resign the match? ${playerName(1 - myPlayerIndex)} wins it.`
+      : `Resign? ${playerName(1 - myPlayerIndex)} wins ${g.cube?.value ?? 1} point${(g.cube?.value ?? 1) === 1 ? '' : 's'}.`;
+    if (!confirm(msg)) return;
+  }
+  leaveForGood();
+});
+on('playerQuit', ({ playerIndex, resigned }) => {
+  if (playerIndex !== myPlayerIndex) log(`${playerName(playerIndex)} ${resigned ? 'resigns' : 'left'}`, gameState?.players[playerIndex]?.color);
 });
 
 // ---- Copy log ----
@@ -515,12 +538,14 @@ function updateLanding() {
     $('landing-name').disabled = true;
     $('remember-row').style.display = 'none';
     $('btn-profile').style.display = '';
+    $('btn-game-profile').style.display = '';
     $('btn-use-code').style.display = 'none';
   } else {
     line.textContent = statsUnavailable ? 'Playing as a guest (stats are off on this server)' : '';
     $('landing-name').disabled = false;
     $('remember-row').style.display = statsUnavailable ? 'none' : '';
     $('btn-profile').style.display = 'none';
+    $('btn-game-profile').style.display = 'none';
     $('btn-use-code').style.display = statsUnavailable ? 'none' : '';
   }
 }
@@ -555,8 +580,10 @@ $('btn-use-code').addEventListener('click', () => {
   if (c.replace(/[^A-Za-z0-9]/g, '').length === 10) send({ action: 'redeemLink', code: c });
   else { saveKey(c); send({ action: 'identify', key: c }); }
 });
-$('btn-profile').addEventListener('click', () => { connect(); send({ action: 'profile' }); });
-$('btn-profile-back').addEventListener('click', () => show('screen-landing'));
+$('btn-profile').addEventListener('click', () => { profileFrom = 'screen-landing'; connect(); send({ action: 'profile' }); });
+let profileFrom = 'screen-landing';
+$('btn-profile-back').addEventListener('click', () => show(profileFrom));
+$('btn-game-profile').addEventListener('click', () => { profileFrom = 'screen-game'; send({ action: 'profile' }); });
 for (const t of document.querySelectorAll('#screen-profile .tab')) {
   t.addEventListener('click', () => { profileTab = t.dataset.tab; renderProfile(); });
 }
