@@ -469,3 +469,20 @@ button.danger { color: #ff8080; }
 #game-log.no-feedback .log-feedback { display: none; }
 .toast { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 6; background: #0d1530ee;
   border: 1px solid #c8920a; border-radius: 10px; padding: 0.5rem 1rem; font-weight: 600; animation: pop-in 0.2s ease-out; }
+
+/* ---- Home (lobby) ---- */
+.card.home-card { max-width: 480px; }
+.home-main { display: flex; gap: 0.8rem; justify-content: center; margin: 1rem 0 0.6rem; }
+.home-main button { font-size: 1.15rem; padding: 0.8rem 1.4rem; }
+.home-more { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+/* ---- Board page ---- */
+.card.board-card { max-width: 860px; }
+.board-settings { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start; }
+.board-preview { width: min(380px, 90vw); height: min(380px, 90vw); flex: 0 0 auto; }
+.board-opts { flex: 1 1 260px; }
+.board-opts h3 { margin: 0.8rem 0 0.4rem; font-size: 0.95rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.9rem;
+  background: #ffffff10; border: 1px solid #ffffff22; color: inherit; font-weight: 500; }
+.chip.on { border-color: #f0c040; background: #f0c04026; color: #fff; font-weight: 700; }
+.chip .ball { width: 16px; height: 16px; border-radius: 50%; display: inline-block; box-shadow: 0 1px 3px #0008; }

@@ -99,6 +99,18 @@ window.addEventListener('pageshow', () => { if ($('screen-landing').classList.co
 const $ = id => document.getElementById(id);
 
 // ---- Landing ----
+// Login → home (the lobby to everything).
+function goHome() {
+  $('home-hello').textContent = me ? `Signed in as ${me.name}` : `Playing as ${myName} (guest)`;
+  for (const id of ['btn-settings', 'btn-profile']) $(id).style.display = me ? '' : 'none';
+  show('screen-home');
+}
+$('btn-continue').addEventListener('click', () => withName(goHome));
+$('btn-switch-user').addEventListener('click', () => {
+  if (me && !confirm('Sign out on this device? To sign back in you will need a link code from another device, or your recovery key (Settings → Show recovery key).')) return;
+  if (me) { saveKey(null); me = null; myPrefs = {}; }
+  updateLanding(); show('screen-landing');
+});
 $('btn-create').addEventListener('click', () => withName(() => {
   show('screen-create');
   const n = parseInt($('create-count').value, 10);
@@ -120,8 +132,7 @@ function withName(next) {
   connect();
   send({ action: 'register', name: myName });
 }
-// Enter on name field → Create Game (most common action)
-$('landing-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create').click(); });
+$('landing-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-continue').click(); });
 
 // ---- Create ----
 function updateColorPicker(n) {
@@ -159,7 +170,7 @@ $('btn-create-confirm').addEventListener('click', () => {
   send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && (matchTo ? matchTo >= 2 : $('create-cube').checked),
     matchTo, jacoby: n === 2 && !matchTo && $('create-cube').checked && $('create-jacoby').checked });
 });
-$('btn-create-back').addEventListener('click', () => show('screen-landing'));
+$('btn-create-back').addEventListener('click', () => show('screen-home'));
 // Enter on player-count field → confirm create
 $('create-count').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-create-confirm').click(); });
 $('create-count').addEventListener('input', () => {
@@ -198,7 +209,7 @@ $('btn-join-confirm').addEventListener('click', () => {
   connect();
   send({ action: 'joinRoom', code, name: myName });
 });
-$('btn-join-back').addEventListener('click', () => show('screen-landing'));
+$('btn-join-back').addEventListener('click', () => show('screen-home'));
 // Enter on room-code field → confirm join
 $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join-confirm').click(); });
 
@@ -383,7 +394,7 @@ function leaveForGood() {
   $('win-overlay').style.display = 'none';
   if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
   gameState = null;
-  show('screen-landing');
+  show(myName || me ? 'screen-home' : 'screen-landing');
 }
 $('btn-play-again').addEventListener('click', leaveForGood);
 $('btn-quit').addEventListener('click', () => {
@@ -608,14 +619,12 @@ function updateLanding() {
     $('landing-name').value = me.name;
     $('landing-name').disabled = true;
     $('remember-row').style.display = 'none';
-    $('btn-profile').style.display = '';
     $('btn-game-profile').style.display = '';
     $('btn-use-code').style.display = 'none';
   } else {
     line.textContent = statsUnavailable ? 'Playing as a guest (stats are off on this server)' : '';
     $('landing-name').disabled = false;
     $('remember-row').style.display = statsUnavailable ? 'none' : '';
-    $('btn-profile').style.display = 'none';
     $('btn-game-profile').style.display = 'none';
     $('btn-use-code').style.display = statsUnavailable ? 'none' : '';
   }
@@ -626,11 +635,12 @@ let myPrefs = {};                  // account preferences (signed in)
 on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
 on('identity', ({ player, prefs }) => {
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
-  if (myPrefs.myColor && myPrefs.myColor !== settings.myColor) { settings.myColor = myPrefs.myColor; saveSettings(); $('opt-color').value = settings.myColor; }
-  for (const [k, id] of [['boardTrack', 'opt-track'], ['boardMarbles', 'opt-marbles']]) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); $(id).value = settings[k]; }
+  for (const k of ['myColor', 'boardTrack', 'boardMarbles']) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); }
   applyBoardLook();
   updateLanding();
   if (profileData && me) $('profile-name').textContent = me.name;
+  // Signed in already: skip the login screen.
+  if (me && $('screen-landing').classList.contains('active')) { myName = me.name; goHome(); }
 });
 on('registered', ({ player, key, linked, prefs }) => {
   saveKey(key);
@@ -654,15 +664,19 @@ $('btn-use-code').addEventListener('click', () => {
   if (c.replace(/[^A-Za-z0-9]/g, '').length === 10) send({ action: 'redeemLink', code: c });
   else { saveKey(c); send({ action: 'identify', key: c }); }
 });
-$('btn-profile').addEventListener('click', () => { profileFrom = 'screen-landing'; connect(); send({ action: 'profile' }); });
-let profileFrom = 'screen-landing';
+// Stats and Settings both come from the profile data.
+let profileFrom = 'screen-home', profileTarget = 'screen-profile';
+const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile' }); };
+$('btn-profile').addEventListener('click', () => openProfile('screen-profile', 'screen-home'));
+$('btn-settings').addEventListener('click', () => openProfile('screen-settings', 'screen-home'));
 $('btn-profile-back').addEventListener('click', () => show(profileFrom));
-$('btn-game-profile').addEventListener('click', () => { profileFrom = 'screen-game'; send({ action: 'profile' }); });
+$('btn-settings-back').addEventListener('click', () => show(profileFrom));
+$('btn-game-profile').addEventListener('click', () => openProfile('screen-settings', 'screen-game'));
 for (const t of document.querySelectorAll('#screen-profile .tab')) {
   t.addEventListener('click', () => { profileTab = t.dataset.tab; renderProfile(); });
 }
 
-on('profile', data => { profileData = data; renderProfile(); show('screen-profile'); });
+on('profile', data => { profileData = data; renderProfile(); show(profileTarget); });
 on('history', ({ games }) => {
   if (!profileData) return;
   profileData.games.push(...games);
@@ -744,8 +758,7 @@ function prefSelect(key, opts) {
   s.value = myPrefs[key] ?? '';
   s.addEventListener('change', () => {
     myPrefs = { ...myPrefs, [key]: s.value || undefined }; send({ action: 'setPrefs', prefs: myPrefs });
-    if (key === 'myColor') { settings.myColor = s.value || undefined; saveSettings(); $('opt-color').value = s.value; }
-    if (key === 'boardTrack' || key === 'boardMarbles') { settings[key] = s.value || undefined; saveSettings(); applyBoardLook(); }
+
   });
   return s;
 }
@@ -763,10 +776,7 @@ function renderAccountSection(extra) {
     el('div', { class: 'acct-row' }, el('span', {}, 'Analysis opens on'),
       prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['all', 'all rolls']]),
       prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']])),
-    el('div', { class: 'acct-row' }, el('span', {}, 'My colour'),
-      prefSelect('myColor', [['', 'as dealt'], ...['blue', 'pink', 'orange', 'yellow', 'green', 'white'].map(c => [c, c])])),
-    el('div', { class: 'acct-row' }, el('span', {}, 'Board'),
-      prefSelect('boardTrack', TRACK_LOOKS), prefSelect('boardMarbles', MARBLE_LOOKS)),
+
     el('div', { class: 'acct-row' },
       el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
       btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); })),
@@ -1507,19 +1517,43 @@ document.addEventListener('keydown', e => {
 $('opt-feedback').checked = settings.feedback;
 $('opt-analysis').checked = settings.analysis;
 $('opt-numbers').checked = settings.numbers;
-$('opt-color').value = settings.myColor ?? '';
-for (const [id, key] of [['opt-track', 'boardTrack'], ['opt-marbles', 'boardMarbles']]) {
-  $(id).value = settings[key] ?? '';
-  $(id).addEventListener('change', e => {
-    settings[key] = e.target.value || undefined; saveSettings(); applyBoardLook();
-    if (me) { myPrefs = { ...myPrefs, [key]: settings[key] }; send({ action: 'setPrefs', prefs: myPrefs }); }
-  });
-}
 applyBoardLook();
-$('opt-color').addEventListener('change', e => {
-  settings.myColor = e.target.value || undefined; saveSettings();
-  if (me) { myPrefs = { ...myPrefs, myColor: settings.myColor }; send({ action: 'setPrefs', prefs: myPrefs }); }
-});
+
+// ---- Board page: my colour, track and marble looks, with a live preview ----
+const BALL = { blue: '#2288f0', pink: '#e8208c', orange: '#ff7800', yellow: '#f5d000', green: '#44bb44', white: '#e0e0e0' };
+function setLook(key, value) {
+  settings[key] = value || undefined; saveSettings(); applyBoardLook();
+  if (me) { myPrefs = { ...myPrefs, [key]: settings[key] }; send({ action: 'setPrefs', prefs: myPrefs }); }
+  renderBoardPage();
+}
+function chip(on, label, fn, ball) {
+  const b = el('button', { class: 'chip' + (on ? ' on' : '') }, ...(ball ? [el('span', { class: 'ball', style: `background: radial-gradient(circle at 35% 35%, #fff8, ${ball} 45%, #0006)` })] : []), label);
+  b.addEventListener('click', fn);
+  return b;
+}
+function previewState() {
+  const mk = (zone, id, extra) => ({ id, zone, space: null, slot: null, starEligible: false, ...extra });
+  return { players: [
+    { index: 0, color: 'blue', name: 'You', marbles: [mk('track', 0, { space: 80 }), mk('track', 1, { space: 3 }), mk('home', 2, { slot: 4 }), mk('base', 3)] },
+    { index: 1, color: 'yellow', name: 'Them', marbles: [mk('track', 0, { space: 45 }), mk('track', 1, { space: 82 }), mk('base', 2), mk('base', 3)] },
+  ], turnIndex: 0, phase: 'IN_TURN', dice: null, diceUsed: [false, false] };
+}
+function renderBoardPage() {
+  const cols = ['blue', 'pink', 'orange', 'yellow', 'green', 'white'];
+  $('pick-color').replaceChildren(chip(!settings.myColor, 'As dealt', () => setLook('myColor', '')),
+    ...cols.map(c => chip(settings.myColor === c, c[0].toUpperCase() + c.slice(1), () => setLook('myColor', c), BALL[c])));
+  $('pick-track').replaceChildren(...TRACK_LOOKS.map(([v, t]) => chip((settings.boardTrack ?? '') === v, t.replace(' track', ''), () => setLook('boardTrack', v))));
+  $('pick-marbles').replaceChildren(...MARBLE_LOOKS.map(([v, t]) => chip((settings.boardMarbles ?? '') === v, t.replace(' marbles', ''), () => setLook('boardMarbles', v))));
+  // Preview: I sit at the bottom as blue, shown in my colour.
+  const gs = previewState();
+  const fav = settings.myColor;
+  setColorShift(fav ? (armOfColor(fav) - armOfColor('blue') + 6) % 6 : 0);
+  setViewArm(0);
+  initBoard($('preview-canvas'));
+  drawBoard(gs);
+}
+$('btn-board').addEventListener('click', () => { show('screen-board'); renderBoardPage(); });
+$('btn-board-back').addEventListener('click', () => { initBoard($('board-canvas')); setColorShift(0); show('screen-home'); });
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
   applySquareNumbers();
