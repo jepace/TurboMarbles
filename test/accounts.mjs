@@ -3,6 +3,7 @@ import { openStore, closeStore, playerStats, playerGames } from '../src/Store.js
 import { handleAccountAction } from '../src/Accounts.js';
 import { createRoom, joinRoom, startGame, handleMove, handleDouble, handleTake, handleAnalyzeGame, storedGameReport, backgroundAnalysisTick,
   _reset, _getRoom, config as gmConfig } from '../src/GameManager.js';
+gmConfig.secureDice = false;   // the tests script dice through Math.random
 
 let passed = 0, failed = 0;
 const assert = (c, m) => { if (c) { console.log(`  ✓ ${m}`); passed++; } else { console.error(`  ✗ ${m}`); failed++; } };

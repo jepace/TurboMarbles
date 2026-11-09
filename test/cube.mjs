@@ -6,6 +6,7 @@ import {
   handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleResign, handleResignAnswer,
   _reset, _getRoom, config as gmConfig,
 } from '../src/GameManager.js';
+gmConfig.secureDice = false;   // the tests script dice through Math.random
 import { shouldDouble, shouldTake, cubefulEquity } from '../src/CubeDecision.js';
 import { analyzeCube } from '../src/CubeAnalysis.js';
 import { outcomeValuer } from '../src/Analysis.js';

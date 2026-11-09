@@ -1,6 +1,6 @@
 // GameManager.js — room registry, session tracking, disconnect timers
 
-import { randomBytes } from 'crypto';
+import { randomBytes, randomInt } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
@@ -51,6 +51,7 @@ export const config = {
   dropNextGameMs: 1500,  // match play: pause after a game (not the last) before the next one starts
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
+  secureDice: true,      // live dice from crypto.randomInt (tests turn it off to script rolls)
   robotThinkMs: 1500,
   robotCubeMs: 3000,     // play-out time for a robot's cube decision (more than a move: they're rare and costly)
 };
@@ -711,10 +712,20 @@ function robotAnswerDouble(room) {
 
 // ---------- Shared roll helper ----------
 
+// The dice of live games come from the operating system's secure random
+// generator: unbiased and unpredictable (Math.random's state can in principle
+// be worked out from enough output). Simulations — robot thinking, analysis
+// play-outs — keep their own fast, seedable generator.
+function liveDice() {
+  if (!config.secureDice) return rollDice();          // tests script the dice through Math.random
+  const a = randomInt(1, 7), b = randomInt(1, 7);
+  return a >= b ? [a, b] : [b, a];
+}
+
 // Performs a dice roll and transitions game to AWAITING_MOVE.
 // Called by both human handleRoll() and doRobotTurn() so roll logic stays in one place.
 function performRoll(game) {
-  const dice = rollDice();
+  const dice = liveDice();
   game.dice = dice;
   game.diceUsed = [false, false];
   game.phase = 'AWAITING_MOVE';

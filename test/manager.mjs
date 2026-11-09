@@ -9,6 +9,7 @@ import {
   _reset, _getRoom, handleSwapSeats,
 } from '../src/GameManager.js';
 import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
+gmConfig.secureDice = false;   // the tests script dice through Math.random
 
 // ---- Harness ----------------------------------------------------------------
 
