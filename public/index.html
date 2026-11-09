@@ -245,14 +245,20 @@
       <div id="cube-offer" class="board-popup" style="display:none">
         <div id="cube-offer-msg"></div>
         <div class="btn-row">
-          <button id="btn-take" class="btn-go" title="Take (T)">Take</button>
           <button id="btn-drop" class="secondary" title="Drop">Drop</button>
+          <button id="btn-take" class="btn-go" title="Take (T)">Take</button>
         </div>
+      </div>
+      <!-- During a turn: Undo / Skip / Commit (all actions share this corner; the main one is always rightmost) -->
+      <div id="commit-area" class="board-popup" style="display:none">
+        <button id="btn-undo" class="secondary" style="display:none" title="Undo the last die (U)">Undo</button>
+        <button id="btn-skip" class="secondary" style="display:none" title="Skip this die (−)">Skip die</button>
+        <button id="btn-commit" style="display:none" title="Commit (Enter)">Commit</button>
       </div>
       <!-- Turn start: Roll / Double, only when there is a choice (else it rolls itself) -->
       <div id="roll-popup" class="board-popup" style="display:none">
-        <button id="pop-roll" title="Roll (Enter)">Roll</button>
         <button id="btn-double" title="Offer a double before rolling (D)">Double</button>
+        <button id="pop-roll" title="Roll (Enter)">Roll</button>
       </div>
       <!-- Win overlay: covers only the board, so the sidebar log stays usable -->
       <div id="win-overlay" style="display:none">
@@ -306,11 +312,6 @@
         <span id="cube-owner"></span>
       </div>
       <div id="score-line" style="display:none"></div>
-      <div id="commit-area">
-        <button id="btn-commit" style="display:none">Commit Turn</button>
-        <button id="btn-skip" class="secondary" style="display:none" title="Skip this die (−)">Skip Die (−)</button>
-        <button id="btn-undo" class="secondary" style="display:none" title="Undo the last die (U)">Undo (U)</button>
-      </div>
       <div id="turn-banner"></div>
       <div id="move-hint" style="display:none"></div>
       <div id="player-list"></div>

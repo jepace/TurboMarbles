@@ -508,7 +508,7 @@ function doCommit() {
   commitPending = false;
   $('btn-commit').style.display = 'none';
   $('btn-undo').style.display   = 'none';
-  $('btn-skip').style.display   = 'none';
+  $('btn-skip').style.display   = 'none';  syncActionBar();
 }
 
 function doUndo() {
@@ -517,14 +517,20 @@ function doUndo() {
   commitPending = false;
   $('btn-commit').style.display = 'none';
   $('btn-undo').style.display   = 'none';
+  syncActionBar();
   legalMovesCache = null;
   selectedMarble = null;
   selectedMarbleMoves = []; selectedComboMoves = [];
 }
 
 // Undo available after any move; Commit only when both dice are used.
-function setUndoVisible(visible)   { $('btn-undo').style.display   = visible ? 'inline-flex' : 'none'; }
-function setCommitVisible(visible) { $('btn-commit').style.display  = visible ? 'inline-flex' : 'none'; }
+function setUndoVisible(visible)   { $('btn-undo').style.display   = visible ? 'inline-flex' : 'none'; syncActionBar(); }
+function setCommitVisible(visible) { $('btn-commit').style.display  = visible ? 'inline-flex' : 'none'; syncActionBar(); }
+// The action corner shows only while one of its buttons does.
+function syncActionBar() {
+  const any = ['btn-undo', 'btn-skip', 'btn-commit'].some(id => $(id).style.display !== 'none');
+  $('commit-area').style.display = any ? 'flex' : 'none';
+}
 
 // The first unused die whose ONLY legal moves are optional (e.g. the pass-home
 // "go around the board again" choice). Such a die can be voluntarily skipped
@@ -547,6 +553,7 @@ function skippableDieIndex() {
 // remaining option is to go around the board again.
 function updateSkipButton() {
   $('btn-skip').style.display = skippableDieIndex() >= 0 ? 'inline-flex' : 'none';
+  syncActionBar();
 }
 
 // ---- [Enter] key — create/start/roll/commit shortcuts ----
@@ -682,7 +689,7 @@ on('resignOffered', ({ playerIndex, mult, points }) => {
   if (playerIndex === myPlayerIndex) { $('turn-banner').textContent = `${playerName(1 - playerIndex)} to answer`; return; }
   const btn = (label, cls, accept) => { const b = el('button', { class: cls }, label); b.addEventListener('click', () => { send({ action: 'resignAnswer', accept }); $('resign-popup')?.remove(); }); return b; };
   boardPopup('resign-popup', el('div', {}, `${playerName(playerIndex)} resigns: ${ptsTxt(points)}`),
-    el('div', { class: 'btn-row' }, btn('Accept', 'btn-go', true), btn('Play on', 'secondary', false)));
+    el('div', { class: 'btn-row' }, btn('Play on', 'secondary', false), btn('Accept', 'btn-go', true)));
   $('turn-banner').textContent = 'Resignation offered';
 });
 on('resignAnswered', ({ playerIndex, accept }) => {

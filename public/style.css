@@ -170,7 +170,7 @@ button.secondary { background: #fff2; }
 #roll-popup button { font-size: 1.15rem; padding: 0.6rem 1.4rem; font-weight: 700; }
 #btn-double { background: #c8920a; color: #111; }
 #btn-double:hover { background: #e0a818; }
-@keyframes pop-in { from { opacity: 0; transform: scale(0.85); } }
+@keyframes pop-in { from { opacity: 0; } }
 
 /* ---- Commit / Undo area ---- */
 #commit-area {
@@ -568,3 +568,14 @@ body.with-nav #screen-board .card { max-width: 1200px; }
 #pw-pop { position: fixed; inset: 0; z-index: 70; background: #000a; align-items: center; justify-content: center; }
 #pw-pop .card { max-width: 420px; }
 input[type=password], input[type=email] { background: var(--surface); color: var(--text); border: 1px solid #ffffff2a; border-radius: 8px; padding: 0.7rem 0.9rem; font: inherit; font-size: 1rem; }
+
+/* Every in-game action sits in the board's bottom-right corner, buttons the
+   same size, the main one rightmost: the thumb always finds it. */
+.board-popup button { font-size: 1.15rem; padding: 0.6rem 1.2rem; min-width: 7.2rem; min-height: 2.9rem; font-weight: 700; justify-content: center; }
+.board-popup .btn-row { display: flex; gap: 0.8rem; justify-content: flex-end; }
+#commit-area.board-popup { flex-direction: row; gap: 0.8rem; }
+.board-popup button { flex: 0 0 auto; width: 7.6rem; min-width: 0; padding-left: 0.4rem; padding-right: 0.4rem; }
+#cube-offer.board-popup { align-items: flex-end; max-width: none; }
+#cube-offer-msg { align-self: stretch; text-align: center; max-width: 18rem; }
+.board-popup { width: max-content; }
+#cube-offer .btn-row { margin: 0; }
