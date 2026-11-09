@@ -124,11 +124,11 @@ function navigate(id) {
   if (id === 'screen-profile' || id === 'screen-settings') { openProfile(id, 'screen-home'); return; }
   if (id === 'screen-board') { show(id); renderBoardPage(); return; }
   if (id === 'screen-leaderboard') send({ action: 'leaderboard' });
-  if (id === 'screen-friends' || id === 'screen-messages') send({ action: 'friends' });
+  if (id === 'screen-friends') send({ action: 'friends' });
   show(id);
-  if (id === 'screen-messages') renderMessages();
+  if (id === 'screen-friends') renderMessages();
 }
-for (const b of document.querySelectorAll('#side-nav .nav-item')) b.addEventListener('click', () => navigate(b.dataset.go));
+for (const b of document.querySelectorAll('#side-nav [data-go]')) b.addEventListener('click', () => navigate(b.dataset.go));
 
 // ---- Quick match ----
 function updateQmOptions() {
@@ -136,9 +136,11 @@ function updateQmOptions() {
   $('qm-match-row').style.display = two ? '' : 'none';
   const m = Number($('qm-match').value);
   $('qm-cube-row').style.display = two && !m ? '' : 'none';
+  $('qm-jacoby-row').style.display = two && !m && $('qm-cube').checked ? '' : 'none';
 }
 $('qm-players').addEventListener('change', updateQmOptions);
 $('qm-match').addEventListener('change', updateQmOptions);
+$('qm-cube').addEventListener('change', updateQmOptions);
 updateQmOptions();
 $('btn-quick').addEventListener('click', () => {
   const n = Number($('qm-players').value), m = n === 2 ? Number($('qm-match').value) : 0;
@@ -176,8 +178,7 @@ function smallBtn(label, fn, cls = 'secondary') { const b = el('button', { class
 on('friends', data => {
   friendsData = data;
   const unread = data.friends.reduce((n, f) => n + (f.unread || 0), 0);
-  $('badge-friends').textContent = data.incoming.length || '';
-  $('badge-messages').textContent = unread || '';
+  $('badge-friends').textContent = (data.incoming.length + unread) || '';
   renderFriends(); renderMessages(); renderLobbyInvite();
 });
 on('presence', ({ id, online }) => {
@@ -191,16 +192,11 @@ function renderFriends() {
     ...sec('Requests', d.incoming.map(f => el('div', { class: 'friend-row' }, el('span', { class: 'fname' }, f.name),
       smallBtn('Accept', () => send({ action: 'friendRespond', id: f.id, accept: true }), 'btn-go'),
       smallBtn('Decline', () => send({ action: 'friendRespond', id: f.id, accept: false }))))),
-    ...sec(`Friends (${d.friends.length})`, d.friends.map(f => el('div', { class: 'friend-row' }, dot(f.online), el('span', { class: 'fname' }, f.name),
-      el('span', { class: 'muted' }, String(f.rating)),
-      smallBtn('Message' + (f.unread ? ` (${f.unread})` : ''), () => { dmWith = f.id; navigate('screen-messages'); }),
-      smallBtn('Remove', () => { if (confirm(`Remove ${f.name} from your friends?`)) send({ action: 'friendRemove', id: f.id }); }),
-      smallBtn('Block', () => { if (confirm(`Block ${f.name}? They can't message you, invite you or chat to you.`)) send({ action: 'block', id: f.id }); })))),
     ...sec('Sent requests', d.outgoing.map(f => el('div', { class: 'friend-row' }, el('span', { class: 'fname' }, f.name), el('span', { class: 'muted' }, 'waiting'),
       smallBtn('Cancel', () => send({ action: 'friendRemove', id: f.id }))))),
     ...sec('Blocked', d.blocked.map(f => el('div', { class: 'friend-row' }, el('span', { class: 'fname' }, f.name), smallBtn('Unblock', () => send({ action: 'unblock', id: f.id }))))),
   );
-  if (!box.children.length) box.append(el('p', { class: 'muted' }, 'No friends yet. Add someone by name.'));
+
 }
 $('btn-friend-add').addEventListener('click', () => { const n = $('friend-name').value.trim(); if (n) { send({ action: 'friendRequest', name: n }); $('friend-name').value = ''; } });
 $('friend-name').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-friend-add').click(); });
@@ -217,9 +213,11 @@ function renderMessages() {
   if (!friendsData.friends.length) $('dm-list').append(el('p', { class: 'muted' }, 'Add friends to message them.'));
   const f = friendsData.friends.find(x => x.id === dmWith);
   $('dm-input').disabled = $('btn-dm-send').disabled = !f;
-  $('dm-head').textContent = f ? f.name : 'Choose a friend.';
-  if (f && $('screen-messages').classList.contains('active') && !dmLogs.has(f.id)) send({ action: 'conversation', with: f.id });
-  if (f && f.unread && $('screen-messages').classList.contains('active')) { send({ action: 'conversation', with: f.id }); f.unread = 0; }
+  $('dm-head').replaceChildren(...(f ? [el('b', {}, f.name), el('span', { class: 'muted' }, ` ${f.rating}`), el('span', { style: 'flex:1' }),
+    smallBtn('Remove', () => { if (confirm(`Remove ${f.name} from your friends?`)) send({ action: 'friendRemove', id: f.id }); }),
+    smallBtn('Block', () => { if (confirm(`Block ${f.name}?`)) send({ action: 'block', id: f.id }); })] : [el('span', { class: 'muted' }, friendsData.friends.length ? 'Pick a friend.' : 'No friends yet.')]));
+  if (f && $('screen-friends').classList.contains('active') && !dmLogs.has(f.id)) send({ action: 'conversation', with: f.id });
+  if (f && f.unread && $('screen-friends').classList.contains('active')) { send({ action: 'conversation', with: f.id }); f.unread = 0; }
   renderDmLog();
 }
 function renderDmLog() {
@@ -231,9 +229,9 @@ on('conversation', ({ with: w, messages }) => { dmLogs.set(w, messages); if (w =
 on('dm', ({ message: m }) => {
   const other = me && m.from === me.id ? m.to : m.from;
   if (dmLogs.has(other)) dmLogs.get(other).push(m);
-  if (other === dmWith && $('screen-messages').classList.contains('active')) { renderDmLog(); if (m.from !== me?.id) send({ action: 'conversation', with: other }); }
-  else if (m.from !== me?.id) { const f = friendsData.friends.find(x => x.id === other); if (f) { f.unread = (f.unread || 0) + 1; $('badge-messages').textContent = friendsData.friends.reduce((n, x) => n + (x.unread || 0), 0) || ''; renderFriends(); }
-    if (!$('screen-messages').classList.contains('active')) toastAnywhere(`💬 ${m.fromName}: ${m.body.slice(0, 80)}`); }
+  if (other === dmWith && $('screen-friends').classList.contains('active')) { renderDmLog(); if (m.from !== me?.id) send({ action: 'conversation', with: other }); }
+  else if (m.from !== me?.id) { const f = friendsData.friends.find(x => x.id === other); if (f) { f.unread = (f.unread || 0) + 1; $('badge-friends').textContent = (friendsData.incoming.length + friendsData.friends.reduce((n, x) => n + (x.unread || 0), 0)) || ''; renderFriends(); }
+    if (!$('screen-friends').classList.contains('active')) toastAnywhere(`💬 ${m.fromName}: ${m.body.slice(0, 80)}`); }
 });
 function sendDm() { const t = $('dm-input').value.trim(); if (t && dmWith) { send({ action: 'dm', to: dmWith, body: t }); $('dm-input').value = ''; } }
 $('btn-dm-send').addEventListener('click', sendDm);
@@ -349,10 +347,13 @@ $('btn-switch-user').addEventListener('click', () => {
   saveKey(null); me = null; myPrefs = {}; myRating = null;
   updateLanding(); loginTab('login'); show('screen-landing');
 });
+// Friends & robots: a private room with the rules chosen above; robots and
+// invitations are added in its waiting room.
 $('btn-create').addEventListener('click', () => withName(() => {
-  show('screen-create');
-  const n = parseInt($('create-count').value, 10);
-  updateColorPicker(n >= 2 && n <= 6 ? n : 4);
+  const n = Number($('qm-players').value), m = n === 2 ? Number($('qm-match').value) : 0;
+  connect();
+  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor,
+    cube: n === 2 && (m ? m >= 2 : $('qm-cube').checked), matchTo: m, jacoby: n === 2 && !m && $('qm-cube').checked && $('qm-jacoby').checked });
 }));
 $('btn-join').addEventListener('click', () => withName(() => show('screen-join')));
 function validateName() {
@@ -871,12 +872,13 @@ updateLanding();
 let myPrefs = {};                  // account preferences (signed in)
 on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
 on('identity', ({ player, prefs, needsPassword }) => {
+  if (player && profileData) setTimeout(() => renderAccountSection(), 0);   // a rename shows at once
   if (player && needsPassword) { $('pw-pop-name').textContent = player.name; $('pw-pop').style.display = 'flex'; }
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
   for (const k of ['myColor', 'boardTrack', 'boardMarbles']) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); }
   applyBoardLook();
   updateLanding();
-  if (profileData && me) $('profile-name').textContent = me.name;
+
   // Signed in already: skip the login screen.
   if (me && $('screen-landing').classList.contains('active')) { myName = me.name; goHome(); }
 });
@@ -897,12 +899,17 @@ on('accountDeleted', () => {
 
 // Stats and Settings both come from the profile data.
 let profileFrom = 'screen-home', profileTarget = 'screen-profile';
-const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile' }); };
+const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile', ...(typeof statsFilter !== 'undefined' ? statsFilter : {}) }); };
 $('btn-profile-back').addEventListener('click', () => show(profileFrom));
 $('btn-settings-back').addEventListener('click', () => show(profileFrom));
 $('btn-game-profile').addEventListener('click', () => openProfile('screen-settings', 'screen-game'));
-for (const t of document.querySelectorAll('#screen-profile .tab')) {
-  t.addEventListener('click', () => { profileTab = t.dataset.tab; renderProfile(); });
+const statsFilter = { players: 'all', robots: 'any' };
+for (const [box, key] of [['sf-players', 'players'], ['sf-robots', 'robots']]) {
+  for (const b of $(box).querySelectorAll('.chip')) b.addEventListener('click', () => {
+    statsFilter[key] = b.dataset.v;
+    for (const x of $(box).querySelectorAll('.chip')) x.classList.toggle('on', x === b);
+    send({ action: 'profile', ...statsFilter });
+  });
 }
 
 on('profile', data => { profileData = data; if (data.rating) { myRating = data.rating; renderNavMe(); } renderProfile(); show(profileTarget); });
@@ -920,61 +927,53 @@ $('btn-more-games').addEventListener('click', () => {
 function renderProfile() {
   const d = profileData;
   if (!d) return;
-  $('profile-name').textContent = d.player.name;
-  for (const t of document.querySelectorAll('#screen-profile .tab')) t.classList.toggle('on', t.dataset.tab === profileTab);
-  const s = d.stats[profileTab];
+  const t = d.stats.totals;
   const pct = (a, b) => (b ? `${Math.round(100 * a / b)}%` : '—');
-  // Moves and cube together, in equity (a move's win-chance loss x is 2x).
-  const nDec = s.choices + s.cube_decisions;
-  const eqLostAll = 2 * s.eq_lost + (+s.cube_eq_lost);
-  const rate = nDec ? eqLostAll / nDec : null;
-  const rating = rate == null ? '—' : RATINGS.find(([max]) => rate < max)[1];
+  const nDec = t.choices + t.cube_decisions;
+  const rate = nDec ? (2 * t.eq_lost + (+t.cube_eq_lost)) / nDec : null;
+  const skill = rate == null ? '—' : RATINGS.find(([max]) => rate < max)[1];
   const stat = (v, k, title) => el('div', { class: 'stat', title: title ?? '' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'k' }, k));
+  const signed = n => `${n > 0 ? '+' : ''}${n}`;
   $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
-    stat(s.games, 'games'),
-    stat(`${s.wins} (${pct(s.wins, s.games)})`, 'won'),
-    stat(`${s.points > 0 ? '+' : ''}${s.points}`, 'money points', 'Each loser pays 1, 2 for an aggro, 3 for a baggro, × the cube'),
-    stat(`${s.aggro_wins} / ${s.aggro_losses}`, 'aggros won / lost'),
-    stat(`${s.doubles} / ${s.takes} / ${s.drops}`, 'doubles / takes / drops'),
-    stat(rating, 'rating', 'From the error rate in analysed games'),
-    stat(rate == null ? '—' : rate.toFixed(3), 'error rate per decision', 'Average equity lost per decision, moves and cube together (clear errors only)'),
-    stat(`${s.errors + s.cube_errors} / ${s.blunders + s.cube_blunders}`, 'errors / blunders',
-      `Moves ${s.errors} / ${s.blunders}, cube ${s.cube_errors} / ${s.cube_blunders} (${s.cube_decisions} cube decisions analysed)`),
-    stat(`${s.analysed} of ${s.games}`, 'games analysed'),
+    stat(d.rating?.rating ?? '—', 'rating'),
+    stat(skill, 'skill', rate == null ? 'Needs analysed games' : `Equity lost per decision: ${rate.toFixed(3)} (${t.analysed} games analysed)`),
+    stat(t.games, 'games'),
+    stat(pct(t.wins, t.games), 'won', `${t.wins} of ${t.games}; an average player would win ${pct(t.expected * t.games, t.games)}`),
+    stat(signed(t.points), 'points'),
+    stat(`${t.aggro_wins} / ${t.aggro_losses}`, 'aggros dealt / taken'),
   ));
-  // Error-rate trend (analysed games, this tab).
-  const tr = d.stats.trend.filter(t => !!t.vs_robot === (profileTab === 'robots'));
+  // Skill trend: equity lost per decision, game by game.
+  const tr = d.stats.trend;
   if (tr.length >= 2) {
     const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 80;
-    const ys = tr.map(t => 2 * t.eq_lost / t.choices), top = Math.max(0.1, ...ys);
+    const ys = tr.map(x => (2 * x.eq_lost + (+x.cube_eq_lost)) / (x.choices + x.cube_decisions)), top = Math.max(0.05, ...ys);
     const svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none');
     const pl = document.createElementNS(ns, 'polyline');
     pl.setAttribute('points', ys.map((y, i) => `${8 + i * (Wd - 16) / (ys.length - 1)},${Ht - 6 - (y / top) * (Ht - 12)}`).join(' '));
     pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#e94560'); pl.setAttribute('stroke-width', '2'); pl.setAttribute('vector-effect', 'non-scaling-stroke');
     svg.append(pl);
-    $('profile-trend').replaceChildren(svg, el('div', { class: 'muted', style: 'font-size:0.75rem' }, `Error rate per analysed game, moves (lower is better; top of chart ${top.toFixed(3)})`));
-  } else $('profile-trend').replaceChildren(el('div', { class: 'muted' }, 'Analyse a few games to see your error-rate trend.'));
-  // Head to head (people).
+    $('profile-trend').replaceChildren(el('h3', {}, 'Error rate'), svg, el('div', { class: 'muted', style: 'font-size:0.75rem' }, 'per game · lower is better'));
+  } else $('profile-trend').replaceChildren();
   const h = d.stats.headToHead;
   $('profile-h2h').replaceChildren(h.length ? el('table', { class: 'ptable' },
     el('tr', {}, el('th', {}, 'Opponent'), el('th', {}, 'Games'), el('th', {}, 'Won'), el('th', {}, 'Points')),
-    ...h.map(r => el('tr', {}, el('td', {}, r.name), el('td', {}, String(r.games)), el('td', {}, `${r.wins} (${pct(r.wins, r.games)})`),
-      el('td', {}, `${r.points > 0 ? '+' : ''}${r.points}`)))) : el('div', { class: 'muted' }, 'No games against other people yet.'));
-  // Game history (this tab).
-  const games = d.games.filter(g => g.vsRobot === (profileTab === 'robots'));
+    ...h.map(r => el('tr', {}, el('td', {}, r.name), el('td', {}, String(r.games)), el('td', {}, pct(r.wins, r.games)), el('td', {}, signed(r.points)))))
+    : el('div', { class: 'muted' }, '—'));
+  const games = d.games.filter(g => (statsFilter.players === 'all' || (statsFilter.players === '2' ? g.players === 2 : g.players >= 3))
+    && (statsFilter.robots === 'any' || !g.vsRobot));
   $('profile-games').replaceChildren(games.length ? el('table', { class: 'ptable' },
     el('tr', {}, el('th', {}, 'When'), el('th', {}, 'Players'), el('th', {}, 'Result'), el('th', {}, 'Points'), el('th', {}, 'Error rate')),
     ...games.map(g => {
-      const tr = el('tr', { class: 'click', title: 'Open this game' },
+      const row = el('tr', { class: 'click', title: 'Open' },
         el('td', {}, new Date(g.endedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })),
-        el('td', {}, g.seats.map((x, i) => (i === g.seat ? 'You' : x.name + (x.isRobot ? ' 🤖' : ''))).join(' · ') + (g.cube ? ' · cube' : '')),
+        el('td', {}, g.seats.map((x, i) => (i === g.seat ? 'You' : x.name + (x.isRobot ? ' 🤖' : ''))).join(' · ')),
         el('td', { class: g.won ? 'won' : 'lost' }, (g.won ? 'Won' : 'Lost') + (g.aggro ? ' (aggro)' : '')),
-        el('td', {}, g.players === 2 ? `${g.points > 0 ? '+' : ''}${g.points}` : '—'),
-        el('td', {}, g.errorRate == null ? (g.analysed ? '—' : 'not analysed') : eqOf(g.errorRate)));
-      tr.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
-      return tr;
-    })) : el('div', { class: 'muted' }, profileTab === 'robots' ? 'No games against robots yet.' : 'No games against people yet.'));
+        el('td', {}, signed(g.points)),
+        el('td', {}, g.errorRate == null ? '—' : eqOf(g.errorRate)));
+      row.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
+      return row;
+    })) : el('div', { class: 'muted' }, 'No games yet.'));
   $('btn-more-games').style.display = d.games.length >= 30 ? '' : 'none';
   renderAccountSection();
 }
@@ -991,39 +990,60 @@ function prefSelect(key, opts) {
   });
   return s;
 }
+// Small inline editors: a value with ✎; click to edit in place.
+function inlineEdit(display, makeForm) {
+  const box = el('span', { class: 'inline-edit' });
+  const view = () => { const pen = el('button', { class: 'icon-btn', title: 'Edit' }, '✎'); pen.addEventListener('click', () => box.replaceChildren(...makeForm(view))); box.replaceChildren(...display, pen); };
+  view();
+  return box;
+}
+function nameEditor() {
+  return inlineEdit([el('b', {}, me?.name ?? '')], done => {
+    const inp = el('input', { type: 'text', value: me?.name ?? '', maxLength: 20 });
+    const save = () => { const n = inp.value.trim(); if (n && n !== me?.name) send({ action: 'rename', name: n }); done(); };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') done(); });
+    setTimeout(() => inp.select(), 0);
+    return [inp, smallBtn('Save', save, 'btn-go'), smallBtn('Cancel', done)];
+  });
+}
+function emailEditor() {
+  return inlineEdit([], done => {
+    const inp = el('input', { type: 'email', value: profileData?.email ?? '', placeholder: 'you@example.com', maxLength: 200 });
+    const save = () => { const e = inp.value.trim(); if (e) send({ action: 'setEmail', email: e }); done(); };
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') done(); });
+    return [inp, smallBtn('Send link', save, 'btn-go'),
+      ...(profileData?.email ? [smallBtn('Remove', () => { send({ action: 'clearEmail' }); done(); })] : []), smallBtn('Cancel', done)];
+  });
+}
+function passwordEditor() {
+  return inlineEdit([el('span', { class: 'muted' }, profileData?.hasPassword ? '••••••••' : 'not set')], done => {
+    const cur = el('input', { type: 'password', placeholder: 'Current', maxLength: 200, autocomplete: 'current-password' });
+    const nw = el('input', { type: 'password', placeholder: 'New (8+ characters)', maxLength: 200, autocomplete: 'new-password' });
+    const save = () => {
+      if (nw.value.length < 8) { alert('Use 8 or more characters.'); return; }
+      send({ action: 'setPassword', password: nw.value, current: cur.value }); done();
+    };
+    return [...(profileData?.hasPassword ? [cur] : []), nw, smallBtn('Save', save, 'btn-go'), smallBtn('Cancel', done)];
+  });
+}
 function renderAccountSection(extra) {
   const box = $('profile-account');
   const btn = (label, fn, cls = 'secondary') => { const b = el('button', { class: cls }, label); b.addEventListener('click', fn); return b; };
   const section = (title, ...kids) => el('section', { class: 'panel' }, el('h3', {}, title), ...kids);
   const row = (label, ...kids) => el('div', { class: 'set-row' }, el('div', { class: 'set-label' }, label), el('div', { class: 'set-ctl' }, ...kids));
   box.replaceChildren(
-    section('Name',
-      row('Your name', el('b', {}, me?.name ?? '')),
-      row('Change it', el('input', { type: 'text', id: 'rename-input', placeholder: 'New name', maxLength: 20 }),
-        btn('Rename', () => { const n = $('rename-input').value.trim(); if (n) send({ action: 'rename', name: n }); }))),
+    section('Account', row('Name', nameEditor()),
+      row('Email', profileData?.email ? el('span', {}, profileData.email) : el('span', { class: 'muted' }, '—'), emailEditor())),
     section('Analysis',
       row('Opens on', prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['inacc', 'inaccuracies and worse'], ['all', 'all rolls']]),
         prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']]))),
-    section('Password',
-      ...(profileData?.hasPassword ? [row('Current', el('input', { type: 'password', id: 'pw-current', placeholder: 'Current password', maxLength: 200, autocomplete: 'current-password' }))] : []),
-      row(profileData?.hasPassword ? 'New' : 'Choose one', el('input', { type: 'password', id: 'pw-new', placeholder: '8 or more characters', maxLength: 200, autocomplete: 'new-password' }),
-        btn(profileData?.hasPassword ? 'Change password' : 'Set password', () => {
-          const password = $('pw-new').value;
-          if (password.length < 8) { alert('Use a password of 8 or more characters.'); return; }
-          send({ action: 'setPassword', password, current: $('pw-current')?.value });
-          $('pw-new').value = ''; if ($('pw-current')) $('pw-current').value = '';
-        }))),
-    section('Email',
-      row('For password resets', profileData?.email ? el('b', {}, profileData.email) : el('span', { class: 'muted' }, 'none'),
-        ...(profileData?.email ? [btn('Remove', () => { if (confirm('Remove your email? You could no longer reset a forgotten password.')) send({ action: 'clearEmail' }); })] : [])),
-      row(profileData?.email ? 'Change it' : 'Add one', el('input', { type: 'email', id: 'email-new', placeholder: 'you@example.com', maxLength: 200 }),
-        btn('Send confirmation', () => { const e = $('email-new').value.trim(); if (e) send({ action: 'setEmail', email: e }); }))),
-    section('Devices',
-      row('Signed in on', el('span', {}, `${profileData?.devices ?? 1} device${profileData?.devices === 1 ? '' : 's'}`)),
-      row('Lost a device?', btn('Sign out other devices', () => { if (confirm('Sign out every other device? They will need your password to log in again.')) send({ action: 'signOutOthers' }); })),
+    section('Security',
+      row('Password', passwordEditor()),
+      row('Devices', el('span', {}, `${profileData?.devices ?? 1} signed in`),
+        ...(profileData?.devices > 1 ? [btn('Sign out the others', () => { if (confirm('Sign out every other device?')) send({ action: 'signOutOthers' }); })] : [])),
       ...(extra ? [extra] : [])),
     section('Danger zone',
-      row('Delete account', btn('Delete my account', () => {
+      row('Account', btn('Delete account', () => {
         const c = prompt(`This deletes your account and stats for good (your past games stay in your opponents' histories, without your name). Type your name to confirm:`);
         if (c) send({ action: 'deleteAccount', confirm: c });
       }, 'secondary danger'))));

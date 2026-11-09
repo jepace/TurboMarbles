@@ -49,10 +49,11 @@ describe('games and stats', () => {
     { playerId: me.id, name: 'Stat', color: 'blue', isRobot: false, won: false, points: -1 },
     { playerId: null, name: 'Hazel', color: 'yellow', isRobot: true, won: true, points: 1 }] });
   saveAnalysis(g1, { rolls: [] }, [{ choices: 20, errors: 2, blunders: 1, eqLost: 0.3 }, { choices: 18, errors: 0, blunders: 0, eqLost: 0.05 }]);
-  const st = playerStats(me.id);
-  assert(st.people.games === 1 && st.people.wins === 1 && st.people.points === 4 && st.people.aggro_wins === 1 && st.people.doubles === 1, 'people stats');
-  assert(st.robots.games === 1 && st.robots.wins === 0 && st.robots.points === -1, 'robot games kept separate');
-  assert(st.people.choices === 20 && st.people.errors === 2 && Math.abs(st.people.eq_lost - 0.3) < 1e-9, 'analysis numbers counted');
+  const people = playerStats(me.id, { robots: 'none' }), all = playerStats(me.id);
+  const st = people;
+  assert(people.totals.games === 1 && people.totals.wins === 1 && people.totals.points === 4 && people.totals.aggro_wins === 1, 'people-only stats');
+  assert(all.totals.games === 2 && all.totals.points === 3, 'all games: the robot game counts too');
+  assert(people.totals.choices === 20 && Math.abs(people.totals.eq_lost - 0.3) < 1e-9, 'analysis numbers counted');
   assert(st.headToHead.length === 1 && st.headToHead[0].name === 'Opp' && st.headToHead[0].wins === 1, 'head to head vs people only');
   assert(st.trend.length === 1, 'error trend from analysed games');
   const list = playerGames(me.id);
@@ -62,7 +63,7 @@ describe('games and stats', () => {
   assert(playedIn(me.id, g1) && !playedIn(register('Stranger').player.id, g1), 'only players of a game may open it');
   deletePlayer(you.id);
   assert(getGame(g1).seats[1].name === 'deleted player' && getGame(g1).seats[1].playerId === null, 'deleting an account anonymises their seats');
-  assert(playerStats(me.id).people.games === 1, "others' history survives");
+  assert(playerStats(me.id, { robots: 'none' }).totals.games === 1, "others' history survives");
 });
 
 closeStore();

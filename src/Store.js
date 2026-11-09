@@ -529,32 +529,34 @@ export function getGame(gameId) {
 // ---- Stats --------------------------------------------------------------------------
 
 // A player's stats, split into games against people and against robots.
-export function playerStats(playerId) {
+// A player's stats, filtered: players 'all' | '2' | '3+'; robots 'any' (games
+// with a robot seat count too) | 'none' (people only).
+export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) {
   if (!db) return null;
-  const block = vsRobot => db.prepare(`
+  const where = ['s.player_id = ?'];
+  if (players === '2') where.push('g.n_players = 2');
+  if (players === '3+') where.push('g.n_players >= 3');
+  if (robots === 'none') where.push('g.vs_robot = 0');
+  const W = where.join(' AND ');
+  const totals = db.prepare(`
     SELECT COUNT(*) games, COALESCE(SUM(s.won),0) wins, COALESCE(SUM(s.points),0) points,
+           COALESCE(AVG(1.0 / g.n_players),0) expected,
            COALESCE(SUM(CASE WHEN s.aggro AND s.won THEN 1 ELSE 0 END),0) aggro_wins,
            COALESCE(SUM(CASE WHEN s.aggro AND NOT s.won THEN 1 ELSE 0 END),0) aggro_losses,
-           COALESCE(SUM(s.doubles),0) doubles, COALESCE(SUM(s.takes),0) takes, COALESCE(SUM(s.drops),0) drops,
-           COALESCE(SUM(CASE WHEN g.n_players = 2 THEN 1 ELSE 0 END),0) two_player,
-           COALESCE(SUM(s.choices),0) choices, COALESCE(SUM(s.errors),0) errors, COALESCE(SUM(s.blunders),0) blunders,
-           COALESCE(SUM(s.eq_lost),0) eq_lost, COALESCE(SUM(CASE WHEN s.choices IS NOT NULL THEN 1 ELSE 0 END),0) analysed,
-           COALESCE(SUM(s.cube_decisions),0) cube_decisions, COALESCE(SUM(s.cube_errors),0) cube_errors,
-           COALESCE(SUM(s.cube_blunders),0) cube_blunders, COALESCE(SUM(s.cube_eq_lost),0) cube_eq_lost
-    FROM seats s JOIN games g ON g.id = s.game_id
-    WHERE s.player_id = ? AND g.vs_robot = ?`).get(playerId, vsRobot ? 1 : 0);
-  // Opponents: per person (people games) — head to head.
+           COALESCE(SUM(s.choices),0) choices, COALESCE(SUM(s.eq_lost),0) eq_lost,
+           COALESCE(SUM(CASE WHEN s.choices IS NOT NULL THEN 1 ELSE 0 END),0) analysed,
+           COALESCE(SUM(s.cube_decisions),0) cube_decisions, COALESCE(SUM(s.cube_eq_lost),0) cube_eq_lost
+    FROM seats s JOIN games g ON g.id = s.game_id WHERE ${W}`).get(playerId);
   const h2h = db.prepare(`
-    SELECT o.player_id id, MAX(o.name) name, COUNT(*) games, SUM(me.won) wins, SUM(me.points) points
-    FROM seats me JOIN seats o ON o.game_id = me.game_id AND o.seat != me.seat JOIN games g ON g.id = me.game_id
-    WHERE me.player_id = ? AND o.is_robot = 0 AND o.player_id IS NOT NULL
+    SELECT o.player_id id, MAX(o.name) name, COUNT(*) games, SUM(s.won) wins, SUM(s.points) points
+    FROM seats s JOIN seats o ON o.game_id = s.game_id AND o.seat != s.seat JOIN games g ON g.id = s.game_id
+    WHERE ${W} AND o.is_robot = 0 AND o.player_id IS NOT NULL
     GROUP BY o.player_id ORDER BY games DESC LIMIT 50`).all(playerId);
-  // Error-rate trend: analysed games, oldest first.
   const trend = db.prepare(`
-    SELECT g.ended_at t, s.choices, s.eq_lost, g.vs_robot
+    SELECT g.ended_at t, s.choices, s.eq_lost, COALESCE(s.cube_decisions,0) cube_decisions, COALESCE(s.cube_eq_lost,0) cube_eq_lost
     FROM seats s JOIN games g ON g.id = s.game_id
-    WHERE s.player_id = ? AND s.choices > 0 ORDER BY g.ended_at DESC LIMIT 200`).all(playerId).reverse();
-  return { people: block(false), robots: block(true), headToHead: h2h, trend };
+    WHERE ${W} AND s.choices > 0 ORDER BY g.ended_at DESC LIMIT 200`).all(playerId).reverse();
+  return { totals, headToHead: h2h, trend };
 }
 
 // The player's games, newest first (for the history list).

@@ -594,3 +594,11 @@ input[type=password], input[type=email] { background: var(--surface); color: var
 #action-slot .resign-popup .btn-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 #action-slot .resign-popup .btn-row button:last-child { grid-column: 3; }
 #action-slot #cube-offer { max-width: none; padding: 0; background: none; border: none; }
+.inline-edit { display: inline-flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.inline-edit input { max-width: 240px; padding: 0.35rem 0.6rem; font-size: 0.95rem; }
+.icon-btn { background: none; color: var(--muted); padding: 0 0.3rem; font-size: 1rem; border: none; }
+.icon-btn:hover { color: var(--text); }
+.nav-brand { background: none; border: none; text-align: left; cursor: pointer; }
+.dm-head { display: flex; align-items: center; gap: 0.5rem; }
+.stats-filters { display: flex; gap: 1rem; flex-wrap: wrap; }
+body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-height: var(--app-h, 100dvh); }

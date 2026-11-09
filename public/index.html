@@ -60,12 +60,11 @@
 
 <!-- Side navigation for every page outside a game (shown with body.with-nav) -->
 <nav id="side-nav">
-  <div class="nav-brand">TurboMarbles</div>
+  <button class="nav-brand" data-go="screen-home" title="New game">TurboMarbles</button>
   <button class="nav-item" data-go="screen-home">🎲 Play</button>
-  <button class="nav-item" data-go="screen-leaderboard">🏆 Leaderboard</button>
-  <button class="nav-item acct" data-go="screen-friends">👥 Friends <span class="nav-badge" id="badge-friends"></span></button>
-  <button class="nav-item acct" data-go="screen-messages">💬 Messages <span class="nav-badge" id="badge-messages"></span></button>
   <button class="nav-item acct" data-go="screen-profile">📊 Stats</button>
+  <button class="nav-item acct" data-go="screen-friends">👥 Friends <span class="nav-badge" id="badge-friends"></span></button>
+  <button class="nav-item" data-go="screen-leaderboard">🏆 Leaderboard</button>
   <button class="nav-item" data-go="screen-board">🎨 Board</button>
   <button class="nav-item acct" data-go="screen-settings">⚙ Settings</button>
   <div class="nav-foot">
@@ -77,30 +76,23 @@
 <!-- Play -->
 <div id="screen-home" class="screen page">
   <div class="card">
-    <h2>Play</h2>
+    <h2>New game</h2>
     <p id="home-hello" class="muted"></p>
     <section class="panel">
-      <h3>Quick match</h3>
-      <p class="muted">Play someone who wants the same kind of game.</p>
       <div class="form-row">
         <label>Players <select id="qm-players"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
-        <label id="qm-match-row">Match to <select id="qm-match"><option value="0">money game</option><option value="1">1 point</option><option value="3" selected>3 points</option><option value="5">5 points</option><option value="7">7 points</option></select></label>
-        <label id="qm-cube-row"><input type="checkbox" id="qm-cube" checked> Doubling cube</label>
+        <label id="qm-match-row">Match <select id="qm-match"><option value="0">single games</option><option value="1">to 1</option><option value="3" selected>to 3</option><option value="5">to 5</option><option value="7">to 7</option><option value="9">to 9</option></select></label>
+        <label id="qm-cube-row"><input type="checkbox" id="qm-cube" checked> Cube</label>
+        <label id="qm-jacoby-row"><input type="checkbox" id="qm-jacoby"> Jacoby</label>
       </div>
       <div class="form-row">
-        <button id="btn-quick" class="btn-go">Find a game</button>
+        <button id="btn-quick" class="btn-go">Find opponents</button>
+        <button id="btn-create">Friends &amp; robots</button>
         <span id="qm-status" class="muted"></span>
         <button id="btn-quick-cancel" class="secondary" style="display:none">Cancel</button>
       </div>
     </section>
-    <section class="panel">
-      <h3>Private game</h3>
-      <p class="muted">Choose the players and rules, add robots, and invite friends.</p>
-      <div class="form-row">
-        <button id="btn-create">Create Game</button>
-        <button id="btn-join" class="secondary">Join with a code</button>
-      </div>
-    </section>
+    <button id="btn-join" class="link-btn" style="align-self:flex-start">Join with a code</button>
   </div>
 </div>
 
@@ -108,29 +100,22 @@
 <div id="screen-leaderboard" class="screen page">
   <div class="card">
     <h2>Leaderboard</h2>
-    <p class="muted">Rating from games against people: everyone starts at 1400; beating someone takes points from them (more for beating a higher rating), and twice as many if the analysis shows you also played better.</p>
+
     <div id="lb-me" class="muted"></div>
     <table class="table" id="lb-table"></table>
   </div>
 </div>
 
-<!-- Friends -->
+<!-- Friends (and messages) -->
 <div id="screen-friends" class="screen page">
   <div class="card">
     <h2>Friends</h2>
-    <div class="form-row"><input id="friend-name" type="text" maxlength="20" placeholder="Player name"><button id="btn-friend-add">Add friend</button></div>
+    <div class="form-row"><input id="friend-name" type="text" maxlength="20" placeholder="Add a friend by name"><button id="btn-friend-add">Add</button></div>
     <div id="friends-box"></div>
-  </div>
-</div>
-
-<!-- Messages -->
-<div id="screen-messages" class="screen page">
-  <div class="card">
-    <h2>Messages</h2>
     <div class="dm-layout">
       <div id="dm-list"></div>
       <div class="dm-pane">
-        <div id="dm-head" class="muted">Choose a friend.</div>
+        <div id="dm-head" class="dm-head muted">Pick a friend.</div>
         <div id="dm-log"></div>
         <div class="form-row"><input id="dm-input" type="text" maxlength="500" placeholder="Message" disabled><button id="btn-dm-send" disabled>Send</button></div>
       </div>
@@ -193,12 +178,12 @@
 <div id="screen-profile" class="screen page">
   <div class="card profile-card">
     <div class="profile-head">
-      <h2 id="profile-name"></h2>
+      <h2>Stats</h2>
       <button id="btn-profile-back" class="secondary">Back</button>
     </div>
-    <div class="tabs">
-      <button class="tab on" data-tab="people">vs People</button>
-      <button class="tab" data-tab="robots">vs Robots</button>
+    <div class="stats-filters">
+      <div class="chips" id="sf-players"><button class="chip on" data-v="all">All games</button><button class="chip" data-v="2">2 players</button><button class="chip" data-v="3+">3+ players</button></div>
+      <div class="chips" id="sf-robots"><button class="chip on" data-v="any">With robots</button><button class="chip" data-v="none">People only</button></div>
     </div>
     <div id="profile-stats"></div>
     <div id="profile-trend"></div>
