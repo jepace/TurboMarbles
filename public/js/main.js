@@ -108,7 +108,7 @@ const $ = id => document.getElementById(id);
 // ---- Landing ----
 // Login → home (the lobby to everything).
 function goHome() {
-  $('home-hello').textContent = me ? '' : `Playing as ${myName} (guest). Keep your stats, rating and friends by signing in: Switch player, then tick "Keep my stats".`;
+  $('home-hello').textContent = me ? '' : `Playing as ${myName} (guest). Keep your stats, rating and friends by signing in: Log out, then tick "Keep my stats".`;
   renderNavMe();
   for (const b of document.querySelectorAll('#side-nav .acct')) b.style.display = me ? '' : 'none';
   show('screen-home');

@@ -476,9 +476,9 @@ button.danger { color: #ff8080; }
 .home-main button { font-size: 1.15rem; padding: 0.8rem 1.4rem; }
 .home-more { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
 /* ---- Board page ---- */
-.card.board-card { max-width: 860px; }
+.card.board-card { max-width: 1200px; }
 .board-settings { display: flex; gap: 1.2rem; flex-wrap: wrap; align-items: flex-start; }
-.board-preview { width: min(380px, 90vw); height: min(380px, 90vw); flex: 0 0 auto; }
+.board-preview { width: min(640px, calc(100vh - 160px), 90vw); height: min(640px, calc(100vh - 160px), 90vw); flex: 0 0 auto; }
 .board-opts { flex: 1 1 260px; }
 .board-opts h3 { margin: 0.8rem 0 0.4rem; font-size: 0.95rem; }
 .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
@@ -557,3 +557,6 @@ select { background: #16203a; color: var(--text); border: 1px solid #ffffff2a; b
 .tip-line { display: flex; align-items: center; gap: 5px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tip-line.cur { opacity: 1; font-weight: 700; }
 .badge.inacc { background: #ffffff14; color: #c9d3e6; }
+body.with-nav #screen-board .card { max-width: 1200px; }
+.board-opts { min-width: 0; max-width: 380px; }
+.board-preview { width: min(760px, calc(100vh - 150px), 90vw); height: min(760px, calc(100vh - 150px), 90vw); }
