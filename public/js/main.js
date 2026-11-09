@@ -108,6 +108,7 @@ const $ = id => document.getElementById(id);
 // ---- Landing ----
 // Login → home (the lobby to everything).
 function goHome() {
+  if (pendingJoin) { const code = pendingJoin; pendingJoin = null; myName = me?.name ?? myName; connect(); send({ action: 'joinRoom', code, name: myName }); return; }
   $('home-hello').textContent = me ? '' : `Playing as ${myName} (guest). Keep your stats, rating and friends by signing in: Log out, then tick "Keep my stats".`;
   renderNavMe();
   for (const b of document.querySelectorAll('#side-nav .acct')) b.style.display = me ? '' : 'none';
@@ -317,7 +318,12 @@ on('resetSent', () => loginMsg("If that account has a confirmed email, we've sen
 // Links from emails: ?reset=… (new password) and ?verify=… (confirm an email).
 const urlQ = new URLSearchParams(location.search);
 const resetToken = urlQ.get('reset'), verifyToken = urlQ.get('verify');
-if (resetToken || verifyToken) history.replaceState(null, '', location.pathname);
+const joinCode = (urlQ.get('join') ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || null;
+if (resetToken || verifyToken || joinCode) history.replaceState(null, '', location.pathname);
+// Opened from an invite link: straight into the game. Signed in → join at once;
+// otherwise the Guest tab (just a name) is shown first.
+let pendingJoin = joinCode;
+if (pendingJoin) { loginTab('guest'); loginMsg(`Joining game ${pendingJoin}. Pick a name (or log in).`); }
 if (resetToken) loginTab('reset');
 $('form-reset').addEventListener('submit', e => {
   e.preventDefault();
@@ -354,7 +360,13 @@ $('btn-create').addEventListener('click', () => withName(() => {
   send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor,
     cube: n === 2 && (m ? m >= 2 : $('qm-cube').checked), matchTo: m });
 }));
-$('btn-join').addEventListener('click', () => withName(() => show('screen-join')));
+// Join by code, right on the Play page.
+$('form-join-home').addEventListener('submit', e => {
+  e.preventDefault();
+  const code = $('home-join-code').value.trim().toUpperCase();
+  if (!code) { $('home-join-code').focus(); return; }
+  withName(() => { connect(); send({ action: 'joinRoom', code, name: myName }); });
+});
 function validateName() {
   const n = me ? me.name : $('landing-name').value.trim();
   if (!n) { $('landing-name').focus(); return false; }
@@ -450,6 +462,14 @@ $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-
 // ---- Lobby ----
 $('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }));
 $('btn-start').addEventListener('click', () => send({ action: 'startGame' }));
+// An invite link: opening it joins this game (after a name, for guests).
+$('btn-copy-link').addEventListener('click', () => {
+  const link = `${location.origin}/?join=${$('lobby-code').textContent}`;
+  navigator.clipboard.writeText(link).then(() => {
+    const btn = $('btn-copy-link'); btn.textContent = 'Copied ✓';
+    setTimeout(() => { btn.textContent = 'Copy invite link'; }, 1500);
+  });
+});
 $('btn-copy-code').addEventListener('click', () => {
   const code = $('lobby-code').textContent;
   navigator.clipboard.writeText(code).then(() => {
@@ -832,6 +852,8 @@ on('error', ({ code, message }) => {
     return;
   }
   if (code && code.startsWith('ANALYSIS')) resetAnalyzeButton();
+  // An invite link whose game has gone: carry on to the Play page.
+  if (code === 'JOIN_FAILED' && $('screen-landing').classList.contains('active')) { alert(message); goHome(); return; }
   if (code === 'STATS_UNAVAILABLE') { statsUnavailable = true; pendingAfterRegister = null; updateLanding(); loginMsg('Accounts are off on this server: play as a guest.'); return; }
   // Login screen problems show under the form.
   if ($('screen-landing').classList.contains('active') && ['BAD_LOGIN', 'BAD_PASSWORD', 'BAD_EMAIL', 'NAME_TAKEN', 'RATE_LIMITED', 'BAD_TOKEN', 'MISSING_FIELDS'].includes(code)) {

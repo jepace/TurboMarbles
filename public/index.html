@@ -91,7 +91,13 @@
         <button id="btn-quick-cancel" class="secondary" style="display:none">Cancel</button>
       </div>
     </section>
-    <button id="btn-join" class="link-btn" style="align-self:flex-start">Join with a code</button>
+    <section class="panel">
+      <h3>Join a game</h3>
+      <form id="form-join-home" class="form-row">
+        <input id="home-join-code" type="text" maxlength="6" placeholder="Code" autocomplete="off" style="text-transform:uppercase; max-width:9rem; letter-spacing:2px">
+        <button id="btn-home-join" type="submit">Join</button>
+      </form>
+    </section>
   </div>
 </div>
 
@@ -205,7 +211,7 @@
 <div id="screen-lobby" class="screen">
   <div class="card wide">
     <h2>Waiting Room</h2>
-    <p>Room code: <strong id="lobby-code"></strong><button id="btn-copy-code" class="btn-icon" title="Copy code">⧉</button> &nbsp;·&nbsp; <span id="lobby-size"></span></p>
+    <p>Room code: <strong id="lobby-code"></strong><button id="btn-copy-code" class="btn-icon" title="Copy code">⧉</button> <button id="btn-copy-link" class="secondary small" title="A link that brings them straight into this game">Copy invite link</button> &nbsp;·&nbsp; <span id="lobby-size"></span></p>
     <ul id="lobby-slots"></ul>
     <div class="btn-row" id="host-controls" style="display:none">
       <button id="btn-add-robot" class="secondary">+ Robot</button>
