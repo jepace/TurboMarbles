@@ -122,7 +122,6 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   aggro, 3 for a baggro (× the cube); with 3+ players the winner collects from every loser. Robot cube play: `src/CubeDecision.js` (exact duel tables, else played-out estimates;
   Janowski money-play formulas). Cube decisions are analysed too (`src/CubeAnalysis.js`): in-game feedback
   (`cubeFeedback`) and post-game rows with no double / double-take / double-drop equities.
-- Jacoby rule (money play option): an aggro only counts double once the cube has been turned.
 - Matches to N points (2 players; Crawford rule: no doubling in the first game after someone reaches
   N−1, then post-Crawford). Match score per room; Rematch continues the match, then starts a new one.
   Cube decisions in a match use a match equity table for this game (`src/MatchEquity.js`, from the
@@ -134,7 +133,7 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   friends by request/accept with presence and invites; direct messages between friends; in-game chat;
   blocks. Account actions in `src/Accounts.js`; quick match and chat in `src/server.js` / GameManager.
 - Move analysis values each played-out ending by what it is worth (`outcomeValuer` in `src/Analysis.js`):
-  money ±1/±2/±3 per cube unit (Jacoby: single until turned); match: match-winning chances after the result
+  money ±1/±2/±3 per cube unit; match: match-winning chances after the result
   at the game's starting score and cube, as EMG (`game._valueCtx`); 3+ players: plain win chance. The instant
   (evaluator) pass still judges by win chance only.
 - Analysis numbers are all **equity** (decimals of the stake; losing a game = 1.0): a move's win-chance

@@ -262,15 +262,6 @@ describe('3+ players — every loser pays: 1, aggro 2, baggro 3', () => {
   assert(r.points === 6 && r.losers.map(l => l.points).join() === '1,2,3' && r.baggro, `winner +6, losers −1 −2 −3 (${r.losers.map(l => l.points)})`);
 });
 
-describe('Jacoby rule — aggros count only once the cube has been turned', () => {
-  const mk = () => { const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true, jacoby: true }); return g; };
-  const g = mk();
-  assert(gameResult(g, 0).points === 1 && !gameResult(g, 0).aggro, 'cube at 1: a baggro scores 1');
-  Object.assign(g.players[1].marbles[1], { zone: 'track', space: 10 });
-  g.cube.value = 2;
-  assert(gameResult(g, 0).points === 4 && gameResult(g, 0).aggro, 'cube turned to 2: an aggro scores 4');
-});
-
 await describe('match play — score, Crawford game, post-Crawford, match over', async () => {
   _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0;
   const host = mockWs(), guest = mockWs();
@@ -364,8 +355,6 @@ describe('move analysis values endings by score: money aggro/baggro, match equit
   const money = outcomeValuer(g, 0, {});
   const eq = u => 2 * u - 1;
   assert(eq(money(end(0, 1))) === 1 && eq(money(end(0, 0))) === 2 && eq(money(end(1, 0))) === -2, 'money: single +1, aggro +2, aggro loss −2');
-  const jac = outcomeValuer(g, 0, { jacoby: true });
-  assert(eq(jac(end(0, 0))) === 1, 'Jacoby, cube unturned: an aggro counts single');
   const dmp = outcomeValuer(g, 0, { match: { length: 3, score: [2, 2], crawfordUsed: true } });
   assert(Math.abs(eq(dmp(end(0, 0))) - 1) < 1e-9 && Math.abs(eq(dmp(end(1, 0))) + 1) < 1e-9, 'match at 1-away/1-away: an aggro is worth no more than a single');
   const behind = outcomeValuer(g, 0, { match: { length: 5, score: [0, 3], crawfordUsed: true } });

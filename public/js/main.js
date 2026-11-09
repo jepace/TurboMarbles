@@ -136,7 +136,6 @@ function updateQmOptions() {
   $('qm-match-row').style.display = two ? '' : 'none';
   const m = Number($('qm-match').value);
   $('qm-cube-row').style.display = two && !m ? '' : 'none';
-  $('qm-jacoby-row').style.display = two && !m && $('qm-cube').checked ? '' : 'none';
 }
 $('qm-players').addEventListener('change', updateQmOptions);
 $('qm-match').addEventListener('change', updateQmOptions);
@@ -353,7 +352,7 @@ $('btn-create').addEventListener('click', () => withName(() => {
   const n = Number($('qm-players').value), m = n === 2 ? Number($('qm-match').value) : 0;
   connect();
   send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor,
-    cube: n === 2 && (m ? m >= 2 : $('qm-cube').checked), matchTo: m, jacoby: n === 2 && !m && $('qm-cube').checked && $('qm-jacoby').checked });
+    cube: n === 2 && (m ? m >= 2 : $('qm-cube').checked), matchTo: m });
 }));
 $('btn-join').addEventListener('click', () => withName(() => show('screen-join')));
 function validateName() {
@@ -407,7 +406,7 @@ $('btn-create-confirm').addEventListener('click', () => {
   connect();
   const matchTo = n === 2 ? Math.max(0, Math.min(25, parseInt($('create-match').value, 10) || 0)) : 0;
   send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor, cube: n === 2 && (matchTo ? matchTo >= 2 : $('create-cube').checked),
-    matchTo, jacoby: n === 2 && !matchTo && $('create-cube').checked && $('create-jacoby').checked });
+    matchTo });
 });
 $('btn-create-back').addEventListener('click', () => show('screen-home'));
 // Enter on player-count field → confirm create
@@ -424,17 +423,13 @@ function updateCubeOption(n) {
   if (!ok) $('create-cube').checked = false;
   $('create-cube-note').textContent = ok ? '' : '— 2 players only';
   $('create-cube-row').style.opacity = ok ? '1' : '0.55';
-  // Matches: two players. Jacoby: money play with the cube only.
+  // Matches: two players.
   $('create-match').disabled = !ok;
   $('create-match-row').style.opacity = ok ? '1' : '0.55';
   const mlen = ok ? (parseInt($('create-match').value, 10) || 0) : 0;
   const match = mlen > 0;
   // A match is played with the cube (a 1-point match without): not a choice.
   if (match) { $('create-cube').checked = mlen >= 2; $('create-cube').disabled = true; }
-  const jok = ok && $('create-cube').checked && !match;
-  $('create-jacoby').disabled = !jok;
-  if (!jok) $('create-jacoby').checked = false;
-  $('create-jacoby-row').style.opacity = jok ? '1' : '0.55';
 }
 $('create-cube').addEventListener('change', () => updateCubeOption(parseInt($('create-count').value, 10)));
 $('create-match').addEventListener('input', () => updateCubeOption(parseInt($('create-count').value, 10)));
@@ -1894,12 +1889,12 @@ $('opt-analysis').addEventListener('change', e => {
 });
 
 on('roomCreated', () => renderLobbyInvite());
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, jacoby, matchTo }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, matchTo }) => {
   roomId = rid;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
-  $('lobby-size').textContent = `${totalPlayers} players` + (matchTo ? ` · match to ${matchTo}` : '') + (cube ? ' · doubling cube' : '') + (jacoby ? ' · Jacoby' : '');
+  $('lobby-size').textContent = `${totalPlayers} players` + (matchTo ? ` · match to ${matchTo}` : '') + (cube ? ' · doubling cube' : '');
   $('host-controls').style.display = 'flex';
   $('lobby-wait-msg').style.display = 'none';
   renderLobbySlots(slots ?? [{ index: 0, name: myName, color: color ?? 'yellow', isRobot: false, filled: true }]);

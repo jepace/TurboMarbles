@@ -239,7 +239,7 @@ function dispatch(ws, msg) {
       if (!Number.isInteger(n) || n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
       const hostColor = typeof msg.hostColor === 'string' ? msg.hostColor : undefined;
       const matchTo = Number.isInteger(msg.matchTo) && msg.matchTo >= 1 && msg.matchTo <= 25 ? msg.matchTo : 0;
-      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, jacoby: msg.jacoby === true, matchTo });
+      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo });
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
       ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });

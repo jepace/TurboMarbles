@@ -30,7 +30,7 @@ export function trackDistance(from, to) {
 
 // --- State factory ---
 
-export function createGame(players, armIndices, initialTurnIndex, { cube = false, jacoby = false, crawford = false, away = null } = {}) {
+export function createGame(players, armIndices, initialTurnIndex, { cube = false, crawford = false, away = null } = {}) {
   // players: array of { id, name, color, isRobot }
   // armIndices: optional explicit arm index per player (overrides ARM_MAP default)
   // Assign player indices and configs; use ARM_MAP so each player occupies the
@@ -66,8 +66,6 @@ export function createGame(players, armIndices, initialTurnIndex, { cube = false
     // (null = centred). cubeOffer is set while a double awaits an answer.
     // crawford: this is the Crawford game of a match — no doubling.
     cube: cube && gamePlayers.length === 2 ? { value: 1, owner: null, ...(crawford ? { crawford: true } : {}), ...(away ? { away: away.slice() } : {}) } : null,
-    // Jacoby rule (money play): an aggro only counts double once the cube has been turned.
-    jacoby: !!jacoby,
     cubeOffer: null,
     // With a cube: { winner, points, aggro, dropped } once the game is over.
     result: null,
@@ -157,13 +155,11 @@ export function lossMultiple(player) {
   return 1;
 }
 // The result of a won game. Every loser pays the winner stake × multiple
-// (the stake is the cube's value, else 1). Jacoby: with the cube never turned
-// (still at 1), aggros and baggros count as single games.
+// (the stake is the cube's value, else 1).
 // { winner, points (the winner's total), losers: [{ pi, points }], aggro, baggro, dropped }
 export function gameResult(state, winner) {
   const stake = state.cube?.value ?? 1;
-  const single = state.jacoby && stake === 1;
-  const losers = state.players.map((p, pi) => ({ pi, mult: single ? 1 : lossMultiple(p) }))
+  const losers = state.players.map((p, pi) => ({ pi, mult: lossMultiple(p) }))
     .filter(l => l.pi !== winner).map(l => ({ pi: l.pi, points: stake * l.mult, mult: l.mult }));
   const top = Math.max(1, ...losers.map(l => l.mult));
   return { winner, points: losers.reduce((s, l) => s + l.points, 0), losers,

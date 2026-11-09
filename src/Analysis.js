@@ -183,17 +183,15 @@ function mulberry32(seed) {
 // Play-outs are scored by what the ending is worth to the mover, on a 0–1
 // "win-like" scale u, so a difference of x in u is 2x in equity (like a
 // win-chance difference was before):
-//   money (2 players): equity ±1/±2/±3 for a single / aggro / baggro (Jacoby:
-//     single while the cube is unturned); u = (equity + 1) / 2
+//   money (2 players): equity ±1/±2/±3 for a single / aggro / baggro
 //   match: match-winning chances after the result at this score and cube,
 //     in game units (EMG); u = (MWC − MWC of losing a single) / (spread)
 //   3+ players: u = 1 for a win, 0 otherwise (the plain win chance)
-// ctx: { jacoby, match: { length, score, crawfordUsed } } (the game's start).
+// ctx: { match: { length, score, crawfordUsed } } (the game's start).
 export function outcomeValuer(before, pi, ctx = {}) {
   if (before.players.length !== 2) return g => (g.winner === pi ? 1 : 0);
   const v = before.cube?.value ?? 1;
-  const single = !!ctx.jacoby && v === 1;
-  const multOf = g => (single ? 1 : lossMultiple(g.players[1 - g.winner]));
+  const multOf = g => lossMultiple(g.players[1 - g.winner]);
   const m = ctx.match;
   if (!m) return g => { const e = (g.winner === pi ? 1 : -1) * multOf(g); return (e + 1) / 2; };
   const a = m.length - m.score[pi], b = m.length - m.score[1 - pi], cu = !!m.crawfordUsed;

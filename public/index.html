@@ -83,7 +83,6 @@
         <label>Players <select id="qm-players"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
         <label id="qm-match-row">Match <select id="qm-match"><option value="0">single games</option><option value="1">to 1</option><option value="3" selected>to 3</option><option value="5">to 5</option><option value="7">to 7</option><option value="9">to 9</option></select></label>
         <label id="qm-cube-row"><input type="checkbox" id="qm-cube" checked> Cube</label>
-        <label id="qm-jacoby-row"><input type="checkbox" id="qm-jacoby"> Jacoby</label>
       </div>
       <div class="form-row">
         <button id="btn-quick" class="btn-go">Find opponents</button>
@@ -164,9 +163,6 @@
     </label>
     <label id="create-match-row" class="opt-row" title="Play a match to this many points (Crawford rule applies). 0 = a money session that just keeps score.">
       Match to <input type="number" id="create-match" min="0" max="25" value="0" style="width:4.5em"> points <span class="muted">(0 = money session)</span>
-    </label>
-    <label id="create-jacoby-row" class="opt-row" title="Money play: an aggro only counts double once the cube has been turned">
-      <input type="checkbox" id="create-jacoby"> Jacoby rule
     </label>
     <div class="btn-row">
       <button id="btn-create-confirm" class="btn-go">Create</button>

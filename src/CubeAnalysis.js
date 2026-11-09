@@ -26,15 +26,14 @@ export const CUBE_SEVERITY = [{ key: 'blunder', min: 0.20 }, { key: 'error', min
 const ownerFor = (cube, d) => cube.owner == null ? 'centre' : cube.owner === d ? 'me' : 'opp';
 
 // Values for doubler d (already at the decision's stakes, in equity units):
-// money play — Janowski cubeful equity × cube value (Jacoby: with the cube
-// unturned, no-double ignores aggros); match play — match-winning chances
+// money play — Janowski cubeful equity × cube value; match play — match-winning chances
 // from the match equity table at the score, shown as equity (EMG).
 function equities(est, owner, entry, v) {
   if (entry.match) {
     const r = matchCube(est, { ...entry.match, v, owner });
     return { nd: emg(r.nd, r), dt: emg(r.dt, r), dp: emg(r.dp, r) };
   }
-  const nd = v * cubefulEquity(entry.jacoby && v === 1 ? { ...est, aggroWin: 0, aggroLoss: 0 } : est, owner);
+  const nd = v * cubefulEquity(est, owner);
   return { nd, dt: 2 * v * cubefulEquity(est, 'opp'), dp: v };
 }
 function rightActions(est, owner, entry, v) {
