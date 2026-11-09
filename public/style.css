@@ -691,3 +691,5 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 #lobby-slots li.dragging { opacity: 0.85; z-index: 2; position: relative; box-shadow: 0 6px 18px #000a; }
 #lobby-slots li.drop-target { outline: 2px dashed #f0c040 !important; }
 .luck-plus { color: #7ee08a; } .luck-minus { color: #ff9a8a; }
+.tip-value { display: flex; align-items: center; gap: 5px; font-weight: 700; }
+.tip-sep { height: 1px; background: #ffffff1f; margin: 4px 0; }

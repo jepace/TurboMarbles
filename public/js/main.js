@@ -1904,6 +1904,7 @@ function drawChart() {
   if (apSel >= 0) add('line', { x1: x(apSel), x2: x(apSel), y1: 0, y2: Ht, stroke: '#fff6' });
   const two = rep.players.length === 2;
   const lines = two ? [0] : rep.players.map((_, i) => i);
+  const series = [];
   for (const pi of lines) {
     const ptsArr = rep.rolls.map((r, i) => {
       if (!r.analysis || r.analysis.playedWin == null) return null;
@@ -1911,6 +1912,7 @@ function drawChart() {
       return two ? [i, 1 - r.analysis.playedWin] : null;
     }).filter(Boolean);
     if (rep.winner != null) ptsArr.push([n - 1, rep.winner === pi ? 1 : 0]);
+    series.push({ pi, pts: ptsArr });
     if (!ptsArr.length) continue;
     const pl = add('polyline', { points: ptsArr.map(([i, v]) => `${x(i)},${y(v)}`).join(' '), fill: 'none', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' });
     pl.style.stroke = colorVar(rep.players[pi].color);
@@ -1949,7 +1951,17 @@ function drawChart() {
     const i = idxAt(ev);
     hover.setAttribute('x1', x(i)); hover.setAttribute('x2', x(i)); hover.setAttribute('visibility', 'visible');
     const from = Math.max(0, i - 2), to = Math.min(n, i + 3);
-    tip.replaceChildren(...rep.rolls.slice(from, to).map((r, k) => { const d = lineFor(r, from + k); if (from + k === i) d.classList.add('cur'); return d; }));
+    // The chart's value at this point and how much this roll changed it.
+    const valueLines = series.map(({ pi, pts }) => {
+      const k = pts.findLastIndex(([j]) => j <= i);
+      if (k < 0) return null;
+      const now = pts[k][1], prev = k > 0 ? pts[k - 1][1] : (two ? 0.5 : 1 / rep.players.length);
+      const ch = Math.round(100 * (now - prev));
+      return el('div', { class: 'tip-value' }, el('span', { class: 'log-dot', style: `background:${colorVar(rep.players[pi].color)}` }),
+        `${rep.players[pi].name} ${Math.round(100 * now)}%`, el('span', { class: ch > 0 ? 'luck-plus' : ch < 0 ? 'luck-minus' : 'muted' }, ` ${ch > 0 ? '+' : ch < 0 ? '−' : '±'}${Math.abs(ch)}`));
+    }).filter(Boolean);
+    tip.replaceChildren(...valueLines, ...(valueLines.length ? [el('div', { class: 'tip-sep' })] : []),
+      ...rep.rolls.slice(from, to).map((r, k) => { const d = lineFor(r, from + k); if (from + k === i) d.classList.add('cur'); return d; }));
     tip.style.display = 'block';
     const box = svg.getBoundingClientRect(), px = ev.clientX - box.left;
     tip.style.left = `${Math.min(Math.max(0, px - 120), box.width - 250)}px`;
