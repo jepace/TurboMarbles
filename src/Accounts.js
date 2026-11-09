@@ -76,6 +76,8 @@ function mailVerify(player, email) {
   sendMail(email, 'Confirm your email for TurboMarbles',
     `Hi ${player.name},\n\nTo use this address for password resets, open this link within a day:\n${publicUrl()}/?verify=${token}\n\nIf this wasn't you, ignore this email.`);
 }
+// Stats filters from a message: players 'all' | '2' | '3+'; robots 'any' | 'none'.
+const filterOf = msg => ({ players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: msg.robots === 'none' ? 'none' : 'any' });
 function friendsPayload(id) {
   const l = store.friendList(id), unread = store.unreadCounts(id);
   const mark = f => ({ ...f, online: isOnline(f.id), unread: unread[f.id] ?? 0 });
@@ -160,13 +162,13 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
     case 'profile': {
       if (!needMe()) return;
       return send(ws, { event: 'profile', player: me, devices: store.deviceCount(me.id),
-        stats: store.playerStats(me.id, { players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: msg.robots === 'none' ? 'none' : 'any' }), games: store.playerGames(me.id, { limit: 30 }), rating: store.ratingOf(me.id), ratingHistory: store.ratingHistory(me.id),
+        stats: store.playerStats(me.id, filterOf(msg)), games: store.playerGames(me.id, { limit: 30, ...filterOf(msg) }), rating: store.ratingOf(me.id), ratingHistory: store.ratingHistory(me.id),
         email: store.emailOf(me.id), hasPassword: store.hasPassword(me.id) });
     }
     case 'history': {
       if (!needMe()) return;
       const before = Number(msg.before);
-      return send(ws, { event: 'history', games: store.playerGames(me.id, { limit: 30, before: Number.isFinite(before) ? before : Infinity }) });
+      return send(ws, { event: 'history', games: store.playerGames(me.id, { limit: 30, before: Number.isFinite(before) ? before : Infinity, ...filterOf(msg) }) });
     }
     case 'login': {
       const acct = 'acct:' + String(msg.name ?? '').toLowerCase().slice(0, 40);

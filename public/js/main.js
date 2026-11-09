@@ -954,17 +954,25 @@ for (const [box, key] of [['sf-players', 'players'], ['sf-robots', 'robots']]) {
   });
 }
 
-on('profile', data => { profileData = data; if (data.rating) { myRating = data.rating; renderNavMe(); } renderProfile(); show(profileTarget); });
+on('profile', data => { profileData = data; historyDone = (data.games?.length ?? 0) < 30; historyLoading = false; if (data.rating) { myRating = data.rating; renderNavMe(); } renderProfile(); show(profileTarget); });
+// The game list loads 30 at a time; the next page comes in as you scroll near the end.
+let historyLoading = false, historyDone = false;
 on('history', ({ games }) => {
+  historyLoading = false;
   if (!profileData) return;
   profileData.games.push(...games);
+  if (games.length < 30) historyDone = true;
   renderProfile();
-  if (games.length < 30) $('btn-more-games').style.display = 'none';
 });
-$('btn-more-games').addEventListener('click', () => {
+function loadMoreGames() {
   const last = profileData?.games.at(-1);
-  if (last) send({ action: 'history', before: last.endedAt });
-});
+  if (!last || historyLoading || historyDone) return;
+  historyLoading = true;
+  send({ action: 'history', before: last.endedAt, ...statsFilter });
+}
+$('btn-more-games').addEventListener('click', loadMoreGames);
+new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) loadMoreGames(); }, { rootMargin: '400px' })
+  .observe($('btn-more-games'));
 
 // Hovering a game card shows its final position on the small board.
 function previewGame(g) {
@@ -1023,8 +1031,7 @@ function renderProfile() {
     el('tr', {}, el('th', {}, 'Opponent'), el('th', {}, 'Games'), el('th', {}, 'Won'), el('th', {}, 'Points')),
     ...h.map(r => el('tr', {}, el('td', {}, r.name), el('td', {}, String(r.games)), el('td', {}, pct(r.wins, r.games)), el('td', {}, signed(r.points)))))
     : el('div', { class: 'muted' }, '—'));
-  const games = d.games.filter(g => (statsFilter.players === 'all' || (statsFilter.players === '2' ? g.players === 2 : g.players >= 3))
-    && (statsFilter.robots === 'any' || !g.vsRobot));
+  const games = d.games;   // already filtered by the server
   // Game cards: each player's points that game (winner's total, 0 for the
   // others), name and rating; click to open the analysis; hover shows the
   // final position.
@@ -1042,7 +1049,7 @@ function renderProfile() {
     return card;
   })) : el('div', { class: 'muted' }, 'No games yet.'));
   if (games[0]) previewGame(games[0]);
-  $('btn-more-games').style.display = d.games.length >= 30 ? '' : 'none';
+  $('btn-more-games').style.display = historyDone || d.games.length < 30 ? 'none' : '';
   renderAccountSection();
 }
 

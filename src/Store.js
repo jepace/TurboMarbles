@@ -586,13 +586,14 @@ export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) 
 }
 
 // The player's games, newest first (for the history list).
-export function playerGames(playerId, { limit = 50, before = Infinity } = {}) {
+export function playerGames(playerId, { limit = 50, before = Infinity, players = 'all', robots = 'any' } = {}) {
   if (!db) return [];
   const rows = db.prepare(`
     SELECT g.id, g.ended_at, g.n_players, g.vs_robot, g.cube, g.report_gz IS NOT NULL analysed, g.rolls_gz,
            me.seat, me.won, me.points, me.aggro
     FROM seats me JOIN games g ON g.id = me.game_id
-    WHERE me.player_id = ? AND g.ended_at < ? ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
+    WHERE me.player_id = ? AND g.ended_at < ?${players === '2' ? ' AND g.n_players = 2' : players === '3+' ? ' AND g.n_players >= 3' : ''}${robots === 'none' ? ' AND g.vs_robot = 0' : ''}
+    ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
   const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after,
     s.choices, s.eq_lost, s.cube_decisions, s.cube_eq_lost FROM seats s WHERE s.game_id = ? ORDER BY s.seat`);
   // PR (performance rating, as in XG): 500 × equity lost per decision.
