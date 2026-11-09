@@ -89,7 +89,7 @@ function show(id) {
   document.body.classList.toggle('with-nav', el.classList.contains('page'));
   for (const b of document.querySelectorAll('#side-nav .nav-item')) b.classList.toggle('on', b.dataset.go === id);
   // The Board page borrows the board renderer for its preview: give it back.
-  if (prev === 'screen-board' && id !== 'screen-board') { initBoard($('board-canvas')); setColorShift(0); }
+  if ((prev === 'screen-board' && id !== 'screen-board') || (prev === 'screen-profile' && boardBorrowed)) { initBoard($('board-canvas')); setColorShift(0); boardBorrowed = false; }
   if (id === 'screen-landing') focusName();
 }
 
@@ -966,6 +966,22 @@ $('btn-more-games').addEventListener('click', () => {
   if (last) send({ action: 'history', before: last.endedAt });
 });
 
+// Hovering a game card shows its final position on the small board.
+function previewGame(g) {
+  const box = $('games-preview');
+  if (!box || !g.final) return;
+  const gs = { players: g.seats.map((x, i) => ({ index: i, name: x.name, color: x.color, marbles: g.final[i] ?? [] })),
+    turnIndex: 0, phase: 'GAME_OVER', dice: null, diceUsed: [false, false] };
+  // Next frame: the page must be showing for the canvas to have its size.
+  requestAnimationFrame(() => {
+    if (!$('screen-profile').classList.contains('active')) return;
+    setColorShift(0); setViewArm(PLAYER_CONFIG.findIndex(c => c.color === g.seats[g.seat]?.color));
+    initBoard($('games-preview-canvas'));
+    drawBoard(gs);
+    boardBorrowed = true;
+  });
+}
+let boardBorrowed = false;
 function renderProfile() {
   const d = profileData;
   if (!d) return;
@@ -978,7 +994,6 @@ function renderProfile() {
   const signed = n => `${n > 0 ? '+' : ''}${n}`;
   $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
     stat(d.rating?.rating ?? '—', 'rating'),
-    stat(skill, 'skill', rate == null ? 'Needs analysed games' : `Equity lost per decision: ${rate.toFixed(3)} (${t.analysed} games analysed)`),
     stat(t.games, 'games'),
     stat(pct(t.wins, t.games), 'won', `${t.wins} of ${t.games}; an average player would win ${pct(t.expected * t.games, t.games)}`),
     stat(signed(t.points), 'points'),
@@ -1009,18 +1024,23 @@ function renderProfile() {
     : el('div', { class: 'muted' }, '—'));
   const games = d.games.filter(g => (statsFilter.players === 'all' || (statsFilter.players === '2' ? g.players === 2 : g.players >= 3))
     && (statsFilter.robots === 'any' || !g.vsRobot));
-  $('profile-games').replaceChildren(games.length ? el('table', { class: 'ptable' },
-    el('tr', {}, el('th', {}, 'When'), el('th', {}, 'Players'), el('th', {}, 'Result'), el('th', {}, 'Points'), el('th', {}, 'Error rate')),
-    ...games.map(g => {
-      const row = el('tr', { class: 'click', title: 'Open' },
-        el('td', {}, new Date(g.endedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })),
-        el('td', {}, g.seats.map((x, i) => (i === g.seat ? 'You' : x.name + (x.isRobot ? ' 🤖' : ''))).join(' · ')),
-        el('td', { class: g.won ? 'won' : 'lost' }, (g.won ? 'Won' : 'Lost') + (g.aggro ? ' (aggro)' : '')),
-        el('td', {}, signed(g.points)),
-        el('td', {}, g.errorRate == null ? '—' : eqOf(g.errorRate)));
-      row.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
-      return row;
-    })) : el('div', { class: 'muted' }, 'No games yet.'));
+  // Game cards: each player's points that game (winner's total, 0 for the
+  // others), name and rating; click to open the analysis; hover shows the
+  // final position.
+  $('profile-games').replaceChildren(games.length ? el('div', { class: 'game-cards' }, ...games.map(g => {
+    const card = el('button', { class: 'game-card', title: 'Open the analysis' },
+      el('div', { class: 'gc-when muted' }, new Date(g.endedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })),
+      el('div', { class: 'gc-rows' }, ...g.seats.map((x, i) => el('div', { class: 'gc-row' + (x.won ? ' won' : '') + (i === g.seat ? ' me' : '') },
+        el('span', { class: 'gc-pts' }, String(x.won ? Math.max(0, x.points) : 0)),
+        el('span', { class: 'log-dot', style: `background:${COLOR_MAP[x.color] ?? '#888'}` }),
+        el('span', { class: 'gc-name' }, (i === g.seat ? 'You' : x.name) + (x.isRobot ? ' 🤖' : '')),
+        x.rating != null && !x.isRobot ? el('span', { class: 'gc-rating' }, String(x.rating)) : '',
+        x.won ? el('span', { class: 'gc-tag' }, '🏆') : x.aggro ? el('span', { class: 'gc-tag muted' }, 'aggro') : ''))));
+    card.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
+    card.addEventListener('mouseenter', () => previewGame(g));
+    return card;
+  })) : el('div', { class: 'muted' }, 'No games yet.'));
+  if (games[0]) previewGame(games[0]);
   $('btn-more-games').style.display = d.games.length >= 30 ? '' : 'none';
   renderAccountSection();
 }
@@ -1390,9 +1410,6 @@ function renderSummary() {
       p.name + (rep.winner === i ? ' 🏆' : ''))));
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
-    row('Rating', s => el('span', { class: 'rating' }, s.rating), 'From the error rate'),
-    row('Error rate', s => s.decisions ? `${s.eqRate.toFixed(3)} per decision` : '—',
-      'Average equity lost per decision — moves and cube together (clear errors only); losing a game = 1.0'),
     row('Equity lost', s => el('span', { title: cubeSplit(s, x => `${eqv(x.moveEq)} on moves, ${eqv(x.cubeLost)} on the cube`) }, eqv(s.eqLost)),
       'Total over the game, moves and cube together'),
     row('Errors / Blunders', s => el('span', { title: cubeSplit(s, x => `moves ${x.moveError} / ${x.moveBlunder}, cube ${x.cubeError} / ${x.cubeBlunder}`) },

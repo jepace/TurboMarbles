@@ -621,3 +621,20 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .mini-marbles i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: 0 1px 2px #0008; }
 .play-buttons { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 0.3rem; }
 .big-btn { font-size: 1.15rem; padding: 0.85rem 1.6rem; border-radius: 10px; }
+
+/* ---- Game cards (Stats) ---- */
+.games-layout { display: flex; gap: 1.2rem; align-items: flex-start; }
+#profile-games { flex: 0 1 460px; }
+#games-preview { flex: 0 0 auto; width: min(420px, 40vw); height: min(420px, 40vw); position: sticky; top: 1rem; }
+.game-cards { display: flex; flex-direction: column; gap: 8px; }
+.game-card { display: flex; gap: 0.8rem; align-items: center; text-align: left; background: var(--card); color: var(--text); border-radius: 10px; padding: 0.55rem 0.8rem; font-weight: 500; width: 100%; }
+.game-card:hover { outline: 2px solid #f0c04088; }
+.gc-when { width: 3.6rem; font-size: 0.8rem; }
+.gc-rows { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.gc-row { display: flex; align-items: center; gap: 0.5rem; }
+.gc-row.won .gc-name { font-weight: 700; }
+.gc-pts { width: 1.8rem; height: 1.6rem; display: inline-flex; align-items: center; justify-content: center; background: #f4f0e6; color: #111; border-radius: 4px; font-weight: 800; }
+.gc-name { flex: 1; }
+.gc-rating { color: #7fb2ff; font-weight: 600; }
+.gc-tag { font-size: 0.85rem; }
+@media (max-width: 900px) { #games-preview { display: none; } }

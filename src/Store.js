@@ -583,16 +583,23 @@ export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) 
 export function playerGames(playerId, { limit = 50, before = Infinity } = {}) {
   if (!db) return [];
   const rows = db.prepare(`
-    SELECT g.id, g.ended_at, g.n_players, g.vs_robot, g.cube, g.report_gz IS NOT NULL analysed,
-           me.seat, me.won, me.points, me.aggro, me.choices, me.eq_lost
+    SELECT g.id, g.ended_at, g.n_players, g.vs_robot, g.cube, g.report_gz IS NOT NULL analysed, g.rolls_gz,
+           me.seat, me.won, me.points, me.aggro
     FROM seats me JOIN games g ON g.id = me.game_id
     WHERE me.player_id = ? AND g.ended_at < ? ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
-  const opp = db.prepare('SELECT seat, name, color, is_robot FROM seats WHERE game_id = ? ORDER BY seat');
+  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, p.rating
+    FROM seats s LEFT JOIN players p ON p.id = s.player_id WHERE s.game_id = ? ORDER BY s.seat`);
+  // The final position (for the preview): the last roll's position after it was played.
+  const finalOf = gz => {
+    try { const rolls = JSON.parse(gunzipSync(gz)); const r = rolls.at(-1); const st = r?.after ?? r?.before; return st ? st.players.map(p => p.marbles) : null; }
+    catch { return null; }
+  };
   return rows.map(r => ({
     id: r.id, endedAt: r.ended_at, players: r.n_players, vsRobot: !!r.vs_robot, cube: !!r.cube, analysed: !!r.analysed,
     seat: r.seat, won: !!r.won, points: r.points, aggro: !!r.aggro,
-    errorRate: r.choices ? r.eq_lost / r.choices : null,
-    seats: opp.all(r.id).map(s => ({ name: s.name, color: s.color, isRobot: !!s.is_robot })),
+    seats: seatsQ.all(r.id).map(x => ({ name: x.name, color: x.color, isRobot: !!x.is_robot, won: !!x.won, points: x.points,
+      aggro: !!x.aggro, rating: x.player_id && x.rating != null ? Math.round(x.rating) : null })),
+    final: r.rolls_gz ? finalOf(r.rolls_gz) : null,
   }));
 }
 
