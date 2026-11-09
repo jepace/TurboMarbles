@@ -8,7 +8,8 @@
 // the plausible ways of playing it (every player uses the robot's strategy
 // afterwards) and compare win rates. Runs in a worker thread (see
 // analysisWorker.js), because it takes seconds per decision.
-import { allLegalMoves, applyMove, earnsExtraRoll, rollDice } from './GameEngine.js';
+import { allLegalMoves, applyMove, earnsExtraRoll, rollDice, lossMultiple } from './GameEngine.js';
+import { met } from './MatchEquity.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { lookup, expectedTurns, finishedBy } from './EndgameTable.js';
 import { locName, armOf } from '../public/js/constants.js';
@@ -177,7 +178,35 @@ function mulberry32(seed) {
   };
 }
 
-// Play out from just after `pi` played a roll of `dice`; returns the winner.
+// ---- What a game's ending is worth ------------------------------------------
+//
+// Play-outs are scored by what the ending is worth to the mover, on a 0–1
+// "win-like" scale u, so a difference of x in u is 2x in equity (like a
+// win-chance difference was before):
+//   money (2 players): equity ±1/±2/±3 for a single / aggro / baggro (Jacoby:
+//     single while the cube is unturned); u = (equity + 1) / 2
+//   match: match-winning chances after the result at this score and cube,
+//     in game units (EMG); u = (MWC − MWC of losing a single) / (spread)
+//   3+ players: u = 1 for a win, 0 otherwise (the plain win chance)
+// ctx: { jacoby, match: { length, score, crawfordUsed } } (the game's start).
+export function outcomeValuer(before, pi, ctx = {}) {
+  if (before.players.length !== 2) return g => (g.winner === pi ? 1 : 0);
+  const v = before.cube?.value ?? 1;
+  const single = !!ctx.jacoby && v === 1;
+  const multOf = g => (single ? 1 : lossMultiple(g.players[1 - g.winner]));
+  const m = ctx.match;
+  if (!m) return g => { const e = (g.winner === pi ? 1 : -1) * multOf(g); return (e + 1) / 2; };
+  const a = m.length - m.score[pi], b = m.length - m.score[1 - pi], cu = !!m.crawfordUsed;
+  const w1 = met(a - v, b, cu), l1 = met(a, b - v, cu), spread = w1 - l1;
+  if (!(spread > 1e-9)) return g => (g.winner === pi ? 1 : 0);
+  return g => {
+    const pts = v * multOf(g);
+    const x = g.winner === pi ? met(a - pts, b, cu) : met(a, b - pts, cu);
+    return (x - l1) / spread;
+  };
+}
+
+// Play out from just after `pi` played a roll of `dice`; returns the finished game.
 function playout(g, pi, dice) {
   let turn = earnsExtraRoll(dice) ? pi : (pi + 1) % g.players.length;
   for (let t = 0; t < 4000 && g.winner == null; t++) {
@@ -192,19 +221,23 @@ function playout(g, pi, dice) {
     }
     turn = (turn + 1) % g.players.length;
   }
-  return g.winner;
+  return g;
 }
 
-// Outcomes (1 = pi won) of n playouts using seeds seed0 … seed0+n-1.
-export function outcomes(g, pi, dice, n, seed0) {
-  const out = new Uint8Array(n);
+// Outcomes of n playouts using seeds seed0 … seed0+n-1: the value of each
+// ending (valuer; default 1 = pi won), with .w = 1/0 for won or not.
+export function outcomes(g, pi, dice, n, seed0, valuer = null) {
+  const out = new Float64Array(n), w = new Uint8Array(n);
   const saved = Math.random;
   try {
     for (let i = 0; i < n; i++) {
       Math.random = mulberry32(seed0 + i * 7919);
-      out[i] = playout(structuredClone(g), pi, dice) === pi ? 1 : 0;
+      const end = playout(structuredClone(g), pi, dice);
+      w[i] = end.winner === pi ? 1 : 0;
+      out[i] = valuer ? valuer(end) : w[i];
     }
   } finally { Math.random = saved; }
+  out.w = w;
   return out;
 }
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
@@ -341,8 +374,10 @@ export function positionFacts(game, pi) {
 //   decision: { before (game after the roll), after (game after the play), pi }
 // Returns { played, playedWin, best, bestWin, loss, se, severity, mistake,
 //           robotAgrees, options: [{ moves, win, loss, played, robot, marbles }] }.
-export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400, keep = 3, maxDeep = 1600, seed = 1, mode = 'rollout', screenBy = 'rollout' } = {}) {
+export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400, keep = 3, maxDeep = 1600, seed = 1, mode = 'rollout', screenBy = 'rollout', ctx = {} } = {}) {
   if (mode === 'eval') return evaluateDecision({ before, after, pi }, { keep });
+  const val = outcomeValuer(before, pi, ctx);
+  const winRate = r => (r.w?.length ? mean(r.w) : null);
   const plays = allPlays(before, pi);
   const playedKey = boardKey(after, pi);
   const robotKey = robotPlay(before, pi).key;
@@ -355,7 +390,7 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
     cands = plays.map(p => ({ p, res: new Uint8Array(0), win: evaluate1(p.game, next)?.[pi] ?? 0 }));
   } else {
     const nScreen = plays.length > 12 ? Math.ceil(screen / 2) : screen;   // many options: cheaper screen
-    cands = plays.map(p => ({ p, res: outcomes(p.game, pi, dice, nScreen, seed) }));
+    cands = plays.map(p => ({ p, res: outcomes(p.game, pi, dice, nScreen, seed, val) }));
     for (const c of cands) c.win = mean(c.res);
   }
   cands.sort((a, b) => b.win - a.win);
@@ -364,7 +399,7 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
     const c = cands.find(x => x.p.key === k);
     if (c && !finalists.includes(c)) finalists.push(c);
   }
-  for (const c of finalists) { c.res = outcomes(c.p.game, pi, dice, deep, seed + 1_000_003); c.win = mean(c.res); }
+  for (const c of finalists) { c.res = outcomes(c.p.game, pi, dice, deep, seed + 1_000_003, val); c.win = mean(c.res); }
   finalists.sort((a, b) => b.win - a.win);
   let best = finalists[0];
   const mine = finalists.find(c => c.p.key === playedKey) ?? null;
@@ -372,8 +407,9 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
   // playouts (same new seeds for all) until it is clear or the budget runs out.
   const grow = c => {
     const n = c.res.length;
-    const more = outcomes(c.p.game, pi, dice, n, seed + 1_000_003 + n * 7919);
-    const r = new Uint8Array(2 * n); r.set(c.res); r.set(more, n);
+    const more = outcomes(c.p.game, pi, dice, n, seed + 1_000_003 + n * 7919, val);
+    const r = new Float64Array(2 * n); r.set(c.res); r.set(more, n);
+    const w = new Uint8Array(2 * n); w.set(c.res.w); w.set(more.w, n); r.w = w;
     c.res = r; c.win = mean(r);
   };
   const unclear = () => mine && mine !== best && best.win - mine.win >= SEVERITY.at(-1).min
@@ -389,16 +425,20 @@ export function analyzeDecision({ before, after, pi }, { screen = 60, deep = 400
   const severity = severityOf(loss, significant);
   return {
     played: mine ? notation(mine.p.moves, armOfPlayer(before, pi)) : '?',
-    playedWin: mine ? mine.win : null,
+    // Win chances (for the chart and display); the ranking and loss use the
+    // value of the endings (eq = equity of each option, in game units).
+    playedWin: mine ? winRate(mine.res) : null,
     best: notation(best.p.moves, armOfPlayer(before, pi)),
-    bestWin: best.win,
+    bestWin: winRate(best.res),
+    valued: ctx.match ? 'match' : before.players.length === 2 ? 'money' : 'win',
     loss: Math.round(loss * 1000) / 1000,
     se: Math.round(se * 1000) / 1000,
     severity,
     mistake: severity !== 'ok',
     robotAgrees: playedKey === robotKey,
     options: finalists.map(c => ({
-      moves: notation(c.p.moves, armOfPlayer(before, pi)), win: c.win, n: c.res.length, loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
+      moves: notation(c.p.moves, armOfPlayer(before, pi)), win: winRate(c.res), eq: Math.round((2 * c.win - 1) * 1000) / 1000, n: c.res.length,
+      loss: Math.round(Math.max(0, best.win - c.win) * 1000) / 1000,
       played: c === mine, robot: c.p.key === robotKey, marbles: marblesOf(c.p.game), steps: c.p.moves,
       facts: positionFacts(c.p.game, pi),
     })),

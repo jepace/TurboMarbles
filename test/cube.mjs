@@ -8,6 +8,7 @@ import {
 } from '../src/GameManager.js';
 import { shouldDouble, shouldTake, cubefulEquity } from '../src/CubeDecision.js';
 import { analyzeCube } from '../src/CubeAnalysis.js';
+import { outcomeValuer } from '../src/Analysis.js';
 import { matchCube, met } from '../src/MatchEquity.js';
 import { _stop } from '../src/RobotThinker.js';
 
@@ -354,6 +355,21 @@ describe('rematch with 3 players', () => {
   assert(room.game === g, 'waits for every human');
   handleRematch(c, r.roomId);
   assert(room.state === 'playing' && room.game !== g && room.game.players.length === 3, 'all three agreed: a new 3-player game');
+});
+
+describe('move analysis values endings by score: money aggro/baggro, match equity', () => {
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0, { cube: true });
+  const end = (winner, loserHome) => { const e = structuredClone(g); e.winner = winner;
+    e.players[1 - winner].marbles.forEach((m, i) => Object.assign(m, i < loserHome ? { zone: 'home', slot: 4 - i } : { zone: 'track', space: 10 })); return e; };
+  const money = outcomeValuer(g, 0, {});
+  const eq = u => 2 * u - 1;
+  assert(eq(money(end(0, 1))) === 1 && eq(money(end(0, 0))) === 2 && eq(money(end(1, 0))) === -2, 'money: single +1, aggro +2, aggro loss −2');
+  const jac = outcomeValuer(g, 0, { jacoby: true });
+  assert(eq(jac(end(0, 0))) === 1, 'Jacoby, cube unturned: an aggro counts single');
+  const dmp = outcomeValuer(g, 0, { match: { length: 3, score: [2, 2], crawfordUsed: true } });
+  assert(Math.abs(eq(dmp(end(0, 0))) - 1) < 1e-9 && Math.abs(eq(dmp(end(1, 0))) + 1) < 1e-9, 'match at 1-away/1-away: an aggro is worth no more than a single');
+  const behind = outcomeValuer(g, 0, { match: { length: 5, score: [0, 3], crawfordUsed: true } });
+  assert(eq(behind(end(0, 0))) > 1.2, `trailing 5-away vs 2-away: winning an aggro is worth much more than a single (${eq(behind(end(0, 0))).toFixed(2)})`);
 });
 
 describe('a match always has the cube (a 1-point match never)', () => {

@@ -258,6 +258,10 @@ function beginGame(room, players) {
   if (crawford) m.crawfordUsed = true;
   room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex,
     { cube: room.cube, jacoby: room.jacoby, crawford, away: m ? m.score.map(x => m.length - x) : null });
+  // What a game's ending is worth, for the analysis: the score at the start
+  // of this game (and whether the Crawford game is used up afterwards).
+  Object.defineProperty(room.game, '_valueCtx', { value: { jacoby: !!room.jacoby,
+    match: m ? { length: m.length, score: m.score.slice(), crawfordUsed: !!m.crawfordUsed } : null }, enumerable: false });
   room.state = 'playing';
   room.robotPlan = null;
   broadcast(room, { event: 'gameStarted', gameState: publicState(room) });
@@ -1452,7 +1456,7 @@ let analysesRunning = 0;
 // Analyses waiting for a free slot (one runs at a time, server-wide).
 const analysisQueue = [];
 function releaseAnalysis() {
-  analysesRunning--;
+  analysesRunning = Math.max(0, analysesRunning - 1);
   while (analysesRunning < MAX_ANALYSES && analysisQueue.length) {
     const q = analysisQueue.shift();
     if (rooms.has(q.roomId) && q.rec.analysis == null) { handleAnalyzeGame(q.ws, q.roomId, q.gameNo); break; }
@@ -1466,7 +1470,7 @@ function scheduleCheck(job) {
   if (checksRunning >= MAX_ANALYSES) { checkQueue.push(job); return; }
   checksRunning++;
   job.run(() => {
-    checksRunning--;
+    checksRunning = Math.max(0, checksRunning - 1);
     while (checkQueue.length) { const j = checkQueue.shift(); if (rooms.has(j.roomId)) { scheduleCheck(j); break; } }
   });
 }
@@ -1634,7 +1638,7 @@ function autoCheck(room, rec, report, end, { level = 1, all = false } = {}) {
       workerData: { decisions: chunk.map(({ idx }) => { const raw = rec.game._rolls[idx]; return { idx, before: raw.before, after: raw.after, pi: raw.pi }; }),
         cube: cubeTodo.filter((_, k) => k % nWorkers === w).map(i => ({ i, entry: cubeLog[i] })),
         cubeGames: config.cubeAnalysisGames,
-        options: { ...opts, level } },
+        options: { ...opts, level, ctx: rec.game?._valueCtx ?? {} } },
     });
     worker.on('message', msg => {
       if (msg.type === 'item') {
@@ -1726,7 +1730,7 @@ function runDeeper(room, rec, idx) {
   Object.defineProperty(roll, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
   broadcast(room, { event: 'analysisDeepening', game: rec.n, idx, level });
   const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
-    workerData: { decisions: [{ idx, before: raw.before, after: raw.after, pi: raw.pi }], options: { ...opts, level } },
+    workerData: { decisions: [{ idx, before: raw.before, after: raw.after, pi: raw.pi }], options: { ...opts, level, ctx: rec.game?._valueCtx ?? {} } },
   });
   let done = false;
   const t0 = Date.now();
@@ -1789,6 +1793,9 @@ export function handleAnalyzeDeeperCube(ws, roomId, i, gameNo) {
 export function _reset() {
   rooms.clear();
   sessions.clear();
+  // Analysis lines: leftovers from earlier tests mustn't hold the slots.
+  analysisQueue.length = 0; checkQueue.length = 0;
+  analysesRunning = 0; checksRunning = 0;
 }
 
 // For unit testing only — exposes a room (and its live game) for state setup.

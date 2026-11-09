@@ -1653,14 +1653,16 @@ function selectRoll(idx, opt = null) {
     kids.push(el('div', { class: 'ap-opt head' },
       el('span', {}, 'Options (click to see on the board)'),
       el('span', { class: 'num', title: 'Chance an opponent can hit one of these marbles with their next roll' }, 'Hit'),
-      el('span', { class: 'num', title: 'Equity: the stake you expect to win (+) or lose (−); 2 × win chance − 1' }, 'Equity'), el('span', { class: 'num' }, 'vs best')));
+      el('span', { class: 'num', title: a.valued === 'match' ? 'Equity at this match score, in game units (EMG): what each ending (single, aggro, baggro) is worth to the match'
+        : a.valued === 'money' ? 'Equity: points expected per unit of cube, counting aggros (2) and baggros (3)' : 'Equity: 2 × win chance − 1' }, a.valued === 'match' ? 'EMG' : 'Equity'),
+      el('span', { class: 'num' }, 'vs best')));
     a.options.forEach((o, k) => {
       const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'robot'].filter(Boolean).join(' · ');
       const cls = o.played ? (a.severity === 'ok' ? ' good' : ` ${a.severity}`) : '';
       const line = el('div', { class: 'ap-opt' + cls + (view === k ? ' sel' : ''), title: `${o.n} playouts` },
         el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
         el('span', { class: 'num hit' }, o.facts && o.facts.anyHit > 0 ? pctTxt(o.facts.anyHit) : '—'),
-        el('span', { class: 'num' }, `${o.win >= 0.5 ? '+' : ''}${(2 * o.win - 1).toFixed(3)}`),
+        el('span', { class: 'num', title: o.win != null ? `wins ${pctTxt(o.win)}` : '' }, (e => `${e >= 0 ? '+' : ''}${e.toFixed(3)}`)(o.eq ?? 2 * o.win - 1)),
         el('span', { class: 'num' }, o.loss > 0 ? `−${eqOf(o.loss)}` : ''));
       line.addEventListener('click', () => selectRoll(idx, k));
       kids.push(line);

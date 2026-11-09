@@ -133,6 +133,10 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
 - Platform: side-nav pages (Play with quick match, Leaderboard, Friends, Messages, Stats, Board, Settings);
   friends by request/accept with presence and invites; direct messages between friends; in-game chat;
   blocks. Account actions in `src/Accounts.js`; quick match and chat in `src/server.js` / GameManager.
+- Move analysis values each played-out ending by what it is worth (`outcomeValuer` in `src/Analysis.js`):
+  money ±1/±2/±3 per cube unit (Jacoby: single until turned); match: match-winning chances after the result
+  at the game's starting score and cube, as EMG (`game._valueCtx`); 3+ players: plain win chance. The instant
+  (evaluator) pass still judges by win chance only.
 - Analysis numbers are all **equity** (decimals of the stake; losing a game = 1.0): a move's win-chance
   loss x shows as 2x; errors 0.06–0.20, blunders ≥ 0.20, for moves and cube alike. Plain chances
   (hit, finish next turn) stay percentages.
