@@ -1034,10 +1034,9 @@ function renderProfile() {
       el('div', { class: 'gc-rows' }, ...g.seats.map((x, i) => el('div', { class: 'gc-row' + (x.won ? ' won' : '') + (i === g.seat ? ' me' : '') },
         el('span', { class: 'gc-pts' }, String(x.won ? Math.max(0, x.points) : 0)),
         el('span', { class: 'log-dot', style: `background:${COLOR_MAP[x.color] ?? '#888'}` }),
-        el('span', { class: 'gc-name' }, (i === g.seat ? 'You' : x.name) + (x.isRobot ? ' 🤖' : '')),
-        x.rating != null && !x.isRobot ? el('span', { class: 'gc-rating' }, String(x.rating)) : '',
-        x.pr != null ? el('span', { class: 'gc-pr', title: 'PR (lower is better)' }, prText(x.pr)) : '',
-        x.won ? el('span', { class: 'gc-tag' }, '🏆') : x.aggro ? el('span', { class: 'gc-tag muted' }, 'aggro') : ''))));
+        el('span', { class: 'gc-name' }, (i === g.seat ? 'You' : x.name) + (x.isRobot ? ' 🤖' : '') + (x.won ? ' 🏆' : '')),
+        el('span', { class: 'gc-rating' }, x.rating != null && !x.isRobot ? String(x.rating) : ''),
+        el('span', { class: 'gc-pr', title: 'PR (lower is better)' }, x.pr != null ? prText(x.pr) : '')))));
     card.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
     card.addEventListener('mouseenter', () => previewGame(g));
     return card;
