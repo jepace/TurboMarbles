@@ -363,7 +363,7 @@ function storeFinishedGame(room, r) {
       });
     room.storedGameId = recordGame({ cube: !!game.cube, winnerSeat: game.winner, rolls: game._rolls ?? [], seats });
     // Rated only between accounts with no robot seat (a quitter's seat still counts as theirs).
-    room._ratings = rateGame(seats, game.winner);
+    room._ratings = rateGame(seats, game.winner, room.storedGameId);
   } catch (err) {
     console.error('[store] could not record game', err);
   }

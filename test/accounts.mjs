@@ -98,6 +98,11 @@ console.log('rating, friends, blocks, messages');
   act(x, { action: 'leaderboard' });
   const lb = x.find('leaderboard').pop().players;
   assert(lb.find(e => e.name === 'Xena')?.rating === 1416, 'leaderboard: Xena 1416');
+  // A rated stored game keeps each player's rating after it (shown on the game cards).
+  const { recordGame: rec2, playerGames: pg2, rateGame: rate2 } = await import('../src/Store.js');
+  const gid = rec2({ cube: false, winnerSeat: 0, rolls: [], seats: [{ playerId: X, name: 'Xena', color: 'blue', won: true, points: 1 }, { playerId: Y, name: 'Yuri', color: 'yellow', won: false, points: -1 }] });
+  const rr = rate2([{ playerId: X }, { playerId: Y }], 0, gid);
+  assert(pg2(X).find(g => g.id === gid)?.seats[0].rating === rr[X].rating, 'game card rating = rating after that game');
   act(x, { action: 'friendRequest', name: 'yuri' });
   assert(y.find('friends').pop()?.incoming[0]?.id === X, 'Yuri sees the request');
   act(x, { action: 'dm', to: Y, body: 'hi' });

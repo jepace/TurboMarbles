@@ -110,7 +110,7 @@ function migrate() {
   `);
   // Added later: cube-decision numbers per seat.
   const cols = new Set(db.prepare('PRAGMA table_info(seats)').all().map(c => c.name));
-  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL']]) {
+  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL'], ['rating_after', 'REAL']]) {
     if (!cols.has(c)) db.exec(`ALTER TABLE seats ADD COLUMN ${c} ${t}`);
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
@@ -365,7 +365,7 @@ export function deletePlayer(playerId) {
 // lower error rate than a loser, that pair's exchange counts twice
 // (applyRatingBonus).
 export const RATING_START = 1400;
-export function rateGame(seats, winnerSeat) {
+export function rateGame(seats, winnerSeat, gameId = null) {
   if (!db || winnerSeat == null || seats.some(s => s.isRobot)) return null;
   const ids = seats.map(s => s.playerId);
   if (!ids[winnerSeat] || ids.filter(Boolean).length < 2) return null;
@@ -385,14 +385,16 @@ export function rateGame(seats, winnerSeat) {
   const up = db.prepare('UPDATE players SET rating = rating + ?, rated_games = rated_games + 1 WHERE id = ?');
   const out = {};
   const hist = db.prepare('INSERT INTO rating_history (player_id, at, rating) VALUES (?, ?, ?)');
+  const seatR = db.prepare('UPDATE seats SET rating_after = ? WHERE game_id = ? AND seat = ?');
   for (const i of [w, ...losers]) {
     up.run(delta[i], ids[i]); hist.run(ids[i], now(), cur[i].rating + delta[i]);
+    if (gameId) seatR.run(cur[i].rating + delta[i], gameId, i);
     out[ids[i]] = { rating: Math.round(cur[i].rating + delta[i]), change: Math.round(delta[i]) };
   }
   // Each pair's exchange, for the played-better bonus.
   const pairs = losers.map(l => {
     const ew = 1 / (1 + 10 ** ((cur[l].rating - cur[w].rating) / 400));
-    return { winSeat: w, loseSeat: l, winId: ids[w], loseId: ids[l], dw: K(w) * (1 - ew), dl: -(cur[l].rated_games < 30 ? 32 : 20) * (1 - ew) };
+    return { gameId, winSeat: w, loseSeat: l, winId: ids[w], loseId: ids[l], dw: K(w) * (1 - ew), dl: -(cur[l].rated_games < 30 ? 32 : 20) * (1 - ew) };
   });
   Object.defineProperty(out, 'pairs', { value: pairs });
   return out;
@@ -406,6 +408,10 @@ export function applyRatingBonus(pair) {
   const fix = db.prepare(`UPDATE rating_history SET rating = rating + ? WHERE rowid =
     (SELECT rowid FROM rating_history WHERE player_id = ? ORDER BY at DESC, rowid DESC LIMIT 1)`);
   fix.run(pair.dw, pair.winId); fix.run(pair.dl, pair.loseId);
+  if (pair.gameId) {
+    const seatR = db.prepare('UPDATE seats SET rating_after = rating_after + ? WHERE game_id = ? AND seat = ?');
+    seatR.run(pair.dw, pair.gameId, pair.winSeat); seatR.run(pair.dl, pair.gameId, pair.loseSeat);
+  }
   return { [pair.winId]: ratingOf(pair.winId), [pair.loseId]: ratingOf(pair.loseId) };
 }
 export function leaderboard({ limit = 50, minGames = 1 } = {}) {
@@ -587,8 +593,8 @@ export function playerGames(playerId, { limit = 50, before = Infinity } = {}) {
            me.seat, me.won, me.points, me.aggro
     FROM seats me JOIN games g ON g.id = me.game_id
     WHERE me.player_id = ? AND g.ended_at < ? ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
-  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, p.rating
-    FROM seats s LEFT JOIN players p ON p.id = s.player_id WHERE s.game_id = ? ORDER BY s.seat`);
+  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after
+    FROM seats s WHERE s.game_id = ? ORDER BY s.seat`);
   // The final position (for the preview): the last roll's position after it was played.
   const finalOf = gz => {
     try { const rolls = JSON.parse(gunzipSync(gz)); const r = rolls.at(-1); const st = r?.after ?? r?.before; return st ? st.players.map(p => p.marbles) : null; }
@@ -598,7 +604,7 @@ export function playerGames(playerId, { limit = 50, before = Infinity } = {}) {
     id: r.id, endedAt: r.ended_at, players: r.n_players, vsRobot: !!r.vs_robot, cube: !!r.cube, analysed: !!r.analysed,
     seat: r.seat, won: !!r.won, points: r.points, aggro: !!r.aggro,
     seats: seatsQ.all(r.id).map(x => ({ name: x.name, color: x.color, isRobot: !!x.is_robot, won: !!x.won, points: x.points,
-      aggro: !!x.aggro, rating: x.player_id && x.rating != null ? Math.round(x.rating) : null })),
+      aggro: !!x.aggro, rating: x.rating_after != null ? Math.round(x.rating_after) : null })),
     final: r.rolls_gz ? finalOf(r.rolls_gz) : null,
   }));
 }
