@@ -593,8 +593,10 @@ export function playerGames(playerId, { limit = 50, before = Infinity } = {}) {
            me.seat, me.won, me.points, me.aggro
     FROM seats me JOIN games g ON g.id = me.game_id
     WHERE me.player_id = ? AND g.ended_at < ? ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
-  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after
-    FROM seats s WHERE s.game_id = ? ORDER BY s.seat`);
+  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after,
+    s.choices, s.eq_lost, s.cube_decisions, s.cube_eq_lost FROM seats s WHERE s.game_id = ? ORDER BY s.seat`);
+  // PR (performance rating, as in XG): 500 × equity lost per decision.
+  const prOf = x => { const n = (x.choices ?? 0) + (x.cube_decisions ?? 0); return n ? Math.round(500 * (2 * (x.eq_lost ?? 0) + (x.cube_eq_lost ?? 0)) / n * 10) / 10 : null; };
   // The final position (for the preview): the last roll's position after it was played.
   const finalOf = gz => {
     try { const rolls = JSON.parse(gunzipSync(gz)); const r = rolls.at(-1); const st = r?.after ?? r?.before; return st ? st.players.map(p => p.marbles) : null; }
@@ -604,7 +606,7 @@ export function playerGames(playerId, { limit = 50, before = Infinity } = {}) {
     id: r.id, endedAt: r.ended_at, players: r.n_players, vsRobot: !!r.vs_robot, cube: !!r.cube, analysed: !!r.analysed,
     seat: r.seat, won: !!r.won, points: r.points, aggro: !!r.aggro,
     seats: seatsQ.all(r.id).map(x => ({ name: x.name, color: x.color, isRobot: !!x.is_robot, won: !!x.won, points: x.points,
-      aggro: !!x.aggro, rating: x.rating_after != null ? Math.round(x.rating_after) : null })),
+      aggro: !!x.aggro, rating: x.rating_after != null ? Math.round(x.rating_after) : null, pr: prOf(x) })),
     final: r.rolls_gz ? finalOf(r.rolls_gz) : null,
   }));
 }

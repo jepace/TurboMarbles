@@ -993,6 +993,8 @@ function renderProfile() {
   const signed = n => `${n > 0 ? '+' : ''}${n}`;
   $('profile-stats').replaceChildren(el('div', { class: 'stat-grid' },
     stat(d.rating?.rating ?? '—', 'rating'),
+    stat(rate == null ? '—' : prText(500 * rate), t.analysed >= 10 && rate != null ? prTitle(500 * rate) : 'PR',
+      t.analysed >= 10 ? `Average PR over ${t.analysed} analysed games (lower is better)` : `Average PR · a title after 10 analysed games (${t.analysed} so far)`),
     stat(t.games, 'games'),
     stat(pct(t.wins, t.games), 'won', `${t.wins} of ${t.games}; an average player would win ${pct(t.expected * t.games, t.games)}`),
     stat(signed(t.points), 'points'),
@@ -1034,6 +1036,7 @@ function renderProfile() {
         el('span', { class: 'log-dot', style: `background:${COLOR_MAP[x.color] ?? '#888'}` }),
         el('span', { class: 'gc-name' }, (i === g.seat ? 'You' : x.name) + (x.isRobot ? ' 🤖' : '')),
         x.rating != null && !x.isRobot ? el('span', { class: 'gc-rating' }, String(x.rating)) : '',
+        x.pr != null ? el('span', { class: 'gc-pr', title: 'PR (lower is better)' }, prText(x.pr)) : '',
         x.won ? el('span', { class: 'gc-tag' }, '🏆') : x.aggro ? el('span', { class: 'gc-tag muted' }, 'aggro') : ''))));
     card.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
     card.addEventListener('mouseenter', () => previewGame(g));
@@ -1258,6 +1261,12 @@ const pctTxt = x => `${Math.round(100 * x)}%`;
 const colorVar = c => `var(--${dc(c)})`;
 
 
+// PR (performance rating, as in XG / Galaxy): 500 × equity lost per decision,
+// lower is better. Titles only from an average over 10+ analysed games; the
+// bands are set against the robot (≈ PR 3.5 over many games).
+const PR_TITLES = [[3.5, 'World Class'], [5, 'Expert'], [7.5, 'Advanced'], [11, 'Intermediate'], [16, 'Casual'], [Infinity, 'Beginner']];
+const prTitle = pr => PR_TITLES.find(([max]) => pr < max)[1];
+const prText = pr => (pr == null ? '—' : pr.toFixed(1));
 function playerStats(rep, pi) {
   const rolls = rep.rolls.filter(r => r.pi === pi);
   const choices = rolls.filter(r => r.analysis);
@@ -1277,7 +1286,7 @@ function playerStats(rep, pi) {
     agree: choices.filter(r => r.analysis.robotAgrees).length,
     moveError: sev('error'), moveBlunder: sev('blunder'), moveEq,
     error: sev('error') + cube.cubeError, blunder: sev('blunder') + cube.cubeBlunder,
-    decisions, eqLost, eqRate,
+    decisions, eqLost, eqRate, pr: decisions ? 500 * eqRate : null,
     ...cube,
   };
 }
@@ -1404,6 +1413,7 @@ function renderSummary() {
       p.name + (rep.winner === i ? ' 🏆' : ''))));
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
+    row('PR', s => el('b', {}, prText(s.pr)), 'Performance rating: 500 × equity lost per decision (lower is better)'),
     row('Equity lost', s => el('span', { title: cubeSplit(s, x => `${eqv(x.moveEq)} on moves, ${eqv(x.cubeLost)} on the cube`) }, eqv(s.eqLost)),
       'Total over the game, moves and cube together'),
     row('Errors / Blunders', s => el('span', { title: cubeSplit(s, x => `moves ${x.moveError} / ${x.moveBlunder}, cube ${x.cubeError} / ${x.cubeBlunder}`) },
@@ -1545,7 +1555,7 @@ function renderMoveList() {
       el('span', { class: 'turn' }, `${r.turn}.`),
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
       el('span', {}, r.dice.join('-')),
-      el('span', { class: 'play' }, r.played, ...(it.cubes ?? []).map(inlineCube).filter(Boolean)),
+      el('span', { class: 'play' }, r.played, ...cubeGroups(it.cubes ?? []).map(inlineCube).filter(Boolean)),
       badgeFor(r, idx));
     rowEl.dataset.idx = idx;
     rowEl.dataset.key = 'r' + idx;
@@ -1612,17 +1622,36 @@ on('cubeDeepening', ({ i, game }) => {
 });
 // A cube decision on its roll's row: a small cube with the value at stake,
 // red for a blunder, amber for an error. Plain right no-doubles aren't shown.
-function inlineCube(c) {
-  const a = c.analysis;
-  const bad = a && !a.skip && a.severity !== 'ok';
-  if (!c.action && !bad && !cubeInaccuracy(a) && !(apCube === c.i)) return null;
-  const p = analysisReport.players[c.pi];
-  const what = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` to ${c.v * 2}` : '');
-  const tip = `${p.name}: ${what}` + (!a ? ' · being worked out' : bad ? ` · ${a.label ?? SEV_LABEL[a.severity]}, −${eqv(a.loss)}` : a.close ? ' · close call' : ' · right') + ' · click for details';
-  const b = el('span', { class: 'cube-ico inline' + (bad ? ' ' + a.severity : '') + (apCube === c.i ? ' sel' : ''), title: tip },
-    String(c.kind === 'double' && !c.action ? c.v : c.v * 2));
-  b.dataset.key = 'c' + c.i;
-  b.addEventListener('click', e => { e.stopPropagation(); selectCube(c.i); });
+// A double and its answer are one event: group them (one cube on the row).
+function cubeGroups(cubes) {
+  const out = [];
+  for (const c of cubes) {
+    const prev = out.at(-1);
+    if (prev && c.kind === 'take' && prev.some(x => x.kind === 'double' && x.action)) prev.push(c); else out.push([c]);
+  }
+  return out;
+}
+const SEV_RANK = { ok: 0, error: 1, blunder: 2 };
+function inlineCube(group) {
+  const shown = group.filter(c => {
+    const a = c.analysis;
+    return c.action || (a && !a.skip && a.severity !== 'ok') || cubeInaccuracy(a) || apCube === c.i;
+  });
+  if (!shown.length) return null;
+  const sevOf = c => (c.analysis && !c.analysis.skip ? c.analysis.severity : 'ok');
+  const worst = shown.reduce((w, c) => (SEV_RANK[sevOf(c)] > SEV_RANK[sevOf(w)] ? c : w), shown[0]);
+  const line = c => {
+    const a = c.analysis, p = analysisReport.players[c.pi];
+    const what = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` to ${c.v * 2}` : '');
+    return `${p.name}: ${what}` + (!a ? ' (being worked out)' : sevOf(c) !== 'ok' ? ` — ${a.label ?? SEV_LABEL[a.severity]}, −${eqv(a.loss)}` : a.close ? ' (close)' : ' ✓');
+  };
+  const top = group[0];
+  const b = el('span', { class: 'cube-ico inline' + (sevOf(worst) !== 'ok' ? ' ' + sevOf(worst) : '') + (group.some(c => apCube === c.i) ? ' sel' : ''),
+    title: shown.map(line).join('\n') + '\nclick for details' },
+    String(top.kind === 'double' && !top.action ? top.v : top.v * 2));
+  b.dataset.key = 'c' + worst.i;
+  for (const c of group) b.dataset['k' + c.i] = '1';
+  b.addEventListener('click', e => { e.stopPropagation(); selectCube((sevOf(worst) !== 'ok' ? worst : top).i); });
   return b;
 }
 function cubeRow(c) {
@@ -1640,7 +1669,7 @@ function cubeRow(c) {
 }
 function markSelected(key) {
   for (const rowEl of $('ap-moves').children) rowEl.classList.toggle('sel', rowEl.dataset.key === key || (rowEl.dataset.cubes ?? '').split(' ').includes(key));
-  for (const b of $('ap-moves').querySelectorAll('.cube-ico.inline')) b.classList.toggle('sel', b.dataset.key === key);
+  for (const b of $('ap-moves').querySelectorAll('.cube-ico.inline')) b.classList.toggle('sel', b.dataset.key === key || (key?.startsWith('c') && b.dataset['k' + key.slice(1)] === '1'));
   $('ap-moves').querySelector('.sel')?.scrollIntoView({ block: 'nearest' });
 }
 function selectCube(i) {

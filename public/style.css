@@ -643,3 +643,5 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 #action-slot { min-height: 2.6rem; }
 #action-slot .action-box button { display: flex; align-items: center; justify-content: center; line-height: 1; }
 #cube-offer-msg .cube-face { width: 26px; height: 26px; font-size: 0.9rem; animation: none; border-width: 2px; flex: 0 0 auto; }
+.gc-pr { min-width: 2.6rem; text-align: right; color: #c9d3e6; font-variant-numeric: tabular-nums; font-size: 0.9rem; }
+.gc-pr::before { content: 'PR '; opacity: 0.55; font-size: 0.75rem; }
