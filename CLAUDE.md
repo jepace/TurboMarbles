@@ -96,9 +96,10 @@ B1 - B4 is the Base
 
 ### Square Numbers (board, move log, feedback, tools)
 Like backgammon, every player numbers the track from their own side: a
-square's number is its walking distance to that player's home entry (0 = home
-entry, 83 = start square) — `countdown` / `fromCountdown` / `locName` /
-`parseLocName` in `public/js/constants.js`. Each player sees their own numbers
+square's number is the pips from there into h1 (1 = home entry, 84 = start
+square), like backgammon's point numbers — `squareNumber` / `fromSquareNumber`
+(display) over `countdown` / `fromCountdown` (walking distance to the home entry,
+0–83, used internally), `locName` / `parseLocName` in `public/js/constants.js`. Each player sees their own numbers
 on the board (option "Numbers on board"); the move log, feedback and analysis
 use the **mover's** numbers ("30/25 12/9"). Home slots are `h1`–`h4`; also
 `hub` and `base`. Hovering a square shows every player's number for it. (The

@@ -330,7 +330,7 @@ function drawBoardAscii(gameState) {
 
 // Squares are shown in a player's own numbers: the countdown to their home
 // entry (backgammon style). arm = that player's arm (default: blue).
-const sq = (space, arm = 0) => String(countdown(arm, space));
+const sq = (space, arm = 0) => String(countdown(arm, space) + 1);
 function describeMarble(m, arm = 0) {
   if (m.zone === 'base')   return 'base';
   if (m.zone === 'track')  return sq(m.space, arm);

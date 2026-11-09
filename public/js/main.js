@@ -6,7 +6,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook } from './board.js';
-import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, armOf } from './constants.js';
+import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
 // ---- State ----
@@ -838,9 +838,9 @@ function describeSquare(hit) {
   // Each player's number for this square: mine first ("30 for you · 54 for Sloane").
   const players = gameState?.players ?? [];
   const me = myPlayerIndex ?? 0;
-  const mine = String(countdown(playerArm(me), hit.space));
+  const mine = String(squareNumber(playerArm(me), hit.space));
   const others = players.filter(p => p.index !== me).slice(0, 5)
-    .map(p => `${countdown(playerArm(p.index), hit.space)} for ${p.name}`);
+    .map(p => `${squareNumber(playerArm(p.index), hit.space)} for ${p.name}`);
   const arm = PLAYER_CONFIG.findIndex(c => c.start === hit.space || c.homeEntry === hit.space || c.star === hit.space);
   let what = '';
   if (arm !== -1) {
@@ -2851,7 +2851,7 @@ function locNotation(loc, pi) {
   if (loc.zone === 'base')   return 'base';
   if (loc.zone === 'center') return 'hub';
   if (loc.zone === 'home')   return `h${loc.slot}`;
-  if (loc.zone === 'track')  return String(countdown(playerArm(pi), loc.space));
+  if (loc.zone === 'track')  return String(squareNumber(playerArm(pi), loc.space));
   return '?';
 }
 function playerArm(pi) {
@@ -3014,7 +3014,7 @@ function faceMyArm() {
 // My countdown numbers on the board (if the option is on).
 function applySquareNumbers() {
   const arm = playerArm(myPlayerIndex ?? 0);
-  setSquareLabels(settings.numbers ? s => countdown(arm, s) : null);
+  setSquareLabels(settings.numbers ? s => squareNumber(arm, s) : null);
 }
 
 function playerName(index) {

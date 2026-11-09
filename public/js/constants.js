@@ -127,9 +127,13 @@ export function fromCountdown(arm, n) {
   return ((PLAYER_CONFIG[arm].homeEntry - n - 1 + TRACK_SIZE) % TRACK_SIZE) + 1;
 }
 // A location in `arm`'s numbers: "30", "h2", "hub", "base".
+// The number shown for a square: the pips it takes from there into h1 (1 =
+// the home entry, 84 = the start square), like backgammon's point numbers.
+export const squareNumber = (arm, space) => countdown(arm, space) + 1;
+export const fromSquareNumber = (arm, n) => fromCountdown(arm, n - 1);
 export function locName(loc, arm) {
   if (!loc) return '?';
-  if (loc.zone === 'track') return String(countdown(arm, loc.space));
+  if (loc.zone === 'track') return String(squareNumber(arm, loc.space));
   if (loc.zone === 'home') return `h${loc.slot}`;
   if (loc.zone === 'center') return 'hub';
   return 'base';
@@ -140,7 +144,7 @@ export function parseLocName(tok, arm) {
   if (tok === 'hub') return { zone: 'center' };
   const h = tok.match(/^h([1-4])$/);
   if (h) return { zone: 'home', slot: +h[1] };
-  if (/^\d+$/.test(tok)) { const s = fromCountdown(arm, +tok); return s ? { zone: 'track', space: s } : null; }
+  if (/^\d+$/.test(tok)) { const s = fromSquareNumber(arm, +tok); return s ? { zone: 'track', space: s } : null; }
   const s = parseSpaceName(tok);                     // old colour names still accepted
   return s ? { zone: 'track', space: s } : null;
 }
