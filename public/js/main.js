@@ -1413,7 +1413,8 @@ function renderSummary() {
       p.name + (rep.winner === i ? ' 🏆' : ''))));
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
-    row('PR', s => el('b', {}, prText(s.pr)), 'Performance rating: 500 × equity lost per decision (lower is better)'),
+    row('PR', s => el('span', {}, el('b', {}, prText(s.pr)), s.pr != null && s.decisions >= 15 ? el('span', { class: 'pr-title' }, ' ' + prTitle(s.pr)) : ''),
+      'Performance rating: 500 × equity lost per decision (lower is better); a title for this game once there are 15+ real decisions'),
     row('Equity lost', s => el('span', { title: cubeSplit(s, x => `${eqv(x.moveEq)} on moves, ${eqv(x.cubeLost)} on the cube`) }, eqv(s.eqLost)),
       'Total over the game, moves and cube together'),
     row('Errors / Blunders', s => el('span', { title: cubeSplit(s, x => `moves ${x.moveError} / ${x.moveBlunder}, cube ${x.cubeError} / ${x.cubeBlunder}`) },

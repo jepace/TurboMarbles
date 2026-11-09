@@ -660,3 +660,4 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .sev-dot.error { background: #f08a24; }
 .sev-dot.blunder { background: #e0283c; box-shadow: 0 0 6px #e0283c99; }
 @keyframes pulse { 50% { opacity: 0.35; } }
+.pr-title { color: #f0c040; font-weight: 700; margin-left: 4px; }
