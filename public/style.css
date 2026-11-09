@@ -687,3 +687,6 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 #ap-status { display: flex; align-items: center; gap: 0.6rem; overflow: visible; }
 #ap-status > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ap-status > button { flex: 0 0 auto; }
+#lobby-slots li { touch-action: none; user-select: none; }
+#lobby-slots li.dragging { opacity: 0.85; z-index: 2; position: relative; box-shadow: 0 6px 18px #000a; }
+#lobby-slots li.drop-target { outline: 2px dashed #f0c040 !important; }

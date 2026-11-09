@@ -2909,7 +2909,7 @@ function flushTurnLog() {
 // ---- Render helpers ----
 
 // Seats: the host clicks one seat, then another, to swap them.
-let seatPick = null;
+let seatPick = null, seatDrag = null, seatDragged = false;
 on('seatChanged', ({ playerIndex, reconnectToken }) => {
   myPlayerIndex = playerIndex;
   setReconnectInfo({ roomId, playerIndex, reconnectToken });
@@ -2926,10 +2926,36 @@ function renderLobbySlots(slots) {
       li.title = 'Click two seats to swap them';
       if (seatPick === slot.index) li.classList.add('picked');
       li.addEventListener('click', e => {
-        if (e.target.closest('button')) return;
+        if (e.target.closest('button') || seatDragged) return;
         if (seatPick == null) { seatPick = slot.index; renderLobbySlots(slots); return; }
         if (seatPick !== slot.index) send({ action: 'swapSeats', a: seatPick, b: slot.index });
         seatPick = null; renderLobbySlots(slots);
+      });
+      // Drag a seat onto another to swap them (mouse or finger).
+      li.addEventListener('pointerdown', e => {
+        if (e.target.closest('button')) return;
+        seatDrag = { from: slot.index, x: e.clientY, moved: false };
+        seatDragged = false;
+        li.setPointerCapture(e.pointerId);
+      });
+      li.addEventListener('pointermove', e => {
+        if (!seatDrag) return;
+        if (!seatDrag.moved && Math.abs(e.clientY - seatDrag.x) < 6) return;
+        seatDrag.moved = true; li.classList.add('dragging');
+        li.style.transform = `translateY(${e.clientY - seatDrag.x}px)`;
+        const over = document.elementsFromPoint(e.clientX, e.clientY).find(x => x !== li && x.closest?.('#lobby-slots li'))?.closest('#lobby-slots li');
+        for (const x of ul.children) x.classList.toggle('drop-target', x === over);
+      });
+      li.addEventListener('pointerup', e => {
+        if (!seatDrag) return;
+        const d = seatDrag; seatDrag = null;
+        li.classList.remove('dragging'); li.style.transform = '';
+        const over = [...ul.children].find(x => x.classList.contains('drop-target'));
+        for (const x of ul.children) x.classList.remove('drop-target');
+        if (!d.moved) return;
+        seatDragged = true; setTimeout(() => { seatDragged = false; }, 0);
+        const to = over ? Number(over.id.replace('slot-', '')) : null;
+        if (to != null && to !== d.from) send({ action: 'swapSeats', a: d.from, b: to });
       });
     }
     li.id = `slot-${slot.index}`;
