@@ -1518,19 +1518,16 @@ function visibleRolls() {
 // Inaccuracy: a real loss (clear of the noise, at least 0.01 equity) below the error threshold.
 const isInaccuracy = a => a && a.severity === 'ok' && 2 * a.loss >= 0.01 && a.loss > 1.96 * (a.se ?? 0);
 const cubeInaccuracy = a => a && !a.skip && a.severity === 'ok' && !a.close && a.played !== a.best && a.lossNorm >= 0.01;
+// Severity as a coloured dot (as in Galaxy); the details are in its tooltip.
 function badgeFor(r, idx) {
-  if (deepening.has(idx)) return deepQueued.has(idx)
-    ? el('span', { class: 'badge unclear', title: 'Go deeper starts when the base analysis finishes' }, 'queued')
-    : el('span', { class: 'badge unclear', title: 'Being played out to check the estimate' }, 'checking…');
-  if (!r.analysis) return el('span', { class: 'badge forced', title: r.played === '--' ? 'No legal move' : 'Only one way to play' }, 'forced ✓');
+  const dot = (cls, title) => el('span', { class: `sev-dot ${cls}`, title });
+  if (deepening.has(idx)) return dot('pending', deepQueued.has(idx) ? 'Queued: starts when the base analysis finishes' : 'Being played out…');
+  if (!r.analysis) return dot('none', r.played === '--' ? 'No legal move' : 'Only one way to play');
   const a = r.analysis;
-  if (a.severity === 'ok' && a.loss >= 0.03) {
-    return el('span', { class: 'badge unclear', title: `Maybe −${eqOf(a.loss)}, but within the noise (± ${eqOf(1.96 * a.se)}). Go deeper (+) to settle it.` }, `−${eqOf(a.loss)}?`);
-  }
-  if (isInaccuracy(a)) return el('span', { class: 'badge inacc', title: `Inaccuracy: −${eqOf(a.loss)} equity against the best play (below the error threshold of 0.06)` }, `−${eqOf(a.loss)}`);
-  if (a.severity === 'ok') return el('span', { class: 'badge ok', title: a.loss > 0 ? `−${eqOf(a.loss)} ± ${eqOf(1.96 * a.se)}: within the noise` : 'Best play' }, '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: ${eqOf(a.loss)} equity worse than the best play (± ${eqOf(1.96 * a.se)})` },
-    `${SEV_LABEL[a.severity]} −${eqOf(a.loss)}`);
+  if (a.severity === 'ok' && a.loss >= 0.03) return dot('unclear', `Maybe −${eqOf(a.loss)}, within the noise (± ${eqOf(1.96 * a.se)}); go deeper (+) to settle it`);
+  if (isInaccuracy(a)) return dot('inacc', `Inaccuracy: −${eqOf(a.loss)}`);
+  if (a.severity === 'ok') return dot('none', a.loss > 0 ? `Within the noise (−${eqOf(a.loss)} ± ${eqOf(1.96 * a.se)})` : 'Best play');
+  return dot(a.severity, `${SEV_LABEL[a.severity]}: −${eqOf(a.loss)} (± ${eqOf(1.96 * a.se)})`);
 }
 
 function renderMoveList() {
@@ -1554,7 +1551,7 @@ function renderMoveList() {
     const rowEl = el('div', { class: 'ap-row' + (idx === apSel && apCube == null ? ' sel' : ''), title: p.name },
       el('span', { class: 'turn' }, `${r.turn}.`),
       el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
-      el('span', {}, r.dice.join('-')),
+      el('span', { class: 'mini-dice' }, ...r.dice.map(d => el('span', { class: 'mini-die', style: `--die-color:${colorVar(p.color)}` }, String(d)))),
       el('span', { class: 'play' }, r.played, ...cubeGroups(it.cubes ?? []).map(inlineCube).filter(Boolean)),
       badgeFor(r, idx));
     rowEl.dataset.idx = idx;
@@ -1602,11 +1599,11 @@ function diceEl(dice, color) {
 const CUBE_ACTION = { double: a => (a ? 'Doubles' : 'No double'), take: a => (a ? 'Takes' : 'Drops') };
 const cubeDeep = new Set();        // cube decisions being redone deeper
 function cubeBadge(c) {
-  const a = c.analysis;
-  if (!a || cubeDeep.has(c.i)) return el('span', { class: 'badge unclear' }, 'checking…');
-  if (a.skip) return el('span', { class: 'badge forced', title: 'Nowhere near a double (estimate under 60% to win), so not analysed. Click the row to analyse it anyway.' }, '—');
-  if (a.severity === 'ok') return el('span', { class: a.close ? 'badge unclear' : 'badge ok', title: a.close ? "Close call: within the estimate's noise" : 'Right decision' }, a.close ? 'close ✓' : '✓');
-  return el('span', { class: `badge ${a.severity}`, title: `${SEV_LABEL[a.severity]}: lost ${eqv(a.loss)} equity` }, `${a.label ?? SEV_LABEL[a.severity]} −${eqv(a.loss)}`);
+  const a = c.analysis, dot = (cls, title) => el('span', { class: `sev-dot ${cls}`, title });
+  if (!a || cubeDeep.has(c.i)) return dot('pending', 'Being worked out…');
+  if (a.skip) return dot('none', 'Not near a double: not analysed (click to analyse anyway)');
+  if (a.severity === 'ok') return cubeInaccuracy(a) ? dot('inacc', `Inaccuracy: −${eqv(a.loss)}`) : dot(a.close ? 'unclear' : 'none', a.close ? 'Close call' : 'Right decision');
+  return dot(a.severity, `${a.label ?? SEV_LABEL[a.severity]}: −${eqv(a.loss)}`);
 }
 function analyzeDeeperCube(i) {
   const c = analysisReport?.cube?.[i];
@@ -3055,3 +3052,8 @@ window.addEventListener('resize', () => {
 
 // ---- Initial connect on load ----
 // Connection is deferred until user takes action (create/join)
+
+// Development aid: with ?debug in the address, a report can be shown directly.
+if (new URLSearchParams(location.search).has('debug')) {
+  window.__tm = { showReport: rep => { analysisReport = rep; openAnalysis(); } };
+}
