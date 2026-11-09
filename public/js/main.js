@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime } from './sounds.js';
 
@@ -3147,6 +3147,8 @@ window.addEventListener('resize', () => {
 // ---- Initial connect on load ----
 // Connection is deferred until user takes action (create/join)
 
+// Name tags on the board by each player's base.
+setSeatLabels(pi => { const p = gameState?.players?.[pi]; return p ? (pi === myPlayerIndex && !viewingStored ? 'You' : p.name) + (p.isRobot ? ' 🤖' : '') : null; });
 // Development aid: with ?debug in the address, a report can be shown directly.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__tm = { showReport: rep => { analysisReport = rep; openAnalysis(); } };

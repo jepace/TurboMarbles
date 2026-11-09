@@ -205,6 +205,40 @@ function computeLayout() {
 // own countdown to home; see constants.js). fn(space) → text, or null = off.
 let labelFn = null;
 export function setSquareLabels(fn) { labelFn = fn; }
+// Name tags by each player's base (who is who on the board): fn(playerIndex) → text.
+let seatLabelFn = null;
+export function setSeatLabels(fn) { seatLabelFn = fn; }
+function drawSeatLabels(gameState) {
+  if (!seatLabelFn || !gameState?.players) return;
+  const { BASE_R, BASE_G } = GEO;
+  const fs = Math.max(10, W * 0.019);
+  ctx.save();
+  ctx.font = `600 ${fs}px system-ui, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const p of gameState.players) {
+    const text = seatLabelFn(p.index);
+    if (!text) continue;
+    const ai = playerToArm[p.index] ?? p.index;
+    const ang = armAngle(ai), dx = Math.cos(ang), dy = Math.sin(ang), px = -Math.sin(ang), py = Math.cos(ang);
+    // Beside the base row, on the side away from the start square's home entry.
+    const off = BASE_G * 2.1 + fs * 0.4;
+    const w = ctx.measureText(text).width + fs * 0.9, h = fs * 1.5;
+    const cx0 = CX + dx * BASE_R + px * off, cy0 = CY + dy * BASE_R + py * off;
+    // Push the pill sideways (along the rim) by half its width so it clears the base.
+    const pad = 3;
+    const cx = Math.min(W - w / 2 - pad, Math.max(w / 2 + pad, cx0 + px * (w / 2)));
+    const cy = Math.min(W - h / 2 - pad, Math.max(h / 2 + pad, cy0 + py * (w / 2)));
+    ctx.fillStyle = 'rgba(8,12,24,0.88)';
+    ctx.strokeStyle = COLORS[ai];
+    ctx.lineWidth = Math.max(1.5, W * 0.0025);
+    ctx.beginPath();
+    ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#eef2fa';
+    ctx.fillText(text, cx, cy + 1);
+  }
+  ctx.restore();
+}
 function drawSquareLabels(n) {
   if (!labelFn) return;
   const activeSet = new Set(playerToArm.slice(0, n));   // arms in play draw arrows
@@ -294,6 +328,7 @@ export function drawBoard(gameState, opts = {}) {
   drawSquareLabels(n);  // under the marbles, so a marble hides its square's number
   if (gameState) drawMarbles(gameState);
   drawRimOverlay();  // repaint rim on top so base panel corners don't poke through
+  if (!opts.noSeatLabels) drawSeatLabels(gameState);
 }
 
 // ---- Rim overlay: repainted on top so base/arm corners don't poke through ----
