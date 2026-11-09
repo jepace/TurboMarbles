@@ -1981,7 +1981,6 @@ document.addEventListener('keydown', e => {
 
 // ---- Options checkboxes ----
 $('opt-feedback').checked = settings.feedback;
-$('opt-analysis').checked = settings.analysis;
 $('opt-numbers').checked = settings.numbers;
 applyBoardLook();
 
@@ -2029,10 +2028,6 @@ $('opt-numbers').addEventListener('change', e => {
 const applyFeedbackVisibility = () => $('game-log').classList.toggle('no-feedback', !settings.feedback);
 applyFeedbackVisibility();
 $('opt-feedback').addEventListener('change', e => { settings.feedback = e.target.checked; if (!settings.feedback) pendingFeedback = null; applyFeedbackVisibility(); saveSettings(); });
-$('opt-analysis').addEventListener('change', e => {
-  settings.analysis = e.target.checked; saveSettings();
-  $('btn-analyze').style.display = settings.analysis ? '' : 'none';
-});
 
 on('roomCreated', () => { renderLobbyInvite(); $('btn-lobby-leave').textContent = 'Cancel game'; });
 on('joinedRoom', () => { $('btn-lobby-leave').textContent = 'Leave'; });
@@ -2371,7 +2366,7 @@ function showGameOver(winnerIndex) {
   const name = playerName(winnerIndex);
   $('winner-msg').textContent = `${name} wins! 🎉`;
   $('score-msg').style.display = 'none';
-  $('btn-analyze').style.display = settings.analysis ? '' : 'none';
+  $('btn-analyze').style.display = '';
   $('btn-rematch').style.display = '';
   $('btn-rematch').disabled = false;
   $('btn-rematch').textContent = 'Rematch';
