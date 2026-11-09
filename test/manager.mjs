@@ -6,7 +6,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper, handlePlayOutAll,
-  _reset, _getRoom,
+  _reset, _getRoom, handleSwapSeats,
 } from '../src/GameManager.js';
 import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
 
@@ -1099,6 +1099,33 @@ describe('finished game — a dropped connection can come back (analysis, rematc
 });
 
 // ---- Summary ----------------------------------------------------------------
+
+describe('seating — people spread out by default; the host can swap seats', () => {
+  _reset();
+  const host = mockWs(), friend = mockWs();
+  const { code, roomId } = createRoom(host, 'Host', 6);
+  joinRoom(friend, code, 'Friend');                 // takes seat 1, right next to the host
+  for (let i = 0; i < 4; i++) addRobot(host, roomId);
+  startGame(host, roomId);
+  const room = _getRoom(roomId);
+  const seatOf = name => room.slots.findIndex(s => s.name === name);
+  assert(seatOf('Host') === 0 && seatOf('Friend') === 3, `2 people at 6 seats sit opposite (seats ${seatOf('Host')}, ${seatOf('Friend')})`);
+  assert(friend.find('seatChanged').pop()?.playerIndex === 3, 'the moved player is told their new seat');
+  assert(getRoomByWs(friend) === roomId && room.game.players[3].name === 'Friend', 'the game uses the new seats');
+
+  _reset();
+  const h2 = mockWs(), f2 = mockWs();
+  const r2 = createRoom(h2, 'Host', 4);
+  joinRoom(f2, r2.code, 'Friend');
+  addRobot(h2, r2.roomId); addRobot(h2, r2.roomId);
+  handleSwapSeats(h2, r2.roomId, 1, 3);             // the host puts the friend in seat 3
+  const rm = _getRoom(r2.roomId);
+  assert(rm.slots[3].name === 'Friend' && rm.slots[1].isRobot, 'the host swaps two seats');
+  handleSwapSeats(f2, r2.roomId, 0, 3);
+  assert(rm.slots[0].name === 'Host', 'only the host can swap');
+  startGame(h2, r2.roomId);
+  assert(rm.slots[3].name === 'Friend', "the host's arrangement stands at the start");
+});
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

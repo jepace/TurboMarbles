@@ -679,3 +679,11 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .gc-row { grid-template-columns: 2.4rem 10px 1fr 3.2rem 4.2rem !important; }
 .gc-pts.plus { background: #7ee08a; }
 .gc-pts.minus { background: #ffb3a8; }
+
+#lobby-slots.can-swap li { cursor: pointer; }
+#lobby-slots.can-swap li:hover { outline: 1px solid #ffffff33; }
+#lobby-slots li.picked { outline: 2px solid #f0c040 !important; }
+/* Analysis status line: the text shortens, the button never gets cut. */
+#ap-status { display: flex; align-items: center; gap: 0.6rem; overflow: visible; }
+#ap-status > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ap-status > button { flex: 0 0 auto; }

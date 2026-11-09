@@ -2901,12 +2901,30 @@ function flushTurnLog() {
 
 // ---- Render helpers ----
 
+// Seats: the host clicks one seat, then another, to swap them.
+let seatPick = null;
+on('seatChanged', ({ playerIndex, reconnectToken }) => {
+  myPlayerIndex = playerIndex;
+  setReconnectInfo({ roomId, playerIndex, reconnectToken });
+});
+on('lobbyState', ({ lobbyState }) => { seatPick = null; renderLobbySlots(lobbyState.slots); updateStartButton(); });
 function renderLobbySlots(slots) {
   const ul = $('lobby-slots');
   const iAmHost = ($('host-controls').style.display !== 'none');
   ul.innerHTML = '';
+  ul.classList.toggle('can-swap', iAmHost && slots.length > 2);
   for (const slot of slots) {
     const li = document.createElement('li');
+    if (iAmHost && slots.length > 2) {
+      li.title = 'Click two seats to swap them';
+      if (seatPick === slot.index) li.classList.add('picked');
+      li.addEventListener('click', e => {
+        if (e.target.closest('button')) return;
+        if (seatPick == null) { seatPick = slot.index; renderLobbySlots(slots); return; }
+        if (seatPick !== slot.index) send({ action: 'swapSeats', a: seatPick, b: slot.index });
+        seatPick = null; renderLobbySlots(slots);
+      });
+    }
     li.id = `slot-${slot.index}`;
     li.dataset.color = slot.color;
     const dot = document.createElement('span');

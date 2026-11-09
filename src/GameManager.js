@@ -233,11 +233,65 @@ export function removeRobot(ws, roomId, playerIndex) {
   return { ok: true };
 }
 
+// ---------- Seating ----------
+//
+// Who sits where matters (the player just behind you is the one best placed to
+// hit you). People are spread out round the table by default — as far apart as
+// the seats allow — unless the host arranged the seats themselves (swapSeats).
+const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot'];
+function arrangeSeats(room, contents) {
+  room.slots.forEach((s, i) => Object.assign(s, contents[i]));
+  room.slots.forEach((s, i) => {
+    if (s.ws) { const sess = sessions.get(s.ws._id); if (sess) sess.playerIndex = i; }
+    if (s.isRobot && s.playerId?.startsWith('robot-')) s.playerId = 'robot-' + i;
+  });
+}
+function seatContents(room) { return room.slots.map(s => Object.fromEntries(SEAT_FIELDS.map(f => [f, s[f]]))); }
+function announceSeats(room, hostBefore) {
+  // The host keeps hosting wherever they now sit.
+  room.hostIndex = room.slots.findIndex(s => s.ws && s.ws === hostBefore);
+  if (room.hostIndex < 0) room.hostIndex = 0;
+  room.slots.forEach((s, i) => { if (s.ws && !s.isRobot) sendTo(s.ws, { event: 'seatChanged', playerIndex: i, reconnectToken: s.playerId }); });
+  broadcast(room, { event: 'lobbyState', lobbyState: lobbySnapshot(room) });
+}
+function spreadPeople(room) {
+  const n = room.slots.length;
+  const host = room.hostIndex;
+  // People in seat order going round from the host; robots fill what's left.
+  const order = Array.from({ length: n }, (_, k) => (host + k) % n);
+  const people = order.filter(i => room.slots[i].playerId && !room.slots[i].isRobot);
+  if (people.length < 2) return;
+  const cur = seatContents(room);
+  const targets = people.map((_, k) => (host + Math.round(k * n / people.length)) % n);
+  if (people.every((p, k) => p === targets[k])) return;
+  const others = order.filter(i => !people.includes(i)).map(i => cur[i]);
+  const next = new Array(n);
+  people.forEach((p, k) => { next[targets[k]] = cur[p]; });
+  for (const i of order) if (!next[i]) next[i] = others.shift();
+  const hostWs = room.slots[room.hostIndex]?.ws;
+  arrangeSeats(room, next);
+  announceSeats(room, hostWs);
+}
+// The host swaps two seats in the waiting room (then their arrangement stands).
+export function handleSwapSeats(ws, roomId, a, b) {
+  const room = rooms.get(roomId);
+  if (!room || room.state !== 'lobby' || !isHost(ws, room)) return;
+  const n = room.slots.length;
+  if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a >= n || b >= n || a === b) return;
+  const cur = seatContents(room);
+  [cur[a], cur[b]] = [cur[b], cur[a]];
+  const hostWs = room.slots[room.hostIndex]?.ws;
+  arrangeSeats(room, cur);
+  room.seatsArranged = true;
+  announceSeats(room, hostWs);
+}
+
 export function startGame(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
   if (!isHost(ws, room)) return { error: 'Only host can start' };
   if (room.slots.some(s => !s.playerId && !s.isRobot)) return { error: 'Unfilled slots remain' };
+  if (!room.seatsArranged) spreadPeople(room);
 
   const players = room.slots.map(s => ({
     id: s.playerId,

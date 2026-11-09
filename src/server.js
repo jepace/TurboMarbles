@@ -9,7 +9,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf,
   handleUndo, handleCommit, handleAnalyzeGame,
-  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleChat, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
+  handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleChat, handleSwapSeats, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS, accountDisconnected } from './Accounts.js';
@@ -214,7 +214,7 @@ const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'quit', 'chat', 'quickMatch', 'quickMatchCancel', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
+  'double', 'take', 'drop', 'rematch', 'quit', 'chat', 'swapSeats', 'quickMatch', 'quickMatchCancel', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
 ]);
 
 function dispatch(ws, msg) {
@@ -303,6 +303,11 @@ function dispatch(ws, msg) {
     case 'resignAnswer': {
       const roomId = getRoomByWs(ws);
       if (roomId) handleResignAnswer(ws, roomId, msg.accept === true);
+      return;
+    }
+    case 'swapSeats': {
+      const roomId = getRoomByWs(ws);
+      if (roomId) handleSwapSeats(ws, roomId, msg.a, msg.b);
       return;
     }
     case 'chat': {
