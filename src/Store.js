@@ -155,6 +155,12 @@ function migrate() {
     );
     CREATE INDEX IF NOT EXISTS messages_to ON messages(to_id, read);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(from_id, to_id, sent_at);
+    CREATE TABLE IF NOT EXISTS rating_history (
+      player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      at        INTEGER NOT NULL,
+      rating    REAL NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS rating_history_player ON rating_history(player_id, at);
   `);
   db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema', '2')").run();
 }
@@ -378,7 +384,11 @@ export function rateGame(seats, winnerSeat) {
   }
   const up = db.prepare('UPDATE players SET rating = rating + ?, rated_games = rated_games + 1 WHERE id = ?');
   const out = {};
-  for (const i of [w, ...losers]) { up.run(delta[i], ids[i]); out[ids[i]] = { rating: Math.round(cur[i].rating + delta[i]), change: Math.round(delta[i]) }; }
+  const hist = db.prepare('INSERT INTO rating_history (player_id, at, rating) VALUES (?, ?, ?)');
+  for (const i of [w, ...losers]) {
+    up.run(delta[i], ids[i]); hist.run(ids[i], now(), cur[i].rating + delta[i]);
+    out[ids[i]] = { rating: Math.round(cur[i].rating + delta[i]), change: Math.round(delta[i]) };
+  }
   // Each pair's exchange, for the played-better bonus.
   const pairs = losers.map(l => {
     const ew = 1 / (1 + 10 ** ((cur[l].rating - cur[w].rating) / 400));
@@ -392,12 +402,22 @@ export function applyRatingBonus(pair) {
   if (!db) return null;
   const up = db.prepare('UPDATE players SET rating = rating + ? WHERE id = ?');
   up.run(pair.dw, pair.winId); up.run(pair.dl, pair.loseId);
+  // The bonus belongs to the same game: adjust each player's latest history point.
+  const fix = db.prepare(`UPDATE rating_history SET rating = rating + ? WHERE rowid =
+    (SELECT rowid FROM rating_history WHERE player_id = ? ORDER BY at DESC, rowid DESC LIMIT 1)`);
+  fix.run(pair.dw, pair.winId); fix.run(pair.dl, pair.loseId);
   return { [pair.winId]: ratingOf(pair.winId), [pair.loseId]: ratingOf(pair.loseId) };
 }
 export function leaderboard({ limit = 50, minGames = 1 } = {}) {
   if (!db) return [];
   return db.prepare(`SELECT id, name, rating, rated_games FROM players WHERE rated_games >= ? ORDER BY rating DESC LIMIT ?`)
     .all(minGames, limit).map((r, i) => ({ rank: i + 1, id: r.id, name: r.name, rating: Math.round(r.rating), games: r.rated_games }));
+}
+// Rating after each rated game, oldest first (starting from 1400).
+export function ratingHistory(id, limit = 300) {
+  if (!db) return [];
+  return db.prepare('SELECT at, rating FROM rating_history WHERE player_id = ? ORDER BY at DESC, rowid DESC LIMIT ?').all(id, limit)
+    .reverse().map(r => ({ at: r.at, rating: Math.round(r.rating) }));
 }
 export function ratingOf(id) {
   const r = db?.prepare('SELECT rating, rated_games FROM players WHERE id = ?').get(id);

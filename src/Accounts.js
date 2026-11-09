@@ -160,7 +160,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
     case 'profile': {
       if (!needMe()) return;
       return send(ws, { event: 'profile', player: me, devices: store.deviceCount(me.id),
-        stats: store.playerStats(me.id, { players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: msg.robots === 'none' ? 'none' : 'any' }), games: store.playerGames(me.id, { limit: 30 }), rating: store.ratingOf(me.id),
+        stats: store.playerStats(me.id, { players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: msg.robots === 'none' ? 'none' : 'any' }), games: store.playerGames(me.id, { limit: 30 }), rating: store.ratingOf(me.id), ratingHistory: store.ratingHistory(me.id),
         email: store.emailOf(me.id), hasPassword: store.hasPassword(me.id) });
     }
     case 'history': {

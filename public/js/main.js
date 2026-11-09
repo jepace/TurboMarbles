@@ -984,18 +984,23 @@ function renderProfile() {
     stat(signed(t.points), 'points'),
     stat(`${t.aggro_wins} / ${t.aggro_losses}`, 'aggros dealt / taken'),
   ));
-  // Skill trend: equity lost per decision, game by game.
-  const tr = d.stats.trend;
-  if (tr.length >= 2) {
-    const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 80;
-    const ys = tr.map(x => (2 * x.eq_lost + (+x.cube_eq_lost)) / (x.choices + x.cube_decisions)), top = Math.max(0.05, ...ys);
+  // Rating over time (rated games), starting from 1400.
+  const hist = [{ rating: 1400 }, ...(d.ratingHistory ?? [])];
+  if (hist.length >= 2) {
+    const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 140, pad = 10;
+    const rs = hist.map(x => x.rating);
+    const lo = Math.min(...rs, 1400) - 10, hi = Math.max(...rs, 1400) + 10;
+    const X = i => pad + i * (Wd - 2 * pad) / (hist.length - 1), Y = r => Ht - pad - (r - lo) / (hi - lo) * (Ht - 2 * pad);
     const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none');
-    const pl = document.createElementNS(ns, 'polyline');
-    pl.setAttribute('points', ys.map((y, i) => `${8 + i * (Wd - 16) / (ys.length - 1)},${Ht - 6 - (y / top) * (Ht - 12)}`).join(' '));
-    pl.setAttribute('fill', 'none'); pl.setAttribute('stroke', '#e94560'); pl.setAttribute('stroke-width', '2'); pl.setAttribute('vector-effect', 'non-scaling-stroke');
-    svg.append(pl);
-    $('profile-trend').replaceChildren(el('h3', {}, 'Error rate'), svg, el('div', { class: 'muted', style: 'font-size:0.75rem' }, 'per game · lower is better'));
+    svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('class', 'rating-chart');
+    const add = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.append(e); return e; };
+    add('line', { x1: 0, x2: Wd, y1: Y(1400), y2: Y(1400), stroke: '#fff3', 'stroke-dasharray': '4 4', 'vector-effect': 'non-scaling-stroke' });
+    const pts = rs.map((r, i) => `${X(i)},${Y(r)}`);
+    add('polygon', { points: `${X(0)},${Ht} ${pts.join(' ')} ${X(rs.length - 1)},${Ht}`, fill: '#f0c04022' });
+    add('polyline', { points: pts.join(' '), fill: 'none', stroke: '#f0c040', 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke' });
+    const last = rs.at(-1), best = Math.max(...rs);
+    $('profile-trend').replaceChildren(el('h3', {}, 'Rating'), svg,
+      el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${hist.length - 1} rated game${hist.length === 2 ? '' : 's'} · now ${last} · best ${best}`));
   } else $('profile-trend').replaceChildren();
   const h = d.stats.headToHead;
   $('profile-h2h').replaceChildren(h.length ? el('table', { class: 'ptable' },

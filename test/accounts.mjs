@@ -89,6 +89,8 @@ console.log('rating, friends, blocks, messages');
   const r = rateGame([{ playerId: X }, { playerId: Y }], 0);
   assert(r[X].change === 16 && r[Y].change === -16, `even players: winner +16, loser −16 (${r[X].change}, ${r[Y].change})`);
   const b = applyRatingBonus(r.pairs[0]);
+  const { ratingHistory } = await import('../src/Store.js');
+  assert(ratingHistory(X).at(-1)?.rating === 1432, 'rating history: one point per rated game, bonus included');
   assert(b[X].rating === 1432 && b[Y].rating === 1368, `played better too: the exchange counts twice (${b[X].rating}, ${b[Y].rating})`);
   // Back to one exchange for the leaderboard checks below.
   applyRatingBonus({ ...r.pairs[0], dw: -r.pairs[0].dw, dl: -r.pairs[0].dl });
