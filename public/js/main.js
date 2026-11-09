@@ -1005,7 +1005,7 @@ function renderProfile() {
       t.analysed >= 10 ? `Average PR over ${t.analysed} analysed games (lower is better)` : `Average PR · a title after 10 analysed games (${t.analysed} so far)`),
     stat(t.games, 'games'),
     stat(pct(t.wins, t.games), 'won', `${t.wins} of ${t.games}; an average player would win ${pct(t.expected * t.games, t.games)}`),
-    stat(signed(t.points), 'points'),
+    stat(signed(t.points), 'net points', 'Everything won minus everything paid (each game sums to zero)'),
     stat(`${t.aggro_wins} / ${t.aggro_losses}`, 'aggros dealt / taken'),
   ));
   // Rating over time (rated games), starting from 1400.
@@ -1039,7 +1039,7 @@ function renderProfile() {
     const card = el('button', { class: 'game-card', title: 'Open the analysis' },
       el('div', { class: 'gc-when muted' }, new Date(g.endedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })),
       el('div', { class: 'gc-rows' }, ...g.seats.map((x, i) => el('div', { class: 'gc-row' + (x.won ? ' won' : '') + (i === g.seat ? ' me' : '') },
-        el('span', { class: 'gc-pts' }, String(x.won ? Math.max(0, x.points) : 0)),
+        el('span', { class: 'gc-pts' + (x.points > 0 ? ' plus' : x.points < 0 ? ' minus' : '') }, `${x.points > 0 ? '+' : x.points < 0 ? '−' : ''}${Math.abs(x.points)}`),
         el('span', { class: 'log-dot', style: `background:${COLOR_MAP[x.color] ?? '#888'}` }),
         el('span', { class: 'gc-name' }, (i === g.seat ? 'You' : x.name) + (x.isRobot ? ' 🤖' : '') + (x.won ? ' 🏆' : '')),
         el('span', { class: 'gc-rating' }, x.rating != null && !x.isRobot ? String(x.rating) : ''),
