@@ -12,18 +12,49 @@
 <!-- ===== SCREENS ===== -->
 
 <div id="screen-landing" class="screen active">
-  <div class="card">
+  <div class="card login-card">
     <h1>TurboMarbles</h1>
     <p class="tagline">Race your marbles. Wreck your friends.</p>
-    <div id="account-line" class="account-line"></div>
-    <input id="landing-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off" autofocus>
-    <label id="remember-row" class="opt-row" title="Saves your name and a private key in this browser, and keeps your games and statistics">
-      <input type="checkbox" id="landing-remember" checked> Keep my stats (remember me on this device)
-    </label>
-    <div class="btn-row"><button id="btn-continue">Play</button></div>
-    <div class="btn-row small-links">
-      <button id="btn-use-code" class="link-btn">Signed in on another device? Use a link code</button>
+    <div class="tabs" id="login-tabs">
+      <button class="tab on" data-tab="login">Log in</button>
+      <button class="tab" data-tab="signup">Create account</button>
+      <button class="tab" data-tab="guest">Guest</button>
     </div>
+    <form id="form-login" class="login-form" autocomplete="on">
+      <input id="login-name" type="text" maxlength="20" placeholder="Name" autocomplete="username">
+      <input id="login-pass" type="password" maxlength="200" placeholder="Password" autocomplete="current-password">
+      <button id="btn-login" type="submit">Log in</button>
+      <button id="btn-forgot" type="button" class="link-btn">Forgot your password?</button>
+    </form>
+    <form id="form-signup" class="login-form" style="display:none" autocomplete="on">
+      <input id="signup-name" type="text" maxlength="20" placeholder="Choose a name" autocomplete="username">
+      <input id="signup-pass" type="password" maxlength="200" placeholder="Password (8 or more characters)" autocomplete="new-password">
+      <input id="signup-email" type="email" maxlength="200" placeholder="Email (optional, for password resets)" autocomplete="email">
+      <button id="btn-signup" type="submit">Create account</button>
+    </form>
+    <form id="form-guest" class="login-form" style="display:none">
+      <input id="landing-name" type="text" maxlength="20" placeholder="Your name" autocomplete="off">
+      <p class="muted">Guests can play, but no stats, rating or friends are kept.</p>
+      <button id="btn-continue" type="submit">Play as guest</button>
+      <input type="checkbox" id="landing-remember" style="display:none">
+    </form>
+    <form id="form-reset" class="login-form" style="display:none">
+      <p>Choose a new password.</p>
+      <input id="reset-pass" type="password" maxlength="200" placeholder="New password (8 or more characters)" autocomplete="new-password">
+      <button id="btn-reset" type="submit">Set password and log in</button>
+    </form>
+    <div id="account-line" class="account-line"></div>
+  </div>
+</div>
+
+<!-- Existing account without a password: choose one -->
+<div id="pw-pop" style="display:none">
+  <div class="card">
+    <h2>Secure your account</h2>
+    <p class="muted">TurboMarbles now uses passwords. Choose one for <b id="pw-pop-name"></b>; your stats, rating and friends stay.</p>
+    <input id="pw-pop-pass" type="password" maxlength="200" placeholder="Password (8 or more characters)" autocomplete="new-password">
+    <input id="pw-pop-email" type="email" maxlength="200" placeholder="Email (optional, for password resets)" autocomplete="email">
+    <button id="btn-pw-pop">Save</button>
   </div>
 </div>
 

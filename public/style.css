@@ -560,3 +560,11 @@ select { background: #16203a; color: var(--text); border: 1px solid #ffffff2a; b
 body.with-nav #screen-board .card { max-width: 1200px; }
 .board-opts { min-width: 0; max-width: 380px; }
 .board-preview { width: min(760px, calc(100vh - 150px), 90vw); height: min(760px, calc(100vh - 150px), 90vw); }
+.login-card { max-width: 400px; }
+.login-form { display: flex; flex-direction: column; gap: 0.7rem; }
+.login-form .link-btn { align-self: center; }
+#account-line:empty { display: none; }
+#account-line { color: #f0c040; text-align: center; font-size: 0.9rem; }
+#pw-pop { position: fixed; inset: 0; z-index: 70; background: #000a; align-items: center; justify-content: center; }
+#pw-pop .card { max-width: 420px; }
+input[type=password], input[type=email] { background: var(--surface); color: var(--text); border: 1px solid #ffffff2a; border-radius: 8px; padding: 0.7rem 0.9rem; font: inherit; font-size: 1rem; }

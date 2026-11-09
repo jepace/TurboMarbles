@@ -283,11 +283,71 @@ for (const inp of [document.querySelector('#lobby-chat .chat-input'), $('game-ch
     if (e.key === 'Enter' && inp.value.trim()) { send({ action: 'chat', text: inp.value.trim() }); inp.value = ''; }
   });
 }
-$('btn-continue').addEventListener('click', () => withName(goHome));
+// ---- Login screen: Log in / Create account / Guest (and a password reset) ----
+const loginForms = { login: 'form-login', signup: 'form-signup', guest: 'form-guest', reset: 'form-reset' };
+function loginTab(t) {
+  for (const [k, id] of Object.entries(loginForms)) $(id).style.display = k === t ? '' : 'none';
+  for (const b of document.querySelectorAll('#login-tabs .tab')) b.classList.toggle('on', b.dataset.tab === t);
+  $('login-tabs').style.display = t === 'reset' ? 'none' : '';
+  $('account-line').textContent = '';
+  const first = $(loginForms[t]).querySelector('input:not([type=checkbox])');
+  requestAnimationFrame(() => first?.focus());
+}
+for (const b of document.querySelectorAll('#login-tabs .tab')) b.addEventListener('click', () => loginTab(b.dataset.tab));
+const loginMsg = m => { $('account-line').textContent = m; };
+$('form-login').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('login-name').value.trim(), password = $('login-pass').value;
+  if (!name || !password) { loginMsg('Enter your name and password.'); return; }
+  pendingAfterRegister = () => { myName = me.name; goHome(); };
+  connect(); send({ action: 'login', name, password });
+});
+$('form-signup').addEventListener('submit', e => {
+  e.preventDefault();
+  const name = $('signup-name').value.trim(), password = $('signup-pass').value, email = $('signup-email').value.trim();
+  if (!name) { loginMsg('Choose a name.'); return; }
+  if (password.length < 8) { loginMsg('Use a password of 8 or more characters.'); return; }
+  pendingAfterRegister = () => { myName = me.name; goHome(); if (email) toastAnywhere(`We sent a link to ${email} to confirm it.`); };
+  connect(); send({ action: 'register', name, password, ...(email ? { email } : {}) });
+});
+$('form-guest').addEventListener('submit', e => { e.preventDefault(); withName(goHome); });
+$('btn-forgot').addEventListener('click', () => {
+  const n = prompt('Your name, or the email on your account:', $('login-name').value.trim());
+  if (!n) return;
+  connect(); send({ action: 'forgotPassword', name: n.trim() });
+});
+on('resetSent', () => loginMsg("If that account has a confirmed email, we've sent it a link to reset the password (it works for an hour)."));
+// Links from emails: ?reset=… (new password) and ?verify=… (confirm an email).
+const urlQ = new URLSearchParams(location.search);
+const resetToken = urlQ.get('reset'), verifyToken = urlQ.get('verify');
+if (resetToken || verifyToken) history.replaceState(null, '', location.pathname);
+if (resetToken) loginTab('reset');
+$('form-reset').addEventListener('submit', e => {
+  e.preventDefault();
+  const password = $('reset-pass').value;
+  if (password.length < 8) { loginMsg('Use a password of 8 or more characters.'); return; }
+  pendingAfterRegister = () => { myName = me.name; goHome(); toastAnywhere('Password changed. Other devices were signed out.'); };
+  connect(); send({ action: 'resetPassword', token: resetToken, password });
+});
+if (verifyToken) { connect(); onOpen(() => send({ action: 'verifyEmail', token: verifyToken })); }
+on('emailCleared', () => { if (profileData) { profileData.email = null; renderAccountSection(); } });
+on('passwordSet', () => { if (profileData) { profileData.hasPassword = true; renderAccountSection(); } });
+on('emailVerified', ({ email }) => { toastAnywhere(`Email confirmed: ${email}`); if (profileData) { profileData.email = email; renderAccountSection(); } });
+// An account from before passwords: choose one now.
+$('btn-pw-pop').addEventListener('click', () => {
+  const password = $('pw-pop-pass').value, email = $('pw-pop-email').value.trim();
+  if (password.length < 8) { alert('Use a password of 8 or more characters.'); return; }
+  send({ action: 'setPassword', password });
+  if (email) send({ action: 'setEmail', email });
+  $('pw-pop').style.display = 'none';
+});
+on('passwordSet', () => toastAnywhere('Password saved.'));
+on('emailPending', ({ email }) => toastAnywhere(`We sent a link to ${email}. Open it to confirm the address.`));
+// Log out: this device's session ends on the server too.
 $('btn-switch-user').addEventListener('click', () => {
-  if (me && !confirm('Sign out on this device? To sign back in you will need a link code from another device, or your recovery key (Settings → Show recovery key).')) return;
-  if (me) { saveKey(null); me = null; myPrefs = {}; }
-  updateLanding(); show('screen-landing');
+  if (me) send({ action: 'logout' });
+  saveKey(null); me = null; myPrefs = {}; myRating = null;
+  updateLanding(); loginTab('login'); show('screen-landing');
 });
 $('btn-create').addEventListener('click', () => withName(() => {
   show('screen-create');
@@ -769,8 +829,12 @@ on('error', ({ code, message }) => {
     return;
   }
   if (code && code.startsWith('ANALYSIS')) resetAnalyzeButton();
+  if (code === 'STATS_UNAVAILABLE') { statsUnavailable = true; pendingAfterRegister = null; updateLanding(); loginMsg('Accounts are off on this server: play as a guest.'); return; }
+  // Login screen problems show under the form.
+  if ($('screen-landing').classList.contains('active') && ['BAD_LOGIN', 'BAD_PASSWORD', 'BAD_EMAIL', 'NAME_TAKEN', 'RATE_LIMITED', 'BAD_TOKEN', 'MISSING_FIELDS'].includes(code)) {
+    pendingAfterRegister = null; loginMsg(message); return;
+  }
   if (code === 'NAME_TAKEN' || code === 'RATE_LIMITED' || code === 'BAD_LINK_CODE') pendingAfterRegister = null;
-  if (code === 'STATS_UNAVAILABLE') { statsUnavailable = true; updateLanding(); if (pendingAfterRegister) { const f = pendingAfterRegister; pendingAfterRegister = null; f(); } return; }
   alert(message);
 });
 
@@ -791,27 +855,16 @@ onOpen(() => { const k = loadKey(); if (k) send({ action: 'identify', key: k });
 if (loadKey()) connect();         // sign in straight away
 
 function updateLanding() {
-  const line = $('account-line');
-  if (me) {
-    line.textContent = `Signed in as ${me.name}`;
-    $('landing-name').value = me.name;
-    $('landing-name').disabled = true;
-    $('remember-row').style.display = 'none';
-    $('btn-game-profile').style.display = '';
-    $('btn-use-code').style.display = 'none';
-  } else {
-    line.textContent = statsUnavailable ? 'Playing as a guest (stats are off on this server)' : '';
-    $('landing-name').disabled = false;
-    $('remember-row').style.display = statsUnavailable ? 'none' : '';
-    $('btn-game-profile').style.display = 'none';
-    $('btn-use-code').style.display = statsUnavailable ? 'none' : '';
-  }
+  $('btn-game-profile').style.display = me ? '' : 'none';
+  // Accounts unavailable on this server: guests only.
+  if (statsUnavailable && !me) { loginTab('guest'); $('login-tabs').style.display = 'none'; }
 }
 updateLanding();
 
 let myPrefs = {};                  // account preferences (signed in)
 on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
-on('identity', ({ player, prefs }) => {
+on('identity', ({ player, prefs, needsPassword }) => {
+  if (player && needsPassword) { $('pw-pop-name').textContent = player.name; $('pw-pop').style.display = 'flex'; }
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
   for (const k of ['myColor', 'boardTrack', 'boardMarbles']) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); }
   applyBoardLook();
@@ -834,14 +887,7 @@ on('accountDeleted', () => {
   alert('Your account has been deleted.');
 });
 
-$('btn-use-code').addEventListener('click', () => {
-  const code = prompt('Enter the link code from your other device (Profile → Link another device), or a recovery key:');
-  if (!code) return;
-  connect();
-  const c = code.trim();
-  if (c.replace(/[^A-Za-z0-9]/g, '').length === 10) send({ action: 'redeemLink', code: c });
-  else { saveKey(c); send({ action: 'identify', key: c }); }
-});
+
 // Stats and Settings both come from the profile data.
 let profileFrom = 'screen-home', profileTarget = 'screen-profile';
 const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile' }); };
@@ -951,13 +997,23 @@ function renderAccountSection(extra) {
     section('Analysis',
       row('Opens on', prefSelect('apFilter', [['', 'last used'], ['errors', 'errors only'], ['inacc', 'inaccuracies and worse'], ['all', 'all rolls']]),
         prefSelect('apPlayer', [['', 'last used'], ['me', 'my plays'], ['all', 'all players']]))),
+    section('Password',
+      ...(profileData?.hasPassword ? [row('Current', el('input', { type: 'password', id: 'pw-current', placeholder: 'Current password', maxLength: 200, autocomplete: 'current-password' }))] : []),
+      row(profileData?.hasPassword ? 'New' : 'Choose one', el('input', { type: 'password', id: 'pw-new', placeholder: '8 or more characters', maxLength: 200, autocomplete: 'new-password' }),
+        btn(profileData?.hasPassword ? 'Change password' : 'Set password', () => {
+          const password = $('pw-new').value;
+          if (password.length < 8) { alert('Use a password of 8 or more characters.'); return; }
+          send({ action: 'setPassword', password, current: $('pw-current')?.value });
+          $('pw-new').value = ''; if ($('pw-current')) $('pw-current').value = '';
+        }))),
+    section('Email',
+      row('For password resets', profileData?.email ? el('b', {}, profileData.email) : el('span', { class: 'muted' }, 'none'),
+        ...(profileData?.email ? [btn('Remove', () => { if (confirm('Remove your email? You could no longer reset a forgotten password.')) send({ action: 'clearEmail' }); })] : [])),
+      row(profileData?.email ? 'Change it' : 'Add one', el('input', { type: 'email', id: 'email-new', placeholder: 'you@example.com', maxLength: 200 }),
+        btn('Send confirmation', () => { const e = $('email-new').value.trim(); if (e) send({ action: 'setEmail', email: e }); }))),
     section('Devices',
       row('Signed in on', el('span', {}, `${profileData?.devices ?? 1} device${profileData?.devices === 1 ? '' : 's'}`)),
-      row('Another device', btn('Link another device', () => send({ action: 'linkCode' }))),
-      row('Lost a device?', btn('Sign out other devices', () => { if (confirm('Sign out every other device? They will need a new link code.')) send({ action: 'signOutOthers' }); })),
-      row('Recovery key', btn('Show recovery key', () => renderAccountSection(el('div', {},
-        el('div', { class: 'muted' }, 'Your recovery key signs in as you on any device ("Use a link code" on the start screen, then paste it). Keep it somewhere safe and private — anyone with it can play as you.'),
-        el('div', { class: 'keybox' }, loadKey() ?? '(not stored in this browser)'))))),
+      row('Lost a device?', btn('Sign out other devices', () => { if (confirm('Sign out every other device? They will need your password to log in again.')) send({ action: 'signOutOthers' }); })),
       ...(extra ? [extra] : [])),
     section('Danger zone',
       row('Delete account', btn('Delete my account', () => {
