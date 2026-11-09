@@ -1267,6 +1267,8 @@ const colorVar = c => `var(--${dc(c)})`;
 const PR_TITLES = [[3.5, 'World Class'], [5, 'Expert'], [7.5, 'Advanced'], [11, 'Intermediate'], [16, 'Casual'], [Infinity, 'Beginner']];
 const prTitle = pr => PR_TITLES.find(([max]) => pr < max)[1];
 const prText = pr => (pr == null ? '—' : pr.toFixed(1));
+// The analysis is still settling: estimates waiting to be played out.
+const analysisPending = () => deepening.size > 0 || (analysisReport?.cube ?? []).some(c => c.pending);
 function playerStats(rep, pi) {
   const rolls = rep.rolls.filter(r => r.pi === pi);
   const choices = rolls.filter(r => r.analysis);
@@ -1413,7 +1415,8 @@ function renderSummary() {
       p.name + (rep.winner === i ? ' 🏆' : ''))));
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
-    row('PR', s => el('span', {}, el('b', {}, prText(s.pr)), s.pr != null && s.decisions >= 15 ? el('span', { class: 'pr-title' }, ' ' + prTitle(s.pr)) : ''),
+    row('PR', s => analysisPending() ? el('span', { class: 'muted', title: 'Waiting for the play-outs' }, '…')
+      : el('span', {}, el('b', {}, prText(s.pr)), s.pr != null && s.decisions >= 15 ? el('span', { class: 'pr-title' }, ' ' + prTitle(s.pr)) : ''),
       'Performance rating: 500 × equity lost per decision (lower is better); a title for this game once there are 15+ real decisions'),
     row('Equity lost', s => el('span', { title: cubeSplit(s, x => `${eqv(x.moveEq)} on moves, ${eqv(x.cubeLost)} on the cube`) }, eqv(s.eqLost)),
       'Total over the game, moves and cube together'),
@@ -1438,7 +1441,7 @@ on('analysisDeepening', ({ idx, game, queued }) => {
   if (game != null && game !== curGame) return;
   deepening.add(idx);
   if (queued) deepQueued.add(idx); else deepQueued.delete(idx);
-  if ($('game-layout').classList.contains('analysis-mode')) { renderMoveList(); renderStatus(); }
+  if ($('game-layout').classList.contains('analysis-mode')) { renderMoveList(); renderStatus(); renderSummary(); }
   if (idx === apSel) selectRoll(apSel, apOpt === 'played' || apOpt === 'before' ? apOpt : null);
 });
 on('cubeUpdate', ({ i, analysis, failed, game }) => {

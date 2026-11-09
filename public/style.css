@@ -661,3 +661,9 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .sev-dot.blunder { background: #e0283c; box-shadow: 0 0 6px #e0283c99; }
 @keyframes pulse { 50% { opacity: 0.35; } }
 .pr-title { color: #f0c040; font-weight: 700; margin-left: 4px; }
+
+/* Analysis summary: fixed columns and equal-width digits, so nothing jumps while numbers update. */
+#ap-summary table { table-layout: fixed; }
+#ap-summary th:first-child, #ap-summary td:first-child { width: 9.5rem; }
+#ap-summary td, #ap-summary th { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ap-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.4em; font-variant-numeric: tabular-nums; }
