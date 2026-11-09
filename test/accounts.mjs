@@ -18,11 +18,11 @@ openStore(':memory:');
 
 console.log('register / identify / link');
 const a = mockWs();
-act(a, { action: 'register', name: 'JEP' });
+act(a, { action: 'register', name: 'JEP', password: 'pass-word-1' });
 const reg = a.find('registered')[0];
 assert(reg?.key && reg.player.name === 'JEP' && a._player?.id === reg.player.id, 'register signs the connection in');
 const a2 = mockWs();
-act(a2, { action: 'register', name: 'jep' });
+act(a2, { action: 'register', name: 'jep', password: 'pass-word-1' });
 assert(a2.find('error')[0]?.code === 'NAME_TAKEN', 'taken name refused');
 act(a2, { action: 'identify', key: reg.key });
 assert(a2.find('identity')[0]?.player?.id === reg.player.id, 'identify with the key on another connection');
@@ -43,7 +43,7 @@ _reset(); gmConfig.initialTurnIndex = 0; gmConfig.robotThinkMs = 0;
 gmConfig.analysis = { screen: 4, deep: 8, keep: 2, maxDeep: 8 };
 gmConfig.analysisLevels = [gmConfig.analysis, gmConfig.analysis];
 const b = mockWs();
-act(b, { action: 'register', name: 'Sloane' });
+act(b, { action: 'register', name: 'Sloane', password: 'pass-word-1' });
 const host = a, guest = b;
 const { code: room, roomId } = createRoom(host, 'JEP', 2, undefined, { cube: true });
 joinRoom(guest, room, 'Sloane');
@@ -70,7 +70,7 @@ assert(a.find('profile')[0]?.stats?.headToHead?.[0]?.name === 'Sloane', 'profile
 act(a, { action: 'openGame', id: games[0].id });
 assert(a.find('storedGame')[0]?.report?.rolls, 'a player can open the stored game');
 const stranger = mockWs();
-act(stranger, { action: 'register', name: 'Stranger' });
+act(stranger, { action: 'register', name: 'Stranger', password: 'pass-word-1' });
 act(stranger, { action: 'openGame', id: games[0].id });
 assert(stranger.find('error')[0]?.code === 'NOT_FOUND', "others can't open it");
 act(guest, { action: 'deleteAccount', confirm: 'nope' });
@@ -82,7 +82,7 @@ console.log('rating, friends, blocks, messages');
 {
   const x = mockWs(), y = mockWs(), z = mockWs();
   for (const w of [x, y, z]) w._ip = '10.9.9.9';
-  act(x, { action: 'register', name: 'Xena' }); act(y, { action: 'register', name: 'Yuri' }); act(z, { action: 'register', name: 'Zed' });
+  act(x, { action: 'register', name: 'Xena', password: 'pass-word-1' }); act(y, { action: 'register', name: 'Yuri', password: 'pass-word-1' }); act(z, { action: 'register', name: 'Zed', password: 'pass-word-1' });
   const X = x._player.id, Y = y._player.id;
   const { rateGame, applyRatingBonus, ratingOf } = await import('../src/Store.js');
   assert(ratingOf(X).rating === 1400, 'new players start at 1400');
@@ -113,6 +113,41 @@ console.log('rating, friends, blocks, messages');
   assert(x.find('error').pop()?.code === 'NOT_FRIENDS', 'blocked: no more messages');
   act(x, { action: 'friendRequest', name: 'Yuri' });
   assert(x.find('error').pop()?.code === 'BLOCKED', 'blocked: no friend request');
+}
+
+console.log('passwords, email, reset');
+{
+  const { createMailToken } = await import('../src/Store.js');
+  const p = mockWs(); p._ip = '10.7.7.7';
+  act(p, { action: 'register', name: 'Pwd', password: 'short' });
+  assert(p.find('error').pop()?.code === 'BAD_PASSWORD', 'a short password is refused');
+  act(p, { action: 'register', name: 'Pwd', password: 'long enough one' });
+  const reg = p.find('registered').pop();
+  assert(reg?.player.name === 'Pwd', 'register with a password');
+  const q = mockWs(); q._ip = '10.7.7.8';
+  act(q, { action: 'login', name: 'pwd', password: 'wrong password' });
+  assert(q.find('error').pop()?.code === 'BAD_LOGIN' && !q._player, 'wrong password refused');
+  act(q, { action: 'login', name: 'pwd', password: 'long enough one' });
+  assert(q._player?.id === reg.player.id && q.find('registered').pop()?.key, 'log in by name (any case) and password: a new session');
+  const key = q.find('registered').pop().key;
+  act(q, { action: 'logout' });
+  const r = mockWs(); r._ip = '10.7.7.9';
+  act(r, { action: 'identify', key });
+  assert(r.find('identity').pop()?.player === null, 'logging out revokes that session');
+  act(p, { action: 'setPassword', current: 'nope nope nope', password: 'another one!' });
+  assert(p.find('error').pop()?.code === 'BAD_LOGIN', 'changing it needs the current password');
+  act(p, { action: 'setPassword', current: 'long enough one', password: 'another one!' });
+  assert(p.find('passwordSet').length === 1, 'password changed');
+  act(p, { action: 'setEmail', email: 'pwd@example.com' });
+  assert(p.find('emailPending').pop()?.email === 'pwd@example.com', 'email waits for confirmation');
+  act(p, { action: 'verifyEmail', token: createMailToken(p._player.id, 'verify', 'pwd@example.com') });
+  assert(p.find('emailVerified').pop()?.email === 'pwd@example.com', 'email confirmed by its link');
+  act(q, { action: 'forgotPassword', name: 'nobody-at-all' });
+  assert(q.find('resetSent').length === 1, 'reset request: the same answer for an unknown name');
+  act(q, { action: 'resetPassword', token: createMailToken(p._player.id, 'reset'), password: 'fresh password' });
+  assert(q.find('registered').pop()?.reset === true, 'reset link sets a new password and signs in');
+  act(r, { action: 'login', name: 'Pwd', password: 'fresh password' });
+  assert(r._player?.name === 'Pwd', 'the new password works');
 }
 
 closeStore();

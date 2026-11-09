@@ -22,9 +22,10 @@
 //
 // A signed-in connection carries ws._player = { id, name }.
 import * as store from './Store.js';
+import { sendMail, publicUrl } from './Mailer.js';
 
 const WINDOW_MS = 60 * 60 * 1000;
-const LIMITS = { register: 10, linkFail: 10, identifyFail: 30 };    // per IP per hour
+const LIMITS = { register: 10, linkFail: 10, identifyFail: 30, loginFail: 30, loginAcct: 15, mail: 6 };    // per IP (or account) per hour
 const hits = new Map();       // `${kind}:${ip}` → [timestamps]
 function limited(kind, ip) {
   const k = `${kind}:${ip}`, t = Date.now();
@@ -35,7 +36,7 @@ function limited(kind, ip) {
 function hit(kind, ip) { const k = `${kind}:${ip}`; (hits.get(k) ?? hits.set(k, []).get(k)).push(Date.now()); }
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some(x => t - x < WINDOW_MS)) hits.delete(k); }, 10 * 60 * 1000).unref();
 
-export const ACCOUNT_ACTIONS = new Set(['leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
+export const ACCOUNT_ACTIONS = new Set(['login', 'logout', 'setPassword', 'setEmail', 'clearEmail', 'verifyEmail', 'forgotPassword', 'resetPassword', 'leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
   'block', 'unblock', 'dm', 'conversation', 'invite', 'setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
   'deleteAccount', 'profile', 'history', 'openGame']);
 
@@ -70,6 +71,11 @@ function dmLimited(id) {
   if (list.length >= 20) return true;
   list.push(t); return false;
 }
+function mailVerify(player, email) {
+  const token = store.createMailToken(player.id, 'verify', email);
+  sendMail(email, 'Confirm your email for TurboMarbles',
+    `Hi ${player.name},\n\nTo use this address for password resets, open this link within a day:\n${publicUrl()}/?verify=${token}\n\nIf this wasn't you, ignore this email.`);
+}
 function friendsPayload(id) {
   const l = store.friendList(id), unread = store.unreadCounts(id);
   const mark = f => ({ ...f, online: isOnline(f.id), unread: unread[f.id] ?? 0 });
@@ -93,16 +99,22 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       if (!p) { hit('identifyFail', ip); return send(ws, { event: 'identity', player: null }); }
       setPlayer(ws, p);
       ws._key = msg.key;
-      return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id) });
+      return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id),
+        needsPassword: !store.hasPassword(p.id) });
     }
     case 'register': {
       const name = cleanName(msg.name);
       if (!name) return err('MISSING_FIELDS', 'Choose a name.');
+      if (!store.validPassword(msg.password)) return err('BAD_PASSWORD', `Choose a password of ${store.PASSWORD_MIN} to ${store.PASSWORD_MAX} characters.`);
+      const email = msg.email ? store.cleanEmail(msg.email) : null;
+      if (msg.email && !email) return err('BAD_EMAIL', "That email address doesn't look right.");
       if (limited('register', ip)) return err('RATE_LIMITED', 'Too many new players from here. Try again later.');
       const r = store.register(name);
       if (r.error === 'NAME_TAKEN') return err('NAME_TAKEN', `"${name}" is taken. Choose another name, or sign in on this device with a link code.`);
       if (r.error) return err(r.error, 'Could not register.');
       hit('register', ip);
+      store.setPassword(r.player.id, msg.password);
+      if (email) mailVerify(r.player, email);
       setPlayer(ws, r.player); ws._key = r.key;
       return send(ws, { event: 'registered', player: r.player, key: r.key });
     }
@@ -148,12 +160,71 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
     case 'profile': {
       if (!needMe()) return;
       return send(ws, { event: 'profile', player: me, devices: store.deviceCount(me.id),
-        stats: store.playerStats(me.id), games: store.playerGames(me.id, { limit: 30 }), rating: store.ratingOf(me.id) });
+        stats: store.playerStats(me.id), games: store.playerGames(me.id, { limit: 30 }), rating: store.ratingOf(me.id),
+        email: store.emailOf(me.id), hasPassword: store.hasPassword(me.id) });
     }
     case 'history': {
       if (!needMe()) return;
       const before = Number(msg.before);
       return send(ws, { event: 'history', games: store.playerGames(me.id, { limit: 30, before: Number.isFinite(before) ? before : Infinity }) });
+    }
+    case 'login': {
+      const acct = 'acct:' + String(msg.name ?? '').toLowerCase().slice(0, 40);
+      if (limited('loginFail', ip) || limited('loginAcct', acct)) return err('RATE_LIMITED', 'Too many tries. Wait a while, or reset your password.');
+      const r = store.login(msg.name, msg.password);
+      if (!r) { hit('loginFail', ip); hit('loginAcct', acct); return err('BAD_LOGIN', 'Wrong name or password.'); }
+      setPlayer(ws, r.player); ws._key = r.key;
+      return send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id) });
+    }
+    case 'logout': {
+      if (ws._key) store.revokeSession(ws._key);
+      accountDisconnected(ws);
+      ws._player = null; ws._key = null;
+      return send(ws, { event: 'loggedOut' });
+    }
+    case 'setPassword': {
+      if (!needMe()) return;
+      if (store.hasPassword(me.id) && !store.checkPassword(me.id, msg.current)) return err('BAD_LOGIN', 'Your current password is wrong.');
+      if (!store.validPassword(msg.password)) return err('BAD_PASSWORD', `Choose a password of ${store.PASSWORD_MIN} to ${store.PASSWORD_MAX} characters.`);
+      store.setPassword(me.id, msg.password);
+      return send(ws, { event: 'passwordSet' });
+    }
+    case 'setEmail': {
+      if (!needMe()) return;
+      const email = store.cleanEmail(msg.email);
+      if (!email) return err('BAD_EMAIL', "That email address doesn't look right.");
+      if (limited('mail', 'id:' + me.id)) return err('RATE_LIMITED', 'Too many emails. Try again later.');
+      hit('mail', 'id:' + me.id);
+      mailVerify(me, email);
+      return send(ws, { event: 'emailPending', email });
+    }
+    case 'clearEmail':
+      if (!needMe()) return;
+      store.clearEmail(me.id);
+      return send(ws, { event: 'emailCleared' });
+    case 'verifyEmail': {
+      const r = store.verifyEmail(msg.token);
+      if (!r || r.error) return err(r?.error ?? 'BAD_TOKEN', r?.error === 'EMAIL_TAKEN' ? 'Another account uses that email.' : 'That link is wrong or has expired.');
+      return send(ws, { event: 'emailVerified', email: r.email });
+    }
+    case 'forgotPassword': {
+      // Same answer whether or not the account (or its email) exists.
+      if (!limited('mail', ip)) {
+        hit('mail', ip);
+        const t = store.resetTarget(msg.name);
+        if (t) {
+          const token = store.createMailToken(t.id, 'reset');
+          sendMail(t.email, 'Reset your TurboMarbles password',
+            `Hi ${t.name},\n\nTo choose a new password, open this link within an hour:\n${publicUrl()}/?reset=${token}\n\nIf you didn't ask for this, ignore this email; your password stays as it is.`);
+        }
+      }
+      return send(ws, { event: 'resetSent' });
+    }
+    case 'resetPassword': {
+      const r = store.resetPassword(msg.token, msg.password);
+      if (r.error) return err(r.error, r.error === 'BAD_PASSWORD' ? `Choose a password of ${store.PASSWORD_MIN} to ${store.PASSWORD_MAX} characters.` : 'That link is wrong or has expired.');
+      setPlayer(ws, r.player); ws._key = r.key;
+      return send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id), reset: true });
     }
     case 'leaderboard':
       return send(ws, { event: 'leaderboard', players: store.leaderboard({ limit: 100 }), me: me ? store.ratingOf(me.id) : null });

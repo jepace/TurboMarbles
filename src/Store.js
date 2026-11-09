@@ -16,7 +16,7 @@
 //
 // If node:sqlite is unavailable (Node too old), the store is disabled: games
 // still work, and identity/stats actions answer STATS_UNAVAILABLE.
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { mkdirSync } from 'fs';
 import { join } from 'path';
 import { gzipSync, gunzipSync } from 'zlib';
@@ -115,6 +115,16 @@ function migrate() {
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
   if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
+  if (!pcols.has('pw_hash')) db.exec('ALTER TABLE players ADD COLUMN pw_hash TEXT');
+  if (!pcols.has('email')) db.exec('ALTER TABLE players ADD COLUMN email TEXT');            // verified only
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS players_email ON players(email) WHERE email IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS mail_tokens (
+      token_hash TEXT PRIMARY KEY,
+      player_id  TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      kind       TEXT NOT NULL,                -- 'verify' (email to confirm) | 'reset'
+      email      TEXT,
+      expires_at INTEGER NOT NULL
+    );`);
   if (!pcols.has('rating')) db.exec('ALTER TABLE players ADD COLUMN rating REAL NOT NULL DEFAULT 1400');
   if (!pcols.has('rated_games')) db.exec('ALTER TABLE players ADD COLUMN rated_games INTEGER NOT NULL DEFAULT 0');
   // Everyone starts at 1400 (players not yet rated, from when it was 1500).
@@ -225,6 +235,88 @@ export function createLinkCode(playerId) {
 }
 
 // Use a link code: a new device key for that player (the code is used up).
+// ---- Passwords (salted scrypt) and email --------------------------------------------
+//
+// Stored as 'scrypt$N$r$p$salt$hash' (base64url). Compared in constant time.
+const SCRYPT = { N: 16384, r: 8, p: 1, len: 64 };
+export const PASSWORD_MIN = 8, PASSWORD_MAX = 200;
+export function hashPassword(pw) {
+  const salt = randomBytes(16);
+  const h = scryptSync(pw.normalize('NFKC'), salt, SCRYPT.len, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: 64 * 1024 * 1024 });
+  return `scrypt$${SCRYPT.N}$${SCRYPT.r}$${SCRYPT.p}$${salt.toString('base64url')}$${h.toString('base64url')}`;
+}
+function checkHash(pw, stored) {
+  const [alg, N, r, p, salt, hash] = String(stored ?? '').split('$');
+  if (alg !== 'scrypt') return false;
+  const want = Buffer.from(hash, 'base64url');
+  const got = scryptSync(pw.normalize('NFKC'), Buffer.from(salt, 'base64url'), want.length, { N: +N, r: +r, p: +p, maxmem: 64 * 1024 * 1024 });
+  return got.length === want.length && timingSafeEqual(got, want);
+}
+const DUMMY_HASH = hashPassword('not-a-real-password');
+export const validPassword = pw => typeof pw === 'string' && pw.length >= PASSWORD_MIN && pw.length <= PASSWORD_MAX;
+function newSession(playerId) {
+  const key = randomBytes(32).toString('base64url');
+  db.prepare('INSERT INTO devices (key_hash, player_id, created_at, last_used) VALUES (?, ?, ?, ?)').run(sha(key), playerId, now(), now());
+  return key;
+}
+export function hasPassword(id) { return !!db?.prepare('SELECT pw_hash FROM players WHERE id = ?').get(id)?.pw_hash; }
+export function setPassword(id, pw) { db.prepare('UPDATE players SET pw_hash = ? WHERE id = ?').run(hashPassword(pw), id); }
+// Log in by name and password → { player, key } (a new session) or null.
+// A missing account costs the same time as a wrong password.
+export function login(name, pw) {
+  if (!db || typeof pw !== 'string' || pw.length > PASSWORD_MAX) return null;
+  const row = db.prepare('SELECT id, name, pw_hash FROM players WHERE name_key = ?').get(nameKey(String(name ?? '')));
+  const ok = checkHash(pw, row?.pw_hash ?? DUMMY_HASH) && !!row?.pw_hash;
+  if (!ok) return null;
+  return { player: { id: row.id, name: row.name }, key: newSession(row.id) };
+}
+export function checkPassword(id, pw) {
+  const row = db?.prepare('SELECT pw_hash FROM players WHERE id = ?').get(id);
+  return !!row?.pw_hash && typeof pw === 'string' && checkHash(pw, row.pw_hash);
+}
+export function revokeSession(key) { if (db && typeof key === 'string') db.prepare('DELETE FROM devices WHERE key_hash = ?').run(sha(key)); }
+export const cleanEmail = e => { const x = String(e ?? '').trim().toLowerCase(); return x.length <= 200 && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x) ? x : null; };
+export function emailOf(id) { return db?.prepare('SELECT email FROM players WHERE id = ?').get(id)?.email ?? null; }
+export function clearEmail(id) { db?.prepare('UPDATE players SET email = NULL WHERE id = ?').run(id); }
+// A one-time emailed token (24 h to verify an email, 1 h to reset a password).
+export function createMailToken(id, kind, email = null) {
+  const token = randomBytes(24).toString('base64url');
+  db.prepare('DELETE FROM mail_tokens WHERE expires_at < ? OR (player_id = ? AND kind = ?)').run(now(), id, kind);
+  db.prepare('INSERT INTO mail_tokens VALUES (?, ?, ?, ?, ?)').run(sha(token), id, kind, email, now() + (kind === 'reset' ? 3600e3 : 24 * 3600e3));
+  return token;
+}
+function takeMailToken(token, kind) {
+  if (!db || typeof token !== 'string' || token.length > 100) return null;
+  const row = db.prepare('SELECT player_id, kind, email, expires_at FROM mail_tokens WHERE token_hash = ?').get(sha(token));
+  if (!row || row.kind !== kind || row.expires_at < now()) return null;
+  db.prepare('DELETE FROM mail_tokens WHERE token_hash = ?').run(sha(token));
+  return row;
+}
+// Confirm an email: it becomes the account's (unless another account has it meanwhile).
+export function verifyEmail(token) {
+  const row = takeMailToken(token, 'verify');
+  if (!row) return null;
+  try { db.prepare('UPDATE players SET email = ? WHERE id = ?').run(row.email, row.player_id); } catch { return { error: 'EMAIL_TAKEN' }; }
+  return { id: row.player_id, email: row.email };
+}
+// The account for a reset request (by name or verified email), with its email.
+export function resetTarget(nameOrEmail) {
+  const e = cleanEmail(nameOrEmail);
+  const row = e ? db?.prepare('SELECT id, name, email FROM players WHERE email = ?').get(e)
+    : db?.prepare('SELECT id, name, email FROM players WHERE name_key = ?').get(nameKey(String(nameOrEmail ?? '')));
+  return row?.email ? row : null;
+}
+// Reset with an emailed token: new password, every old session signed out, a new one here.
+export function resetPassword(token, pw) {
+  if (!validPassword(pw)) return { error: 'BAD_PASSWORD' };
+  const row = takeMailToken(token, 'reset');
+  if (!row) return { error: 'BAD_TOKEN' };
+  setPassword(row.player_id, pw);
+  db.prepare('DELETE FROM devices WHERE player_id = ?').run(row.player_id);
+  const p = db.prepare('SELECT id, name FROM players WHERE id = ?').get(row.player_id);
+  return { player: p, key: newSession(p.id) };
+}
+
 export function redeemLinkCode(code) {
   if (!db || typeof code !== 'string') return null;
   const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, '');
