@@ -1,6 +1,6 @@
 // GameManager.js — room registry, session tracking, disconnect timers
 
-import { randomBytes, randomInt } from 'crypto';
+import { randomBytes, randomInt, createHash, createHmac } from 'crypto';
 import {
   createGame, rollDice, allLegalMoves, applyMove,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
@@ -318,6 +318,7 @@ function beginGame(room, players) {
   // of this game (and whether the Crawford game is used up afterwards).
   Object.defineProperty(room.game, '_valueCtx', { value: {
     match: m ? { length: m.length, score: m.score.slice(), crawfordUsed: !!m.crawfordUsed } : null }, enumerable: false });
+  if (config.secureDice) startDice(room.game);
   room.state = 'playing';
   room.robotPlan = null;
   broadcast(room, { event: 'gameStarted', gameState: publicState(room) });
@@ -392,7 +393,8 @@ function finishGame(room) {
   room._ratings = null;
   // A rated game is analysed at once (quick level) for the played-better bonus.
   if (rec.ratingPairs?.length) setImmediate(() => { if (rooms.has(room.id)) handleAnalyzeGame(null, room.id, rec.n); });
-  broadcast(room, { event: 'gameResult', game: rec.n, ratings, winnerIndex: game.winner, result: r,
+  const dice = game._dice ? { commit: game._dice.commit, seed: game._dice.seed } : null;
+  broadcast(room, { event: 'gameResult', game: rec.n, ratings, dice, winnerIndex: game.winner, result: r,
     score: !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
 }
@@ -418,7 +420,7 @@ function storeFinishedGame(room, r) {
           doubles: c.doubles, takes: c.takes, drops: c.drops,
         };
       });
-    room.storedGameId = recordGame({ cube: !!game.cube, winnerSeat: game.winner, rolls: game._rolls ?? [], seats });
+    room.storedGameId = recordGame({ cube: !!game.cube, winnerSeat: game.winner, rolls: game._rolls ?? [], seats, diceSeed: game._dice?.seed ?? null });
     // Rated only between accounts with no robot seat (a quitter's seat still counts as theirs).
     room._ratings = rateGame(seats, game.winner, room.storedGameId);
   } catch (err) {
@@ -494,6 +496,7 @@ export function storedGameReport(g) {
   return {
     players: g.seats.map(s => ({ name: s.name, color: s.color, isRobot: s.isRobot })),
     winner: g.winnerSeat,
+    dice: g.diceSeed ? { commit: createHash('sha256').update(Buffer.from(g.diceSeed, 'hex')).digest('hex'), seed: g.diceSeed } : null,
     rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
       ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
   };
@@ -716,16 +719,33 @@ function robotAnswerDouble(room) {
 // generator: unbiased and unpredictable (Math.random's state can in principle
 // be worked out from enough output). Simulations — robot thinking, analysis
 // play-outs — keep their own fast, seedable generator.
-function liveDice() {
+// Provably fair: each game has a secret 32-byte seed, chosen at random when
+// it starts; its SHA-256 fingerprint is shown then, the seed itself only when
+// the game is over. Roll number k (0, 1, 2, …) is the first two bytes below
+// 252 of HMAC-SHA256(seed, "k"), each taken as 1 + byte mod 6 (252 = 6 × 42,
+// so all six faces are equally likely). Anyone can re-derive every roll from
+// the revealed seed and check the game (the client's "Verify dice" does).
+export function diceFromSeed(seedHex, k) {
+  const h = createHmac('sha256', Buffer.from(seedHex, 'hex')).update(String(k)).digest();
+  const out = [];
+  for (const byte of h) { if (byte < 252) out.push(1 + (byte % 6)); if (out.length === 2) break; }
+  while (out.length < 2) out.push(randomInt(1, 7));     // (never happens: 32 bytes)
+  return out[0] >= out[1] ? out : [out[1], out[0]];
+}
+function startDice(game) {
+  const seed = randomBytes(32).toString('hex');
+  Object.defineProperty(game, '_dice', { value: { seed, n: 0, commit: createHash('sha256').update(Buffer.from(seed, 'hex')).digest('hex') }, enumerable: false, writable: true });
+}
+function liveDice(game) {
   if (!config.secureDice) return rollDice();          // tests script the dice through Math.random
-  const a = randomInt(1, 7), b = randomInt(1, 7);
-  return a >= b ? [a, b] : [b, a];
+  if (!game._dice) startDice(game);
+  return diceFromSeed(game._dice.seed, game._dice.n++);
 }
 
 // Performs a dice roll and transitions game to AWAITING_MOVE.
 // Called by both human handleRoll() and doRobotTurn() so roll logic stays in one place.
 function performRoll(game) {
-  const dice = liveDice();
+  const dice = liveDice(game);
   game.dice = dice;
   game.diceUsed = [false, false];
   game.phase = 'AWAITING_MOVE';
@@ -1411,6 +1431,7 @@ function publicState(room) {
     cube: game.cube,
     cubeOffer: game.cubeOffer,
     resignOffer: game.resignOffer ?? null,
+    diceCommit: game._dice?.commit ?? null,
     score: !room.match ? room.score.slice() : null,
     wins: room.wins.slice(),
     match: room.match ? { ...structuredClone(room.match), crawford: !!game.cube?.crawford } : null,
@@ -1640,6 +1661,8 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
     winner: game.winner,
     rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
       ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
+    // The game's dice seed (revealed now the game is over), to verify the rolls.
+    dice: game._dice ? { commit: game._dice.commit, seed: game._dice.seed } : null,
     // Cube decisions, worked out in the background (see autoCheck).
     cube: (game._cubeLog ?? []).map((c, i) => ({ i, turn: c.turn, pi: c.pi, kind: c.kind, action: c.action, doubler: c.doubler,
       rollIdx: c.rollIdx, v: c.state.cube?.value ?? 1, marbles: c.state.players.map(p => p.marbles), analysis: null, pending: true })),

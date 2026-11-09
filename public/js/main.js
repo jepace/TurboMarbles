@@ -1338,6 +1338,7 @@ function openAnalysis(matchView = false) {
   if (matchView) { renderMatchView(); return; }
   const rep = analysisReport;
   if (!rep) return;
+  $('btn-ap-dice').style.display = rep.dice ? '' : 'none';
   renderSummary();
 
   const sel = $('ap-player');
@@ -1362,6 +1363,30 @@ function openAnalysis(matchView = false) {
 
 // How much work is behind the report: estimates vs played-out decisions.
 let playingOutAll = false;
+$('btn-ap-dice').addEventListener('click', async () => {
+  const r = await verifyDice(analysisReport ?? {});
+  toastAnywhere(r.ok ? `✓ All ${r.n} rolls match the dice fixed before the game` : `✗ ${r.why}`);
+});
+// ---- Provably fair dice: re-derive every roll from the revealed seed ----
+// Same rule as the server (src/GameManager.js diceFromSeed): roll k = the first
+// two bytes below 252 of HMAC-SHA256(seed, "k"), each 1 + byte mod 6.
+const hexBytes = h => new Uint8Array(h.match(/../g).map(x => parseInt(x, 16)));
+const bytesHex = b => [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+async function verifyDice(rep) {
+  const d = rep.dice;
+  if (!d?.seed || !crypto?.subtle) return { ok: false, why: 'No dice record for this game.' };
+  const seed = hexBytes(d.seed);
+  if (bytesHex(await crypto.subtle.digest('SHA-256', seed)) !== d.commit) return { ok: false, why: 'The seed does not match the fingerprint shown at the start.' };
+  const key = await crypto.subtle.importKey('raw', seed, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  for (let k = 0; k < rep.rolls.length; k++) {
+    const h = new Uint8Array(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(k))));
+    const out = [];
+    for (const byte of h) { if (byte < 252) out.push(1 + (byte % 6)); if (out.length === 2) break; }
+    const want = out[0] >= out[1] ? out : [out[1], out[0]], got = rep.rolls[k].dice;
+    if (got[0] !== want[0] || got[1] !== want[1]) return { ok: false, why: `Roll ${k + 1} doesn't match (played ${got.join('-')}, seed gives ${want.join('-')}).` };
+  }
+  return { ok: true, n: rep.rolls.length };
+}
 function renderStatus() {
   const rep = analysisReport;
   if (!rep) return;
@@ -2063,6 +2088,7 @@ function updateStartButton() {
 
 on('gameStarted', ({ gameState: gs }) => {
   gameState = gs;
+  if (gs.diceCommit) setTimeout(() => log(`🎲 Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`, null, 'log-dice'), 0);
   pendingFeedback = null;
   resetAnalyzeButton();
   analysisReport = null; apSel = -1; curGame = null; waitingFor = null;

@@ -115,6 +115,8 @@ function migrate() {
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
   if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
+  const gcols = new Set(db.prepare('PRAGMA table_info(games)').all().map(c => c.name));
+  if (!gcols.has('dice_seed')) db.exec('ALTER TABLE games ADD COLUMN dice_seed TEXT');   // revealed after the game
   if (!pcols.has('pw_hash')) db.exec('ALTER TABLE players ADD COLUMN pw_hash TEXT');
   if (!pcols.has('email')) db.exec('ALTER TABLE players ADD COLUMN email TEXT');            // verified only
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS players_email ON players(email) WHERE email IS NOT NULL;
@@ -501,13 +503,13 @@ export function unreadCounts(me) {
 
 // Store a finished game. seats: [{ playerId|null, name, color, isRobot, won,
 // points, aggro, doubles, takes, drops }]; rolls: the roll records.
-export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, seats, rolls }) {
+export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, seats, rolls, diceSeed = null }) {
   if (!db) return null;
   const vsRobot = seats.some(s => s.isRobot) ? 1 : 0;
   db.exec('BEGIN');
   try {
-    db.prepare('INSERT INTO games (id, ended_at, n_players, vs_robot, cube, winner_seat, rolls_gz) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(id, endedAt, seats.length, vsRobot, cube ? 1 : 0, winnerSeat ?? null, rolls ? gzipSync(JSON.stringify(rolls)) : null);
+    db.prepare('INSERT INTO games (id, ended_at, n_players, vs_robot, cube, winner_seat, rolls_gz, dice_seed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, endedAt, seats.length, vsRobot, cube ? 1 : 0, winnerSeat ?? null, rolls ? gzipSync(JSON.stringify(rolls)) : null, diceSeed);
     const ins = db.prepare(`INSERT INTO seats (game_id, seat, player_id, name, color, is_robot, won, points, aggro, doubles, takes, drops)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     seats.forEach((s, i) => ins.run(id, i, s.playerId ?? null, s.name, s.color, s.isRobot ? 1 : 0, s.won ? 1 : 0,
@@ -545,7 +547,7 @@ export function getGame(gameId) {
   if (!g) return null;
   const seats = db.prepare('SELECT * FROM seats WHERE game_id = ? ORDER BY seat').all(gameId);
   return {
-    id: g.id, endedAt: g.ended_at, cube: !!g.cube, vsRobot: !!g.vs_robot, winnerSeat: g.winner_seat,
+    id: g.id, endedAt: g.ended_at, cube: !!g.cube, vsRobot: !!g.vs_robot, winnerSeat: g.winner_seat, diceSeed: g.dice_seed ?? null,
     seats: seats.map(s => ({ playerId: s.player_id, name: s.name, color: s.color, isRobot: !!s.is_robot, won: !!s.won, points: s.points })),
     rolls: g.rolls_gz ? JSON.parse(gunzipSync(g.rolls_gz)) : null,
     report: g.report_gz ? JSON.parse(gunzipSync(g.report_gz)) : null,
