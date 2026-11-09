@@ -55,17 +55,17 @@ if (cmd === 'gen') {
     }
     return { loss: L / rows.length, acc: acc / rows.length };
   };
-  const fit = (mask) => {
+  const fit = (mask, rows = train) => {
     const w = new Array(K).fill(0), m = new Array(K).fill(0), v = new Array(K).fill(0);
     const lr = 0.05, b1 = 0.9, b2 = 0.999;
     for (let it = 1; it <= 400; it++) {
       const grad = new Array(K).fill(0);
-      for (const r of train) {
+      for (const r of rows) {
         const p = softmax(r.f.map(f => f.reduce((s, x, k) => s + mask[k] * x * w[k], 0)));
         r.f.forEach((f, i) => { const d = p[i] - (i === r.w ? 1 : 0); for (let k = 0; k < K; k++) grad[k] += mask[k] * d * f[k]; });
       }
       for (let k = 0; k < K; k++) {
-        const gk = grad[k] / train.length;
+        const gk = grad[k] / rows.length;
         m[k] = b1 * m[k] + (1 - b1) * gk; v[k] = b2 * v[k] + (1 - b2) * gk * gk;
         w[k] -= lr * (m[k] / (1 - b1 ** it)) / (Math.sqrt(v[k] / (1 - b2 ** it)) + 1e-8);
       }
@@ -80,9 +80,7 @@ if (cmd === 'gen') {
   for (const n of [...new Set(data.map(r => r.f.length))].sort()) {
     const tr = train.filter(r => r.f.length === n), te = test.filter(r => r.f.length === n);
     if (tr.length < 2000) continue;
-    const saveTrain = train.splice(0, train.length, ...tr);
-    const wN = fit(FEATURES.map(() => 1));
-    train.splice(0, train.length, ...saveTrain);
+    const wN = fit(FEATURES.map(() => 1), tr);
     const own = lossOf(wN, te).loss, shared = lossOf(wAll, te).loss;
     console.log(`${n} players: ${te.length} test rows, log-loss shared ${shared.toFixed(4)} → own ${own.toFixed(4)}`);
     if (own < shared - 0.0005) byPlayers[n] = wN.map(x => +x.toFixed(6));
