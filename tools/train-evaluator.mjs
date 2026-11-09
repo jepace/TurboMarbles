@@ -74,6 +74,19 @@ if (cmd === 'gen') {
   };
   const raceMask = FEATURES.map(f => (f === 'race' || f === 'toMove' ? 1 : 0));
   const wRace = fit(raceMask), wAll = fit(FEATURES.map(() => 1));
+  // Separate weights per number of players (when there is data for it): kept
+  // only where they beat the shared weights on that table size's test rows.
+  const byPlayers = {};
+  for (const n of [...new Set(data.map(r => r.f.length))].sort()) {
+    const tr = train.filter(r => r.f.length === n), te = test.filter(r => r.f.length === n);
+    if (tr.length < 2000) continue;
+    const saveTrain = train.splice(0, train.length, ...tr);
+    const wN = fit(FEATURES.map(() => 1));
+    train.splice(0, train.length, ...saveTrain);
+    const own = lossOf(wN, te).loss, shared = lossOf(wAll, te).loss;
+    console.log(`${n} players: ${te.length} test rows, log-loss shared ${shared.toFixed(4)} → own ${own.toFixed(4)}`);
+    if (own < shared - 0.0005) byPlayers[n] = wN.map(x => +x.toFixed(6));
+  }
   const base = { loss: Math.log(data[0].f.length), acc: 1 / data[0].f.length };
   console.log(`${data.length} positions (${train.length} train / ${test.length} test)`);
   console.log(`no information:     log-loss ${base.loss.toFixed(4)}`);
@@ -82,7 +95,7 @@ if (cmd === 'gen') {
   console.log(`all features:       log-loss ${all.loss.toFixed(4)}  accuracy ${(100 * all.acc).toFixed(1)}%`);
   console.log('weights', Object.fromEntries(FEATURES.map((f, k) => [f, +wAll[k].toFixed(4)])));
   writeFileSync(new URL('../src/evaluator-weights.json', import.meta.url),
-    JSON.stringify({ note: 'see tools/train-evaluator.mjs', features: FEATURES, weights: wAll.map(x => +x.toFixed(6)), positions: data.length }, null, 1) + '\n');
+    JSON.stringify({ note: 'see tools/train-evaluator.mjs', features: FEATURES, weights: wAll.map(x => +x.toFixed(6)), byPlayers, positions: data.length }, null, 1) + '\n');
   console.log('wrote src/evaluator-weights.json');
 } else {
   console.error('usage: train-evaluator.mjs gen <out.jsonl> <games> <players> | fit <in.jsonl>…');

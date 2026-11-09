@@ -32,12 +32,15 @@ export function playerFeatures(game, i, mover) {
   ];
 }
 
-let weights = null;
-function loadWeights() {
-  if (weights) return weights;
-  const file = new URL('./evaluator-weights.json', import.meta.url);
-  weights = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')).weights : null;
-  return weights;
+// Weights: shared, plus (where fitted) separate ones per number of players —
+// races and danger weigh differently at a crowded table.
+let weightsFile = null;
+function loadWeights(n) {
+  if (!weightsFile) {
+    const file = new URL('./evaluator-weights.json', import.meta.url);
+    weightsFile = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : {};
+  }
+  return weightsFile.byPlayers?.[n] ?? weightsFile.weights ?? null;
 }
 
 export function softmax(scores) {
@@ -55,7 +58,7 @@ export function evaluate(game, mover) {
     const p0 = duelWinChance(game, 0, mover);
     if (p0 != null) return [p0, 1 - p0];
   }
-  const w = loadWeights();
+  const w = loadWeights(game.players.length);
   if (!w) return null;
   return softmax(game.players.map((_, i) => {
     const f = playerFeatures(game, i, mover);
