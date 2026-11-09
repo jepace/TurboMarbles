@@ -70,7 +70,11 @@ app.use(helmet());
 
 
 
-app.use(express.static(join(__dirname, '..', 'public')));
+// Page code must never be stale after a deploy: browsers revalidate every time
+// (a quick 304 when unchanged).
+app.use(express.static(join(__dirname, '..', 'public'), {
+  setHeaders: (res, path) => { if (/\.(html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache'); },
+}));
 
 const server = createServer(app);
 

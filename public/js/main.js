@@ -2919,7 +2919,16 @@ function log(msg, color, cls) {
 
 // ---- Canvas resize ----
 // iPad/iPhone: the visible area changes as the browser toolbars show/hide.
-window.visualViewport?.addEventListener('resize', () => window.dispatchEvent(new Event('resize')));
+// The height the browser really shows (iPad Safari's 100vh/100dvh can include
+// space under its toolbars): the page and the board are sized from this.
+function setAppHeight() {
+  const h = Math.round(window.visualViewport?.height ?? window.innerHeight);
+  document.documentElement.style.setProperty('--app-h', `${h}px`);
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', () => setTimeout(() => { setAppHeight(); window.dispatchEvent(new Event('resize')); }, 300));
+window.visualViewport?.addEventListener('resize', () => { setAppHeight(); window.dispatchEvent(new Event('resize')); });
 window.addEventListener('orientationchange', () => setTimeout(() => window.dispatchEvent(new Event('resize')), 300));
 window.addEventListener('resize', () => {
   resizeBoard();

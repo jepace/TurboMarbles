@@ -20,7 +20,7 @@ body {
   color: var(--text);
   font-family: 'Segoe UI', system-ui, sans-serif;
   height: 100vh;
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -34,7 +34,7 @@ body {
 #screen-game.active {
   display: block;
   height: 100vh;
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   position: relative;  /* needed for win overlay absolute positioning */
 }
 
@@ -120,7 +120,7 @@ button.secondary { background: #fff2; }
 #game-layout {
   display: flex;
   height: 100vh;
-  height: 100dvh;
+  height: var(--app-h, 100dvh);
   width: 100vw;
   overflow: hidden;
 }
