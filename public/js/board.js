@@ -62,6 +62,7 @@ let hubInstant = false;
 const STEP = (2 * Math.PI) / ALL_ARMS;
 
 let canvas, ctx, W, CX, CY;
+let layoutFor = null;   // the canvas the current layout was computed for
 let trackPos  = [];
 let homePos   = [];
 let basePos   = [];
@@ -89,11 +90,14 @@ export function resize() {
     rect.height > 0 ? rect.height : visH - 10,
     visH - 10
   )));
-  if (canvas.width === size) return;
+  // Same size and already laid out for this canvas: nothing to do. (The Board
+  // page's preview borrows the renderer, so the layout may be another canvas's.)
+  if (canvas.width === size && W === size && layoutFor === canvas) return;
   canvas.width  = size;
   canvas.height = size;
   W  = size;
   CX = CY = size / 2;
+  layoutFor = canvas;
   computeLayout();
 }
 

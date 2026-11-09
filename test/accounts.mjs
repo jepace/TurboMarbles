@@ -1,7 +1,7 @@
 // test/accounts.mjs — account actions and game recording (in-memory store).
 import { openStore, closeStore, playerStats, playerGames } from '../src/Store.js';
 import { handleAccountAction } from '../src/Accounts.js';
-import { createRoom, joinRoom, startGame, handleMove, handleDouble, handleTake, handleAnalyzeGame, storedGameReport,
+import { createRoom, joinRoom, startGame, handleMove, handleDouble, handleTake, handleAnalyzeGame, storedGameReport, backgroundAnalysisTick,
   _reset, _getRoom, config as gmConfig } from '../src/GameManager.js';
 
 let passed = 0, failed = 0;
@@ -148,6 +148,15 @@ console.log('passwords, email, reset');
   assert(q.find('registered').pop()?.reset === true, 'reset link sets a new password and signs in');
   act(r, { action: 'login', name: 'Pwd', password: 'fresh password' });
   assert(r._player?.name === 'Pwd', 'the new password works');
+}
+
+console.log('background analysis (idle)');
+{
+  const { recordGame, getGame } = await import('../src/Store.js');
+  _reset();                                // no games in progress: idle
+  const id = recordGame({ cube: false, winnerSeat: 0, rolls: [], seats: [{ playerId: null, name: 'A', color: 'blue', won: true, points: 1 }, { playerId: null, name: 'B', color: 'yellow', won: false, points: -1 }] });
+  for (let t = 0; t < 10 && !getGame(id).report; t++) { backgroundAnalysisTick(); await new Promise(r => setTimeout(r, 100)); }
+  assert(!!getGame(id).report, 'an unanalysed stored game gets analysed when the server is idle');
 }
 
 closeStore();

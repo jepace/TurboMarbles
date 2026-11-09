@@ -496,6 +496,14 @@ export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, se
 
 // Save (or replace) a game's analysis report, and the per-seat error numbers
 // from it.
+// The most recent stored game with no analysis yet (and its roll records),
+// for the idle-time background analysis. Skips ids in `skip`.
+export function nextUnanalysed(skip = new Set()) {
+  if (!db) return null;
+  const rows = db.prepare('SELECT id FROM games WHERE report_gz IS NULL AND rolls_gz IS NOT NULL ORDER BY ended_at DESC LIMIT 20').all();
+  const row = rows.find(r => !skip.has(r.id));
+  return row ? getGame(row.id) : null;
+}
 export function saveAnalysis(gameId, report, perSeat) {
   if (!db || !gameId) return;
   db.prepare('UPDATE games SET report_gz = ? WHERE id = ?').run(gzipSync(JSON.stringify(report)), gameId);

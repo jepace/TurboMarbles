@@ -8,7 +8,7 @@ import {
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { matchCube, emg } from './MatchEquity.js';
-import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked, applyRatingBonus } from './Store.js';
+import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked, applyRatingBonus, nextUnanalysed } from './Store.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
@@ -46,6 +46,7 @@ export const config = {
   analysisWorkers: 4,     // worker threads per analysis (capped at CPUs − 1)
   cubeAnalysisGames: 400, // played-out games per cube decision (when no exact table applies)
   cubeLevels: [400, 1600, 6400],
+  backgroundAnalysis: true,  // analyse stored, never-analysed games when the server is idle
   dropNextGameMs: 1500,  // match play: pause after a game (not the last) before the next one starts
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
@@ -1348,6 +1349,46 @@ function publicState(room) {
     gamesPlayed: room.gamesPlayed,
   };
 }
+
+// ---------- Background analysis (idle time) ----------
+//
+// Games that were stored but never analysed get analysed when the server is
+// otherwise idle: no game in progress and no analysis running. One game at a
+// time, in one worker, at the automatic level (played out), so the stats,
+// trends and history fill in. It stops between games as soon as anyone plays.
+const backgroundSkip = new Set();
+let backgroundBusy = false;
+const serverIdle = () => analysesRunning === 0 && checksRunning === 0 && deepensRunning === 0 &&
+  ![...rooms.values()].some(r => r.state === 'playing' && r.slots.some(s => !s.isRobot && s.ws));
+export function backgroundAnalysisTick() {
+  if (backgroundBusy || !storeEnabled() || !config.backgroundAnalysis || !serverIdle()) return false;
+  const g = nextUnanalysed(backgroundSkip);
+  if (!g) return false;
+  backgroundSkip.add(g.id);
+  const rolls = g.rolls ?? [];
+  const decisions = rolls.map((r, idx) => ({ r, idx })).filter(x => !x.r.forced && x.r.before && x.r.after)
+    .map(({ r, idx }) => ({ idx, before: r.before, after: r.after, pi: r.pi }));
+  const report = storedGameReport({ ...g, report: null });
+  if (!decisions.length) { saveAnalysis(g.id, report, seatAnalysis(report)); return true; }
+  backgroundBusy = true;
+  const level = 1, opts = config.analysisLevels[level];
+  const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
+    workerData: { decisions, options: { ...opts, level }, cube: [] },
+  });
+  let ended = false;
+  const end = ok => {
+    if (ended) return; ended = true; backgroundBusy = false;
+    if (ok) { try { saveAnalysis(g.id, report, seatAnalysis(report)); } catch (err) { console.error('[background] save failed', err); } }
+  };
+  worker.on('message', msg => {
+    if (msg.type === 'item' && report.rolls[msg.idx]) report.rolls[msg.idx].analysis = msg.item;
+    if (msg.type === 'end') end(true);
+  });
+  worker.on('error', err => { console.error('[background] analysis failed', err.message); end(false); });
+  worker.on('exit', () => end(false));
+  return true;
+}
+if (process.env.NODE_ENV !== 'test') setInterval(backgroundAnalysisTick, 60_000).unref();
 
 // ---------- In-game chat ----------
 // Short messages to everyone in the room (lobby, game, after the game).
