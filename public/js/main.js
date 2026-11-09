@@ -1849,6 +1849,13 @@ function renderFacts(rep, r, opt, facts) {
 
 // Win chance through the game. For two players one line (the first player's
 // chance; the other's is the rest); otherwise one line per player.
+// From the chart: select that roll and bring it into view in the list (showing
+// all rolls if the current filter hides it), centred.
+function jumpToRoll(idx) {
+  if (!visibleRolls().some(x => x.idx === idx)) { $('ap-filter').value = 'all'; $('ap-player').value = 'all'; renderMoveList(); }
+  selectRoll(idx);
+  $('ap-moves').querySelector(`[data-key="r${idx}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
 function drawChart() {
   const rep = analysisReport;
   const n = rep.rolls.length;
@@ -1885,7 +1892,7 @@ function drawChart() {
     const t = document.createElementNS(ns, 'title');
     t.textContent = `Turn ${r.turn} ${rep.players[r.pi].name}: ${SEV_LABEL[a.severity]} −${eqOf(a.loss)}`;
     c.append(t);
-    c.addEventListener('click', () => selectRoll(i));
+    c.addEventListener('click', () => jumpToRoll(i));
   });
   // A thin line follows the mouse; a box shows the moves around that point;
   // clicking anywhere jumps there.
@@ -1915,7 +1922,7 @@ function drawChart() {
     tip.style.left = `${Math.min(Math.max(0, px - 120), box.width - 250)}px`;
   });
   svg.addEventListener('mouseleave', () => { hover.setAttribute('visibility', 'hidden'); tip.style.display = 'none'; });
-  svg.addEventListener('click', ev => { if (ev.target.tagName !== 'circle') selectRoll(idxAt(ev)); });
+  svg.addEventListener('click', ev => { if (ev.target.tagName !== 'circle') jumpToRoll(idxAt(ev)); });
   svg.style.cursor = 'crosshair';
   const label = two ? `${rep.players[0].name}'s chance to win` : 'Each player’s chance to win';
   $('ap-chart').replaceChildren(wrap, el('div', { class: 'muted', style: 'font-size:0.72rem' }, label + ' after each real choice · dots are errors · click anywhere to jump there'));
