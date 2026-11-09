@@ -16,6 +16,7 @@ import { worthThinking } from './RobotRollout.js';
 import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll } from './Analysis.js';
+import { evaluate1 } from './Evaluator.js';
 import { availableParallelism } from 'os';
 
 const DISCONNECT_TIMEOUT_MS  = 30 * 60 * 1000; // 30 minutes
@@ -51,6 +52,7 @@ export const config = {
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   robotThinkMs: 1500,
+  robotCubeMs: 3000,     // play-out time for a robot's cube decision (more than a move: they're rare and costly)
 };
 
 const rooms = new Map();    // roomId → Room
@@ -530,7 +532,7 @@ async function cubeEstimate(game, pi) {
   const exact = exactEstimate(game, pi);
   if (exact) return exact;
   if (!(config.robotThinkMs > 0)) return null;
-  return think(snapshot(game), pi, config.robotThinkMs, 'cube');
+  return think(snapshot(game), pi, Math.max(config.robotThinkMs, config.robotCubeMs ?? 0), 'cube');
 }
 
 // ---------- Resignation offers (two players) ----------
@@ -1200,7 +1202,11 @@ function doRobotTurn(room) {
   const me = game.turnIndex;
   if (canDouble(game, me) && game._cubeChecked !== (game._turnNo ?? 1)) {
     game._cubeChecked = game._turnNo ?? 1;
-    cubeEstimate(game, me).then(est => {
+    // Nowhere near a double (the instant evaluator gives it under 55%): no
+    // double, without spending play-out time on it.
+    const quick = exactEstimate(game, me) ? null : evaluate1(game, me)?.[me];
+    const estP = quick != null && quick < 0.55 ? Promise.resolve(null) : cubeEstimate(game, me);
+    estP.then(est => {
       if (!rooms.has(room.id) || room.game !== game || game.phase !== 'IN_TURN' || game.turnIndex !== me || !room.slots[me]?.isRobot) return;
       if (est && cubeDecision(room, game, est, me).double && doubleFor(room, me)) return;
       recordCube(room, { kind: 'double', pi: me, action: false, state: cubeSnapshot(game) });

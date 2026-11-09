@@ -647,8 +647,7 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .gc-pr::before { content: 'PR '; opacity: 0.55; font-size: 0.75rem; }
 
 /* ---- Move list, Galaxy style: dice, move, cube, severity dot ---- */
-.ap-row { grid-template-columns: 2.4em 3.4em 1fr auto !important; }
-.ap-row .log-dot { display: none; }
+.ap-row { grid-template-columns: 2.4em 10px 3.4em 1fr auto !important; }
 .mini-dice { display: inline-flex; gap: 3px; }
 .mini-die { width: 1.35em; height: 1.35em; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center;
   font-size: 0.8em; font-weight: 800; color: #111; background: color-mix(in srgb, var(--die-color, #fff) 45%, #fff); box-shadow: 0 1px 2px #0007; }
@@ -667,3 +666,8 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 #ap-summary th:first-child, #ap-summary td:first-child { width: 9.5rem; }
 #ap-summary td, #ap-summary th { font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #ap-status { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+
+/* Cube detail: the right action in bold; a wrong played action struck through lightly. */
+.ap-opt.best-opt { font-weight: 800; }
+.ap-opt.best-opt .num { color: #7ee08a; }
+.ap-opt.played-wrong { color: #ff9a8a; }

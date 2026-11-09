@@ -1657,7 +1657,8 @@ function inlineCube(group) {
 }
 function cubeRow(c) {
   const p = analysisReport.players[c.pi];
-  const label = CUBE_ACTION[c.kind](c.action) + (c.kind === 'double' && c.action ? ` → ${c.v * 2}` : '');
+  const verb = c.kind === 'double' ? (c.action ? `doubles to ${c.v * 2}` : "doesn't double") : (c.action ? 'takes' : 'drops');
+  const label = `${p.name} ${verb}`;
   const rowEl = el('div', { class: 'ap-row cube-row' + (apCube === c.i ? ' sel' : ''), title: `${p.name}: cube decision` },
     el('span', { class: 'turn' }, `${c.turn}.`),
     el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
@@ -1697,7 +1698,7 @@ function selectCube(i) {
       const bestHere = isDouble ? side != null && a.best === side : o.key === a.best;
       const playedHere = isDouble ? side != null && a.played === side : o.key === a.played;
       const tag = [bestHere ? 'best' : '', playedHere ? 'played' : ''].filter(Boolean).join(' · ');
-      kids.push(el('div', { class: 'ap-opt' }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
+      kids.push(el('div', { class: 'ap-opt' + (bestHere ? ' best-opt' : '') + (playedHere && !bestHere ? ' played-wrong' : '') }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
         el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + eqv(o.eq)), el('span')));
     }
     kids.push(el('div', { class: 'fact' }, `${p.name} ${(100 * a.p).toFixed(1)}%` +
