@@ -110,7 +110,7 @@ function migrate() {
   `);
   // Added later: cube-decision numbers per seat.
   const cols = new Set(db.prepare('PRAGMA table_info(seats)').all().map(c => c.name));
-  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL'], ['rating_after', 'REAL']]) {
+  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL'], ['rating_after', 'REAL'], ['luck', 'REAL']]) {
     if (!cols.has(c)) db.exec(`ALTER TABLE seats ADD COLUMN ${c} ${t}`);
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
@@ -536,9 +536,9 @@ export function saveAnalysis(gameId, report, perSeat) {
   if (!db || !gameId) return;
   db.prepare('UPDATE games SET report_gz = ? WHERE id = ?').run(gzipSync(JSON.stringify(report)), gameId);
   const up = db.prepare(`UPDATE seats SET choices = ?, errors = ?, blunders = ?, eq_lost = ?,
-    cube_decisions = ?, cube_errors = ?, cube_blunders = ?, cube_eq_lost = ? WHERE game_id = ? AND seat = ?`);
+    cube_decisions = ?, cube_errors = ?, cube_blunders = ?, cube_eq_lost = ?, luck = ? WHERE game_id = ? AND seat = ?`);
   perSeat.forEach((s, seat) => up.run(s.choices, s.errors, s.blunders, s.eqLost,
-    s.cubeDecisions ?? null, s.cubeErrors ?? null, s.cubeBlunders ?? null, s.cubeEqLost ?? null, gameId, seat));
+    s.cubeDecisions ?? null, s.cubeErrors ?? null, s.cubeBlunders ?? null, s.cubeEqLost ?? null, s.luck ?? null, gameId, seat));
 }
 
 export function getGame(gameId) {
@@ -573,7 +573,8 @@ export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) 
            COALESCE(SUM(CASE WHEN s.aggro AND NOT s.won THEN 1 ELSE 0 END),0) aggro_losses,
            COALESCE(SUM(s.choices),0) choices, COALESCE(SUM(s.eq_lost),0) eq_lost,
            COALESCE(SUM(CASE WHEN s.choices IS NOT NULL THEN 1 ELSE 0 END),0) analysed,
-           COALESCE(SUM(s.cube_decisions),0) cube_decisions, COALESCE(SUM(s.cube_eq_lost),0) cube_eq_lost
+           COALESCE(SUM(s.cube_decisions),0) cube_decisions, COALESCE(SUM(s.cube_eq_lost),0) cube_eq_lost,
+           SUM(s.luck) luck, COUNT(s.luck) luck_games
     FROM seats s JOIN games g ON g.id = s.game_id WHERE ${W}`).get(playerId);
   const h2h = db.prepare(`
     SELECT o.player_id id, MAX(o.name) name, COUNT(*) games, SUM(s.won) wins, SUM(s.points) points

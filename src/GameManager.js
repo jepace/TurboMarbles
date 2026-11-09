@@ -452,7 +452,9 @@ function seatAnalysis(report) {
   return report.players.map((_, pi) => {
     const mine = report.rolls.filter(x => x.pi === pi && x.analysis);
     const bad = mine.filter(x => x.analysis.severity !== 'ok');
-    return { choices: mine.length, errors: bad.filter(x => x.analysis.severity === 'error').length,
+    const rolls = report.rolls.filter(x => x.pi === pi);
+    const luck = rolls.some(x => x.luck != null) ? rolls.reduce((t, x) => t + (x.luck ?? 0), 0) : null;
+    return { luck, choices: mine.length, errors: bad.filter(x => x.analysis.severity === 'error').length,
       blunders: bad.filter(x => x.analysis.severity === 'blunder').length,
       eqLost: mine.reduce((sum, x) => sum + (x.analysis.loss > 1.96 * (x.analysis.se ?? 0) ? x.analysis.loss : 0), 0),
       ...cubeSeat(report, pi) };
@@ -1462,7 +1464,7 @@ export function backgroundAnalysisTick() {
   backgroundBusy = true;
   const level = 1, opts = config.analysisLevels[level];
   const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
-    workerData: { decisions, options: { ...opts, level }, cube: [] },
+    workerData: { decisions, options: { ...opts, level }, cube: [], luck: rolls.map((r, idx) => ({ idx, before: r.before, pi: r.pi })).filter(x => x.before) },
   });
   let ended = false;
   const end = ok => {
@@ -1471,6 +1473,7 @@ export function backgroundAnalysisTick() {
   };
   worker.on('message', msg => {
     if (msg.type === 'item' && report.rolls[msg.idx]) report.rolls[msg.idx].analysis = msg.item;
+    if (msg.type === 'luck' && report.rolls[msg.idx]) report.rolls[msg.idx].luck = msg.luck;
     if (msg.type === 'end') end(true);
   });
   worker.on('error', err => { console.error('[background] analysis failed', err.message); end(false); });
@@ -1714,12 +1717,14 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
     for (const w of waiting) sendTo(w, { event: 'error', code: 'ANALYSIS_FAILED', message: 'Analysis failed.' });
     end();
   };
-  const workers = chunks.map(chunk => {
+  const workers = chunks.map((chunk, w) => {
     const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
-      workerData: { decisions: chunk.map(({ r, idx }) => ({ idx, before: r.before, after: r.after, pi: r.pi })), options: { ...config.analysis, level: 0 } },
+      workerData: { decisions: chunk.map(({ r, idx }) => ({ idx, before: r.before, after: r.after, pi: r.pi })), options: { ...config.analysis, level: 0 },
+        luck: rolls.map((r, idx) => ({ idx, before: r.before, pi: r.pi })).filter((x, k) => x.before && k % nWorkers === w) },
     });
     worker.on('message', msg => {
       if (failed) return;
+      if (msg.type === 'luck') { if (base.rolls[msg.idx]) base.rolls[msg.idx].luck = msg.luck; return; }
       if (msg.type === 'item') {
         results.set(msg.idx, msg.item);
         done++;

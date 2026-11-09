@@ -72,20 +72,35 @@ export function evaluate(game, mover) {
 // and races.
 const ROLLS = [];
 for (let a = 6; a >= 1; a--) for (let b = a; b >= 1; b--) ROLLS.push({ d: [a, b], w: a === b ? 1 / 36 : 2 / 36 });
+// The chances after `mover` plays roll d (the robot's play) from `game`.
+function afterRoll(game, mover, d) {
+  const n = game.players.length;
+  const g = structuredClone(game);
+  g.turnIndex = mover; g.dice = d.slice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+  while (!(g.diceUsed[0] && g.diceUsed[1]) && g.winner == null) {
+    const mv = pickNextRobotMove(g, mover);
+    if (mv) applyMove(g, mover, mv); else g.diceUsed[g.diceUsed[0] ? 1 : 0] = true;
+  }
+  const next = earnsExtraRoll(d) ? mover : (mover + 1) % n;
+  return evaluate(g, next) ?? new Array(n).fill(1 / n);
+}
 export function evaluate1(game, mover) {
   if (game.winner != null) return evaluate(game, mover);
   const n = game.players.length;
   const acc = new Array(n).fill(0);
   for (const { d, w } of ROLLS) {
-    const g = structuredClone(game);
-    g.turnIndex = mover; g.dice = d.slice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
-    while (!(g.diceUsed[0] && g.diceUsed[1]) && g.winner == null) {
-      const mv = pickNextRobotMove(g, mover);
-      if (mv) applyMove(g, mover, mv); else g.diceUsed[g.diceUsed[0] ? 1 : 0] = true;
-    }
-    const next = earnsExtraRoll(d) ? mover : (mover + 1) % n;
-    const p = evaluate(g, next) ?? new Array(n).fill(1 / n);
+    const p = afterRoll(game, mover, d);
     for (let i = 0; i < n; i++) acc[i] += w * p[i];
   }
   return acc;
+}
+// Luck of a roll: how much the roll `mover` got was worth compared with an
+// average roll from the same position (both played the robot's way), in
+// equity (2 × win chance). `game` is the position with the roll's dice set.
+export function rollLuck(game, mover) {
+  if (!game?.dice) return null;
+  const start = { ...game, dice: null, diceUsed: [false, false], phase: 'IN_TURN' };
+  const avg = evaluate1(start, mover)?.[mover];
+  const got = afterRoll(start, mover, game.dice)?.[mover];
+  return avg == null || got == null ? null : Math.round(2 * (got - avg) * 1000) / 1000;
 }

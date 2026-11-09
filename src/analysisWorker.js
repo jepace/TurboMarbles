@@ -10,7 +10,14 @@ import { analyzeDecision } from './Analysis.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { evaluate1 } from './Evaluator.js';
 
-const { decisions, options, cube = [], cubeGames = 400, cubeForce = false, cubeLevel = 0 } = workerData;
+const { decisions, options, cube = [], cubeGames = 400, cubeForce = false, cubeLevel = 0, luck = [] } = workerData;
+import { rollLuck } from './Evaluator.js';
+// Luck of each roll (every roll, forced or not), from the instant evaluator.
+for (const { idx, before, pi } of luck) {
+  let value = null;
+  try { value = rollLuck(before, pi); } catch (err) { console.error('[analysis] luck', err.message); }
+  parentPort.postMessage({ type: 'luck', idx, luck: value });
+}
 for (const d of decisions) {
   // Each depth uses fresh dice streams (seed depends on the level), so a deeper
   // answer is independent of the quick one.
