@@ -144,7 +144,7 @@ button.secondary { background: #fff2; }
 }
 
 #sidebar {
-  width: 220px;
+  width: 260px;
   flex-shrink: 0;
   background: var(--surface);
   display: flex;
@@ -638,3 +638,8 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .gc-rating { color: #7fb2ff; font-weight: 600; }
 .gc-tag { font-size: 0.85rem; }
 @media (max-width: 900px) { #games-preview { display: none; } }
+/* Action slot buttons: one line, equal size, compact type. */
+#action-slot .action-box button { white-space: nowrap; font-size: 0.95rem; min-height: 2.6rem; padding: 0.3rem 0.2rem; border-radius: 8px; overflow: hidden; text-overflow: ellipsis; }
+#action-slot { min-height: 2.6rem; }
+#action-slot .action-box button { display: flex; align-items: center; justify-content: center; line-height: 1; }
+#cube-offer-msg .cube-face { width: 26px; height: 26px; font-size: 0.9rem; animation: none; border-width: 2px; flex: 0 0 auto; }
