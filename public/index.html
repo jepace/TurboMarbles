@@ -241,25 +241,6 @@
     <div id="board-area">
       <canvas id="board-canvas"></canvas>
       <div id="board-tip" style="display:none"></div>
-      <!-- Doubled: Take / Drop -->
-      <div id="cube-offer" class="board-popup" style="display:none">
-        <div id="cube-offer-msg"></div>
-        <div class="btn-row">
-          <button id="btn-drop" class="secondary" title="Drop">Drop</button>
-          <button id="btn-take" class="btn-go" title="Take (T)">Take</button>
-        </div>
-      </div>
-      <!-- During a turn: Undo / Skip / Commit (all actions share this corner; the main one is always rightmost) -->
-      <div id="commit-area" class="board-popup" style="display:none">
-        <button id="btn-undo" class="secondary" style="display:none" title="Undo the last die (U)">Undo</button>
-        <button id="btn-skip" class="secondary" style="display:none" title="Skip this die (−)">Skip die</button>
-        <button id="btn-commit" style="display:none" title="Commit (Enter)">Commit</button>
-      </div>
-      <!-- Turn start: Roll / Double, only when there is a choice (else it rolls itself) -->
-      <div id="roll-popup" class="board-popup" style="display:none">
-        <button id="btn-double" title="Offer a double before rolling (D)">Double</button>
-        <button id="pop-roll" title="Roll (Enter)">Roll</button>
-      </div>
       <!-- Win overlay: covers only the board, so the sidebar log stays usable -->
       <div id="win-overlay" style="display:none">
         <div class="card" id="win-card">
@@ -306,6 +287,27 @@
         <div class="die" id="die-0">–</div>
         <div class="die" id="die-1">–</div>
         <button id="btn-roll" disabled style="display:none">Roll</button>
+      </div>
+      <!-- The action slot: every in-game decision appears here, in three fixed
+           columns with the main button always in the right-hand one. -->
+      <div id="action-slot">
+      <!-- Doubled: Take / Drop -->
+      <div id="cube-offer" class="action-box" style="display:none">
+        <div id="cube-offer-msg"></div>
+        <button id="btn-drop" class="secondary" title="Drop">Drop</button>
+        <button id="btn-take" class="btn-go" title="Take (T)">Take</button>
+      </div>
+      <!-- During a turn: Undo / Skip / Commit (all actions share this corner; the main one is always rightmost) -->
+      <div id="commit-area" class="action-box" style="display:none">
+        <button id="btn-undo" class="secondary" style="display:none" title="Undo the last die (U)">Undo</button>
+        <button id="btn-skip" class="secondary" style="display:none" title="Skip this die (−)">Skip die</button>
+        <button id="btn-commit" style="display:none" title="Commit (Enter)">Commit</button>
+      </div>
+      <!-- Turn start: Roll / Double, only when there is a choice (else it rolls itself) -->
+      <div id="roll-popup" class="action-box" style="display:none">
+        <button id="btn-double" title="Offer a double before rolling (D)">Double</button>
+        <button id="pop-roll" title="Roll (Enter)">Roll</button>
+      </div>
       </div>
       <div id="cube-area" style="display:none">
         <div id="cube" title="Doubling cube">1</div>

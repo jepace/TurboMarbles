@@ -652,8 +652,8 @@ $('btn-quit').addEventListener('click', () => {
 // Two players: offer to resign at 1×/2×/3× (on your turn), or abandon.
 function boardPopup(id, ...kids) {
   $(id)?.remove();
-  const p = el('div', { id, class: 'board-popup resign-popup' }, ...kids);
-  $('board-area').append(p);
+  const p = el('div', { id, class: 'action-box resign-popup' }, ...kids);
+  $('action-slot').append(p);
   return p;
 }
 const ptsTxt = n => `${n} pt${n === 1 ? '' : 's'}`;

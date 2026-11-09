@@ -579,3 +579,18 @@ input[type=password], input[type=email] { background: var(--surface); color: var
 #cube-offer-msg { align-self: stretch; text-align: center; max-width: 18rem; }
 .board-popup { width: max-content; }
 #cube-offer .btn-row { margin: 0; }
+
+/* ---- The action slot (top of the side panel): every in-game decision, in
+   three fixed columns; the main button is always in the right-hand one. ---- */
+#action-slot { min-height: 3rem; display: flex; flex-direction: column; gap: 6px; }
+#action-slot .action-box:not([style*="none"]) { display: grid !important; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; align-items: start; }
+#action-slot .action-box button { width: 100%; min-height: 2.9rem; font-size: 1.05rem; font-weight: 700; padding: 0.4rem 0.2rem; justify-content: center; }
+#pop-roll, #btn-take, #btn-commit { grid-column: 3; grid-row: 1; }
+#btn-double, #btn-drop, #btn-skip { grid-column: 2; grid-row: 1; }
+#btn-undo { grid-column: 1; grid-row: 1; }
+#cube-offer-msg { grid-column: 1 / -1; grid-row: 2; text-align: center; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; }
+#cube-offer-msg .cube-face { width: 28px; height: 28px; font-size: 0.95rem; margin: 0; }
+#action-slot .resign-popup:not([style*="none"]) { display: flex !important; flex-direction: column; gap: 6px; font-weight: 600; }
+#action-slot .resign-popup .btn-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+#action-slot .resign-popup .btn-row button:last-child { grid-column: 3; }
+#action-slot #cube-offer { max-width: none; padding: 0; background: none; border: none; }
