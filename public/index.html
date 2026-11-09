@@ -75,26 +75,30 @@
 
 <!-- Play -->
 <div id="screen-home" class="screen page">
-  <div class="card">
-    <h2>New game</h2>
-    <p id="home-hello" class="muted"></p>
-    <section class="panel">
-      <div class="form-row">
-        <label>Players <select id="qm-players"><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select></label>
-        <label id="qm-match-row">Match <select id="qm-match"><option value="0">single games</option><option value="1">to 1</option><option value="3" selected>to 3</option><option value="5">to 5</option><option value="7">to 7</option><option value="9">to 9</option></select></label>
-        <label id="qm-cube-row"><input type="checkbox" id="qm-cube" checked> Cube</label>
+  <div class="card play-card">
+    <div class="play-hero">
+      <div class="hero-marbles"><span style="--c:#2288f0"></span><span style="--c:#e8208c"></span><span style="--c:#ff7800"></span><span style="--c:#f5d000"></span><span style="--c:#44bb44"></span><span style="--c:#e0e0e0"></span></div>
+      <h2 id="play-title">Ready to race?</h2>
+      <p id="home-hello" class="muted"></p>
+    </div>
+    <section class="panel play-panel">
+      <div class="pick-row"><span class="pick-label">Players</span><div class="chips big" id="pick-players"></div></div>
+      <div class="pick-row" id="pick-length-row"><span class="pick-label">Game</span><div class="chips big" id="pick-length"></div></div>
+      <div class="pick-row" id="pick-cube-row"><span class="pick-label"></span><div class="chips big"><button class="chip" id="pick-cube">🎲 Doubling cube</button></div></div>
+      <div class="play-buttons">
+        <button id="btn-quick" class="btn-go big-btn">Find opponents</button>
+        <button id="btn-create" class="big-btn">Play friends &amp; robots</button>
       </div>
-      <div class="form-row">
-        <button id="btn-quick" class="btn-go">Find opponents</button>
-        <button id="btn-create">Friends &amp; robots</button>
-        <span id="qm-status" class="muted"></span>
-        <button id="btn-quick-cancel" class="secondary" style="display:none">Cancel</button>
-      </div>
+      <div class="form-row"><span id="qm-status" class="muted"></span><button id="btn-quick-cancel" class="secondary" style="display:none">Cancel</button></div>
+      <select id="qm-players" hidden><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
+      <select id="qm-match" hidden><option value="0">0</option><option value="1">1</option><option value="3" selected>3</option><option value="5">5</option><option value="7">7</option><option value="9">9</option></select>
+      <input type="checkbox" id="qm-cube" checked hidden>
+      <span id="qm-match-row" hidden></span><span id="qm-cube-row" hidden></span>
     </section>
     <section class="panel">
-      <h3>Join a game</h3>
+      <h3>Got a code?</h3>
       <form id="form-join-home" class="form-row">
-        <input id="home-join-code" type="text" maxlength="6" placeholder="Code" autocomplete="off" style="text-transform:uppercase; max-width:9rem; letter-spacing:2px">
+        <input id="home-join-code" type="text" maxlength="6" placeholder="ABC123" autocomplete="off" style="text-transform:uppercase; max-width:9rem; letter-spacing:3px; font-weight:700">
         <button id="btn-home-join" type="submit">Join</button>
       </form>
     </section>

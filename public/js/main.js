@@ -109,7 +109,8 @@ const $ = id => document.getElementById(id);
 // Login → home (the lobby to everything).
 function goHome() {
   if (pendingJoin) { const code = pendingJoin; pendingJoin = null; myName = me?.name ?? myName; connect(); send({ action: 'joinRoom', code, name: myName }); return; }
-  $('home-hello').textContent = me ? '' : `Playing as ${myName} (guest). Keep your stats, rating and friends by signing in: Log out, then tick "Keep my stats".`;
+  $('play-title').textContent = `Ready to race, ${me?.name ?? myName}?`;
+  $('home-hello').textContent = me ? '' : 'Playing as a guest · create an account to keep your stats';
   renderNavMe();
   for (const b of document.querySelectorAll('#side-nav .acct')) b.style.display = me ? '' : 'none';
   show('screen-home');
@@ -134,7 +135,28 @@ function navigate(id) {
 for (const b of document.querySelectorAll('#side-nav [data-go]')) b.addEventListener('click', () => navigate(b.dataset.go));
 
 // ---- Quick match ----
+// The Play page's choices: chips that set the (hidden) form values.
+const MARBLE_HEX = ['#2288f0', '#e8208c', '#ff7800', '#f5d000', '#44bb44', '#e0e0e0'];
+function renderPlayPicks() {
+  const n = Number($('qm-players').value), m = Number($('qm-match').value);
+  $('pick-players').replaceChildren(...[2, 3, 4, 5, 6].map(k => {
+    const b = el('button', { class: 'chip' + (k === n ? ' on' : '') }, el('span', { class: 'mini-marbles' },
+      ...MARBLE_HEX.slice(0, k).map(c => el('i', { style: `background:${c}` }))), String(k));
+    b.addEventListener('click', () => { $('qm-players').value = String(k); updateQmOptions(); });
+    return b;
+  }));
+  $('pick-length').replaceChildren(...[[0, 'One game'], [3, 'Match to 3'], [5, 'to 5'], [7, 'to 7'], [9, 'to 9']].map(([v, t]) => {
+    const b = el('button', { class: 'chip' + (v === m ? ' on' : '') }, t);
+    b.addEventListener('click', () => { $('qm-match').value = String(v); updateQmOptions(); });
+    return b;
+  }));
+  $('pick-length-row').style.display = n === 2 ? '' : 'none';
+  $('pick-cube-row').style.display = n === 2 && !m ? '' : 'none';
+  $('pick-cube').classList.toggle('on', $('qm-cube').checked);
+}
+$('pick-cube').addEventListener('click', () => { $('qm-cube').checked = !$('qm-cube').checked; renderPlayPicks(); });
 function updateQmOptions() {
+  renderPlayPicks();
   const two = $('qm-players').value === '2';
   $('qm-match-row').style.display = two ? '' : 'none';
   const m = Number($('qm-match').value);

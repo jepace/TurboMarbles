@@ -602,3 +602,22 @@ input[type=password], input[type=email] { background: var(--surface); color: var
 .dm-head { display: flex; align-items: center; gap: 0.5rem; }
 .stats-filters { display: flex; gap: 1rem; flex-wrap: wrap; }
 body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-height: var(--app-h, 100dvh); }
+
+/* ---- Play page ---- */
+.play-card { gap: 1.2rem; }
+.play-hero { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.4rem 0 0.2rem; }
+.play-hero h2 { font-size: 2rem !important; }
+.hero-marbles { display: flex; gap: 8px; margin-bottom: 0.4rem; }
+.hero-marbles span { width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff9, var(--c) 42%, #0007 100%);
+  box-shadow: 0 3px 8px #0008; animation: hero-bounce 2.4s ease-in-out infinite; }
+.hero-marbles span:nth-child(2) { animation-delay: .15s } .hero-marbles span:nth-child(3) { animation-delay: .3s }
+.hero-marbles span:nth-child(4) { animation-delay: .45s } .hero-marbles span:nth-child(5) { animation-delay: .6s } .hero-marbles span:nth-child(6) { animation-delay: .75s }
+@keyframes hero-bounce { 0%, 60%, 100% { transform: translateY(0); } 30% { transform: translateY(-7px); } }
+.play-panel { gap: 1rem; padding: 1.4rem 1.5rem; }
+.pick-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.pick-label { width: 5rem; color: var(--muted); font-weight: 600; }
+.chips.big .chip { font-size: 1rem; padding: 0.5rem 1rem; }
+.mini-marbles { display: inline-flex; gap: 2px; margin-right: 2px; }
+.mini-marbles i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: 0 1px 2px #0008; }
+.play-buttons { display: flex; gap: 0.8rem; flex-wrap: wrap; margin-top: 0.3rem; }
+.big-btn { font-size: 1.15rem; padding: 0.85rem 1.6rem; border-radius: 10px; }
