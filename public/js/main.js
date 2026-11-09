@@ -1689,17 +1689,23 @@ function selectCube(i) {
   else if (a.skip) kids.push(el('div', { class: 'muted' }, `Not near a double (${a.p != null ? (100 * a.p).toFixed(0) + '%' : '<60%'}) — skipped`));
   else {
     const isDouble = c.kind === 'double';
-    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Equity: expected stake won (+) or lost (−), at this cube' }, 'Equity'), el('span')));
+    kids.push(el('div', { class: 'ap-opt head' }, el('span', {}, 'Decision'), el('span'), el('span', { class: 'num', title: 'Equity: expected stake won (+) or lost (−), at this cube' }, 'Equity'),
+      el('span', { class: 'num' }, 'vs best')));
     // A double is worth the lower of take and drop (the opponent's best answer):
     // that row carries the double's tags.
     const dblKey = isDouble ? (a.options[1].eq <= a.options[2].eq ? 'dt' : 'dp') : null;
+    // The value of each choice: no double vs double (= the opponent's better
+    // answer); take vs drop. Its gap to the best choice is the "vs best" column.
+    const valueOf = o => (isDouble ? (o.key === 'nd' ? o.eq : o.key === dblKey ? o.eq : null) : o.eq);
+    const bestVal = Math.max(...a.options.map(valueOf).filter(v => v != null));
     for (const o of a.options) {
       const side = o.key === 'nd' ? 'no double' : o.key === dblKey ? 'double' : null;
       const bestHere = isDouble ? side != null && a.best === side : o.key === a.best;
       const playedHere = isDouble ? side != null && a.played === side : o.key === a.played;
       const tag = [bestHere ? 'best' : '', playedHere ? 'played' : ''].filter(Boolean).join(' · ');
       kids.push(el('div', { class: 'ap-opt' + (bestHere ? ' best-opt' : '') + (playedHere && !bestHere ? ' played-wrong' : '') }, el('span', {}, o.label, el('span', { class: 'tags' }, tag)), el('span'),
-        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + eqv(o.eq)), el('span')));
+        el('span', { class: 'num' }, (o.eq > 0 ? '+' : '') + eqv(o.eq)),
+        el('span', { class: 'num' }, valueOf(o) == null ? '' : bestVal - valueOf(o) > 0.0005 ? `−${eqv(bestVal - valueOf(o))}` : '')));
     }
     kids.push(el('div', { class: 'fact' }, `${p.name} ${(100 * a.p).toFixed(1)}%` +
       (a.aggroWin || a.aggroLoss ? ` (aggro ${(100 * a.aggroWin).toFixed(1)}% / ${(100 * a.aggroLoss).toFixed(1)}%)` : '') +
