@@ -122,6 +122,8 @@ function renderNavMe() {
 }
 let myRating = null;
 function navigate(id) {
+  // Leaving a waiting room through the menu leaves the room.
+  if ($('screen-lobby').classList.contains('active') && id !== 'screen-lobby') { send({ action: 'quit' }); setReconnectInfo(null); }
   if (id === 'screen-profile' || id === 'screen-settings') { openProfile(id, 'screen-home'); return; }
   if (id === 'screen-board') { show(id); renderBoardPage(); return; }
   if (id === 'screen-leaderboard') send({ action: 'leaderboard' });
@@ -460,6 +462,7 @@ $('btn-join-back').addEventListener('click', () => show('screen-home'));
 $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-join-confirm').click(); });
 
 // ---- Lobby ----
+$('btn-lobby-leave').addEventListener('click', () => { send({ action: 'quit' }); setReconnectInfo(null); show('screen-home'); });
 $('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }));
 $('btn-start').addEventListener('click', () => send({ action: 'startGame' }));
 // An invite link: opening it joins this game (after a name, for guests).
@@ -1910,7 +1913,8 @@ $('opt-analysis').addEventListener('change', e => {
   $('btn-analyze').style.display = settings.analysis ? '' : 'none';
 });
 
-on('roomCreated', () => renderLobbyInvite());
+on('roomCreated', () => { renderLobbyInvite(); $('btn-lobby-leave').textContent = 'Cancel game'; });
+on('joinedRoom', () => { $('btn-lobby-leave').textContent = 'Leave'; });
 on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, matchTo }) => {
   roomId = rid;
   myPlayerIndex = 0;
