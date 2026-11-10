@@ -1,6 +1,8 @@
 // sounds.js — Web Audio synthesis, no asset files needed
 
 let ctx = null;
+let muted = false;
+export function setMuted(m) { muted = !!m; }
 
 function getCtx() {
   if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -10,6 +12,7 @@ function getCtx() {
 
 // Short percussive thud — marble getting bumped back to base
 export function playBonk() {
+  if (muted) return;
   const ac = getCtx();
   const t = ac.currentTime;
 
@@ -31,6 +34,7 @@ export function playBonk() {
 
 // Soft click — marble moves to a normal track space
 export function playClick() {
+  if (muted) return;
   const ac = getCtx();
   const t = ac.currentTime;
 
@@ -52,6 +56,7 @@ export function playClick() {
 
 // Ascending fanfare — marble enters home corridor
 export function playHomeChime() {
+  if (muted) return;
   const ac = getCtx();
   const notes = [523.25, 659.25, 783.99, 1046.5]; // C5 E5 G5 C6
   const spacing = 0.13;

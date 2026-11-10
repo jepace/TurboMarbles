@@ -7,7 +7,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          setAnimatingMarble, clearAnimatingMarble,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
-import { playBonk, playClick, playHomeChime } from './sounds.js';
+import { playBonk, playClick, playHomeChime, setMuted } from './sounds.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2059,6 +2059,8 @@ document.addEventListener('keydown', e => {
 // ---- Options checkboxes ----
 $('opt-feedback').checked = settings.feedback;
 $('opt-numbers').checked = settings.numbers;
+$('opt-mute').checked = !!settings.muted;
+setMuted(settings.muted);
 applyBoardLook();
 
 // ---- Board page: my colour, track and marble looks, with a live preview ----
@@ -2096,6 +2098,9 @@ function renderBoardPage() {
 }
 
 $('btn-board-back').addEventListener('click', () => show('screen-home'));
+$('opt-mute').addEventListener('change', e => {
+  settings.muted = e.target.checked; saveSettings(); setMuted(settings.muted);
+});
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
   applySquareNumbers();
