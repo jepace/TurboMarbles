@@ -14,7 +14,7 @@
 // covers use the exact value instead.
 import { readFileSync, existsSync } from 'fs';
 import { racePips, dangerPips, pickNextRobotMove } from './RobotPlayer.js';
-import { applyMove, earnsExtraRoll } from './GameEngine.js';
+import { applyMove, skipDie, earnsExtraRoll } from './GameEngine.js';
 import { duelWinChance } from './DuelTable.js';
 
 export const FEATURES = ['race', 'sqrtRace', 'base', 'home', 'danger', 'toMove'];
@@ -79,7 +79,7 @@ function afterRoll(game, mover, d) {
   g.turnIndex = mover; g.dice = d.slice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
   while (!(g.diceUsed[0] && g.diceUsed[1]) && g.winner == null) {
     const mv = pickNextRobotMove(g, mover);
-    if (mv) applyMove(g, mover, mv); else g.diceUsed[g.diceUsed[0] ? 1 : 0] = true;
+    if (mv) applyMove(g, mover, mv); else skipDie(g, g.diceUsed[0] ? 1 : 0);
   }
   const next = earnsExtraRoll(d) ? mover : (mover + 1) % n;
   return evaluate(g, next) ?? new Array(n).fill(1 / n);

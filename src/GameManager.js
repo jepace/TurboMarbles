@@ -2,7 +2,7 @@
 
 import { randomBytes, randomInt, createHash, createHmac } from 'crypto';
 import {
-  createGame, rollDice, allLegalMoves, applyMove,
+  createGame, rollDice, allLegalMoves, applyMove, skipDie,
   earnsExtraRoll, nextTurn, startExtraRoll, PLAYER_CONFIG, ARM_MAP,
   MARBLES_PER_PLAYER, offerResign, answerResign, abandonMultiple, canDouble, offerDouble, takeDouble, dropDouble, twoDiceTargets, gameResult,
 } from './GameEngine.js';
@@ -878,7 +878,7 @@ export function handleForfeitDie(ws, roomId, dieIndex) {
   game._undoStack ??= [];
   game._undoStack.push({ marbles: game.players.map(p => p.marbles.map(m => ({ ...m }))), diceUsed: [...game.diceUsed] });
   game._humanMadeMove = true;
-  game.diceUsed[idx] = true;
+  skipDie(game, idx);
   // Tell everyone the die was skipped so the client updates its dice state and
   // re-evaluates the Skip button for the other die (otherwise the player can be
   // stuck unable to skip a second optional-only die).
@@ -1354,7 +1354,7 @@ function applyNextRobotMove(room) {
       events.forEach(ev => broadcast(room, ev));
     } else {
       const dieIdx = game.diceUsed[0] ? 1 : 0;
-      game.diceUsed[dieIdx] = true;
+      skipDie(game, dieIdx);
       broadcast(room, { event: 'dieForfeit', dieIndex: dieIdx });
     }
     applyNextRobotMove(room);

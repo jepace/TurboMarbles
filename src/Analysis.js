@@ -8,7 +8,7 @@
 // the plausible ways of playing it (every player uses the robot's strategy
 // afterwards) and compare win rates. Runs in a worker thread (see
 // analysisWorker.js), because it takes seconds per decision.
-import { allLegalMoves, applyMove, earnsExtraRoll, rollDice, lossMultiple } from './GameEngine.js';
+import { allLegalMoves, applyMove, skipDie, earnsExtraRoll, rollDice, lossMultiple } from './GameEngine.js';
 import { met } from './MatchEquity.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { lookup, expectedTurns, finishedBy } from './EndgameTable.js';
@@ -85,24 +85,25 @@ export function allPlays(game, pi) {
   const add = (g, moves) => { const key = boardKey(g, pi); if (!out.has(key)) out.set(key, { game: g, moves, key }); };
   const play = (g, d, mv, rec) => {
     const g2 = structuredClone(g), r2 = rec.slice();
-    if (mv) applyRecorded(g2, pi, mv, r2); else g2.diceUsed[d] = true;
+    if (mv) applyRecorded(g2, pi, mv, r2); else skipDie(g2, d);
     return [g2, r2];
   };
-  for (const d of [0, 1]) {
-    // A die with no move at all can't be given up first while the other die
-    // is unplayed: playing that one may open a move for it (hub/7 then 7/4).
-    // The other order covers it (the die is skipped second if still stuck).
-    if (!(allLegalMoves(game, pi)[d] ?? []).length && (allLegalMoves(game, pi)[1 - d] ?? []).length) continue;
-    for (const m1 of dieChoices(game, pi, d)) {
-      const [g1, rec1] = play(game, d, m1, []);
-      const second = dieChoices(g1, pi, 1 - d);
-      if (!second.length) { add(g1, rec1); continue; }
-      for (const m2 of second) {
-        const [g2, rec2] = play(g1, 1 - d, m2, rec1);
-        add(g2, rec2);
-      }
+  // Dice still to play, in either order. A skipped die can come back when the
+  // other die opens a compulsory move for it (skipDie / applyMove), so this
+  // recurses until both are used.
+  const walk = (g, rec, depth) => {
+    const open = [0, 1].filter(d => !g.diceUsed[d]);
+    if (!open.length || g.winner != null || depth > 3) { add(g, rec); return; }
+    let any = false;
+    for (const d of open) {
+      // A die with no move at all isn't given up first while the other die
+      // is unplayed: the other order covers it.
+      if (open.length === 2 && !(allLegalMoves(g, pi)[d] ?? []).length && (allLegalMoves(g, pi)[1 - d] ?? []).length) continue;
+      for (const m of dieChoices(g, pi, d)) { any = true; const [g2, r2] = play(g, d, m, rec); walk(g2, r2, depth + 1); }
     }
-  }
+    if (!any) add(g, rec);
+  };
+  walk(game, [], 0);
   if (!out.size) add(structuredClone(game), []);
   return [...out.values()];
 }
@@ -110,9 +111,9 @@ export function allPlays(game, pi) {
 // What the robot plays with this roll: { game, moves, key }.
 export function robotPlay(game, pi) {
   const g = structuredClone(game), moves = [];
-  for (let k = 0; k < 2 && g.winner == null && !(g.diceUsed[0] && g.diceUsed[1]); k++) {
+  for (let k = 0; k < 4 && g.winner == null && !(g.diceUsed[0] && g.diceUsed[1]); k++) {
     const mv = pickNextRobotMove(g, pi);
-    if (!mv) { g.diceUsed[g.diceUsed[0] ? 1 : 0] = true; continue; }
+    if (!mv) { skipDie(g, g.diceUsed[0] ? 1 : 0); continue; }
     applyRecorded(g, pi, mv, moves);
   }
   return { game: g, moves, key: boardKey(g, pi) };
@@ -217,7 +218,7 @@ function playout(g, pi, dice) {
       g.dice = rollDice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
       while (!(g.diceUsed[0] && g.diceUsed[1]) && g.winner == null) {
         const mv = pickNextRobotMove(g, turn);
-        if (mv) applyMove(g, turn, mv); else g.diceUsed[g.diceUsed[0] ? 1 : 0] = true;
+        if (mv) applyMove(g, turn, mv); else skipDie(g, g.diceUsed[0] ? 1 : 0);
       }
       again = earnsExtraRoll(g.dice);
     }

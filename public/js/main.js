@@ -2401,6 +2401,11 @@ on('extraRoll', ({ playerIndex }) => {
   renderCube();
 });
 
+on('dieRestored', ({ dieIndex }) => {
+  if (gameState?.diceUsed) gameState.diceUsed[dieIndex] = false;
+  if (gameState) renderDice(gameState.dice);
+  updateSkipButton();
+});
 on('dieForfeit', ({ dieIndex }) => {
   if (gameState?.diceUsed) gameState.diceUsed[dieIndex] = true;
   renderDice(gameState?.dice);

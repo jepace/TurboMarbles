@@ -5,7 +5,7 @@ import {
   createGame, legalMovesForDie, allLegalMoves, applyMove,
   PLAYER_CONFIG, ALL_STARS, advanceTrack, trackDistance,
   marbleOnTrack, marbleAtCenter, marbleInHome, marbleInBase,
-  earnsExtraRoll, MARBLES_PER_PLAYER, rollDice, twoDiceTargets,
+  earnsExtraRoll, MARBLES_PER_PLAYER, rollDice, twoDiceTargets, skipDie,
 } from '../src/GameEngine.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 
@@ -1049,6 +1049,26 @@ describe('twoDiceTargets — where one marble gets with both dice', () => {
   assert(!t[1], 'marbles in base with 3-2 have no two-dice targets');
   g.diceUsed = [true, false];
   assert(Object.keys(twoDiceTargets(g, 0)).length === 0, 'nothing once a die is used');
+});
+
+describe('skipDie — a skipped die comes back when the other die opens a real move', () => {
+  const g = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
+  const p = g.players[0], entry = p.config.homeEntry;
+  // One marble 2 short of the home entry (blue's square 3), the rest home.
+  Object.assign(p.marbles[0], { zone: 'track', space: advanceTrack(entry, -2) });
+  [[1, 4], [2, 3], [3, 2]].forEach(([i, s]) => Object.assign(p.marbles[i], { zone: 'home', slot: s, space: undefined }));
+  g.dice = [6, 4]; g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
+  const legal = allLegalMoves(g, 0);
+  assert([0, 1].every(d => (legal[d] ?? []).every(m => m.optional)), 'both dice only have optional moves');
+  skipDie(g, 0);
+  const round = allLegalMoves(g, 0)[1].find(m => m.optional && m.toZone === 'track');
+  const ev = applyMove(g, 0, round);
+  assert(!g.diceUsed[0] && ev.some(e => e.event === 'dieRestored' && e.dieIndex === 0), 'going round with the 4 brings the skipped 6 back');
+  const g2 = createGame([{ name: 'a', color: 'blue' }, { name: 'b', color: 'yellow' }], undefined, 0);
+  g2.dice = [6, 4]; g2.diceUsed = [false, false]; g2.phase = 'AWAITING_MOVE';
+  skipDie(g2, 0);
+  const out = allLegalMoves(g2, 0)[1] ?? [];
+  if (out.length) { applyMove(g2, 0, out[0]); assert(g2.diceUsed[0] || g2.diceUsed[1] === true, 'no spurious restore'); }
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

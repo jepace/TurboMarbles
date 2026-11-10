@@ -643,6 +643,18 @@ export function applyMove(state, playerIndex, move) {
   }
 
   state.diceUsed[move.dieIndex] = true;
+  if (state.skipped) state.skipped[move.dieIndex] = false;
+  // A die skipped earlier this roll (it had only optional moves) comes back
+  // if this move opened a compulsory one for it: going round with one die
+  // can't leave the other die's real move unplayed (6-4: 3/83 then 83/77).
+  for (let i = 0; i < 2; i++) {
+    if (!state.skipped?.[i] || !state.diceUsed[i] || state.winner != null) continue;
+    state.diceUsed[i] = false;
+    if ((allLegalMoves(state, playerIndex)[i] ?? []).some(m => !m.optional)) {
+      state.skipped[i] = false;
+      events.push({ event: 'dieRestored', playerIndex, dieIndex: i });
+    } else state.diceUsed[i] = true;
+  }
   // Say which die moved, so every client (not just the mover) greys it out.
   for (const e of events) if (e.event === 'marbleMoved') e.dieIndex = move.dieIndex;
 
@@ -703,6 +715,13 @@ export function rollDice() {
   const a = Math.floor(Math.random() * 6) + 1;
   const b = Math.floor(Math.random() * 6) + 1;
   return a >= b ? [a, b] : [b, a];
+}
+
+// Give up a die (no move, or only optional ones). Remembered, so a later
+// move that opens a compulsory move for it brings it back (see applyMove).
+export function skipDie(state, dieIndex) {
+  state.diceUsed[dieIndex] = true;
+  (state.skipped ??= [false, false])[dieIndex] = true;
 }
 
 // After both dice used: does this roll earn an extra roll?

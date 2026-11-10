@@ -11,7 +11,7 @@
 //      take point TP = (L − ½) / (W + L + ½)     cash point CP = (L + 1) / (W + L + ½)
 //    Doubler: double when min(double/take, double/drop) beats no double.
 //    Taker:   take when the equity of owning the doubled cube beats −1 (dropping).
-import { applyMove, rollDice, earnsExtraRoll, lossMultiple } from './GameEngine.js';
+import { applyMove, skipDie, rollDice, earnsExtraRoll, lossMultiple } from './GameEngine.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { duelWinChance } from './DuelTable.js';
 
@@ -29,7 +29,7 @@ function playoutFromTurn(g, mover) {
       g.turnIndex = turn; g.dice = rollDice(); g.diceUsed = [false, false]; g.phase = 'AWAITING_MOVE';
       while (!(g.diceUsed[0] && g.diceUsed[1]) && g.winner == null) {
         const mv = pickNextRobotMove(g, turn);
-        if (mv) applyMove(g, turn, mv); else g.diceUsed[g.diceUsed[0] ? 1 : 0] = true;
+        if (mv) applyMove(g, turn, mv); else skipDie(g, g.diceUsed[0] ? 1 : 0);
       }
       again = earnsExtraRoll(g.dice);
     }
