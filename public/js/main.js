@@ -3256,7 +3256,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 // Text is scanned as it appears; each name of a player in the current game or
 // the open analysis gets its colour dot. Places that already draw one (player
 // list, lobby, a log line's leading dot) are left alone.
-const NAME_SKIP = '#player-list, #lobby-slots, select, option, input, textarea, .pname, canvas';
+const NAME_SKIP = '#player-list, #lobby-slots, .aph, .gc-name, select, option, input, textarea, .pname, canvas';
 function nameColors() {
   const m = new Map();
   for (const p of [...(analysisReport?.players ?? []), ...(gameState?.players ?? [])])
