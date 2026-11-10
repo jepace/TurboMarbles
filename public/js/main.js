@@ -1467,15 +1467,15 @@ function renderStatus() {
   const cubeGames = (rep.cube ?? []).reduce((s, c) => s + (c.analysis?.n ?? 0), 0);
   const parts = [`${dec.length} decisions`, `${dec.length - played.length} estimated`,
     `${played.length} played out (${(games + cubeGames).toLocaleString()} games)`];
-  if (deepening.size) parts.push(`checking ${deepening.size}…`);
+  if (deepening.size) parts.push(`${deepening.size} being checked`);
   // Clocks: the quick pass, the base play-outs, Play out all.
   const t = rep.timing ?? {}, clock = ms => ms < 60000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.floor(ms / 60000)}:${String(Math.round(ms / 1000) % 60).padStart(2, '0')}`;
   const tp = [];
   if (t.quickMs != null) tp.push(`quick ${clock(t.quickMs)}`);
   if (t.playoutMs != null) tp.push(`play-outs ${clock(t.playoutMs)}`);
-  else if (apPhase.playout) tp.push(`play-outs ${clock(Date.now() - apPhase.playout)}…`);
+  else if (apPhase.playout) tp.push(`play-outs running ${clock(Date.now() - apPhase.playout)}`);
   if (t.playOutAllMs != null) tp.push(`play out all ${clock(t.playOutAllMs)}`);
-  else if (apPhase.all) tp.push(`play out all ${clock(Date.now() - apPhase.all)}…`);
+  else if (apPhase.all) tp.push(`play out all running ${clock(Date.now() - apPhase.all)}`);
   if (tp.length) parts.push('⏱ ' + tp.join(' · '));
   const kids = [el('span', { title: 'Estimated = judged instantly by the formula (one roll ahead). Played out = options played to the end many times.' }, parts.join(' · '))];
   if (!viewingStored && (dec.some(r => (r.analysis.level ?? 0) < 2) || (rep.cube ?? []).some(c => c.analysis && !c.analysis.exact && !c.analysis.skip && (c.analysis.level ?? 0) < 1))) {
