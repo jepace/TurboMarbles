@@ -1777,7 +1777,10 @@ function autoCheck(room, rec, report, end, { level = 1, all = false } = {}) {
     r.analysis && !r._deepening && rec.game?._rolls?.[idx]?.after && (r.analysis.level ?? 0) < level)
     .sort((x, y) => Number(x.r.analysis.robotAgrees && x.r.analysis.severity === 'ok') - Number(y.r.analysis.robotAgrees && y.r.analysis.severity === 'ok'));
   const cubeLog = rec.game?._cubeLog ?? [];
-  const cubeTodo = all ? [] : (report.cube ?? []).map(c => c.i).filter(i => cubeLog[i]);
+  // Play out all: also every cube decision below the deep level (not exact,
+  // not one skipped as nowhere near the doubling window).
+  const cubeTodo = (report.cube ?? []).filter(c => cubeLog[c.i] && !c._deepening && (!all ||
+    (c.analysis && !c.analysis.exact && !c.analysis.skip && (c.analysis.level ?? 0) < 1))).map(c => c.i);
   if (!opts || (!todo.length && !cubeTodo.length)) { end(); return; }
   for (const { r, idx } of todo) {
     Object.defineProperty(r, '_deepening', { value: true, configurable: true, enumerable: false, writable: true });
@@ -1791,7 +1794,7 @@ function autoCheck(room, rec, report, end, { level = 1, all = false } = {}) {
     const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
       workerData: { decisions: chunk.map(({ idx }) => { const raw = rec.game._rolls[idx]; return { idx, before: raw.before, after: raw.after, pi: raw.pi }; }),
         cube: cubeTodo.filter((_, k) => k % nWorkers === w).map(i => ({ i, entry: cubeLog[i] })),
-        cubeGames: config.cubeAnalysisGames,
+        cubeGames: all ? config.cubeLevels[1] : config.cubeAnalysisGames, cubeLevel: all ? 1 : 0,
         options: { ...opts, level, ctx: rec.game?._valueCtx ?? {} } },
     });
     worker.on('message', msg => {

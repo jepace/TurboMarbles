@@ -1478,8 +1478,8 @@ function renderStatus() {
   else if (apPhase.all) tp.push(`play out all ${clock(Date.now() - apPhase.all)}…`);
   if (tp.length) parts.push('⏱ ' + tp.join(' · '));
   const kids = [el('span', { title: 'Estimated = judged instantly by the formula (one roll ahead). Played out = options played to the end many times.' }, parts.join(' · '))];
-  if (!viewingStored && dec.some(r => (r.analysis.level ?? 0) < 2)) {
-    const b = el('button', { class: 'secondary', title: 'Play out every decision at the deep level (minutes; runs in the background)' },
+  if (!viewingStored && (dec.some(r => (r.analysis.level ?? 0) < 2) || (rep.cube ?? []).some(c => c.analysis && !c.analysis.exact && !c.analysis.skip && (c.analysis.level ?? 0) < 1))) {
+    const b = el('button', { class: 'secondary', title: 'Play out every move and cube decision at the deep level (minutes; runs in the background)' },
       playingOutAll ? 'Playing out all…' : 'Play out all');
     b.disabled = playingOutAll;
     b.addEventListener('click', () => { send({ action: 'playOutAll', game: curGame ?? undefined }); });

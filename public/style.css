@@ -685,7 +685,8 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 #lobby-slots li.picked { outline: 2px solid #f0c040 !important; }
 /* Analysis status line: the text shortens, the button never gets cut. */
 #ap-status { display: flex; align-items: center; gap: 0.6rem; overflow: visible; }
-#ap-status > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ap-status > span { flex: 1 1 auto; min-width: 0; white-space: normal; }
+#ap-status { white-space: normal; margin-top: 0.8rem; padding-top: 0.5rem; border-top: 1px solid #ffffff1a; flex-wrap: wrap; }
 #ap-status > button { flex: 0 0 auto; }
 #lobby-slots li { touch-action: none; user-select: none; }
 #lobby-slots li.dragging { opacity: 0.85; z-index: 2; position: relative; box-shadow: 0 6px 18px #000a; }
