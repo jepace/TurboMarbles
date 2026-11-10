@@ -704,3 +704,6 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 #admin-content h3 { margin: 12px 0 2px; }
 .name-dot { display: inline-block; width: 0.6em; height: 0.6em; border-radius: 50%; margin-right: 0.25em; vertical-align: 0.05em; box-shadow: 0 0 0 1px #0006; }
 .pname { white-space: nowrap; }
+/* Status line at the bottom of the analysis panel: never squeezed; the detail pane gives way instead. */
+#ap-status { flex: 0 0 auto; }
+#ap-detail { flex: 0 1 45%; height: auto; min-height: 0; }
