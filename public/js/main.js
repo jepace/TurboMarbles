@@ -2446,7 +2446,8 @@ on('undone', ({ gameState: gs }) => {
 on('gameOver', ({ winnerIndex }) => showGameOver(winnerIndex));
 
 function showGameOver(winnerIndex) {
-  if (gameState.phase === 'GAME_OVER' && $('win-overlay').style.display === 'flex') return;
+  if (gameState._overShown) return;   // once per game (the window itself may still be waiting for the animation)
+  gameState._overShown = true;
   flushTurnLog();
   turnLogPlayer = null;
   gameState.phase = 'GAME_OVER';
@@ -2458,7 +2459,8 @@ function showGameOver(winnerIndex) {
   $('btn-rematch').disabled = false;
   $('btn-rematch').textContent = 'Rematch';
   $('rematch-msg').style.display = 'none';
-  $('win-overlay').style.display = 'flex';
+  // The game-over window waits for the winning move's animation.
+  afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
   $('cube-offer').style.display = 'none';
   renderCube();
   // Board stays visible — no screen switch
@@ -2882,6 +2884,7 @@ function pinQueuedMarbles() {
 // leave an old tween drawing a marble in a stale place or running a second
 // queue-drain loop alongside a new one.
 let animationGen = 0;
+const afterAnimWaiters = [];
 
 function resetAnimations() {
   animationGen++;
@@ -2892,13 +2895,20 @@ function resetAnimations() {
   lastAnimEnd = null;
   clearAnimatingMarble();
   clearAllMarbleOverrides();
+  for (const fn of afterAnimWaiters.splice(0)) fn();
 }
 
+// Run fn once every queued marble animation has finished (now if none).
+function afterAnimations(fn) {
+  if (!animationRunning && animationQueue.length === 0) fn();
+  else afterAnimWaiters.push(fn);
+}
 function runNextAnimation() {
   if (animationQueue.length === 0) {
     animationRunning = false;
     runningMarble = null;
     lastAnimEnd = null;
+    for (const fn of afterAnimWaiters.splice(0)) fn();
     return;
   }
   animationRunning = true;
