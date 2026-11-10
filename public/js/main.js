@@ -1297,9 +1297,8 @@ function playerStats(rep, pi) {
     moveError: sev('error'), moveBlunder: sev('blunder'), moveEq,
     error: sev('error') + cube.cubeError, blunder: sev('blunder') + cube.cubeBlunder,
     decisions, eqLost, eqRate, pr: decisions ? 500 * eqRate : null,
-    // Dice: luck (equity the rolls gave against average rolls), doubles.
+    // Dice: luck (equity the rolls gave against average rolls).
     luck: rolls.some(r => r.luck != null) ? rolls.reduce((x, r) => x + (r.luck ?? 0), 0) : null,
-    doubles: rolls.filter(r => r.dice?.[0] === r.dice?.[1]).length,
     ...cube,
   };
 }
@@ -1456,7 +1455,6 @@ function renderSummary() {
       'Performance rating: 500 × equity lost per decision (lower is better); a title for this game once there are 15+ real decisions'),
     row('Luck', s => s.luck == null ? '…' : el('span', { class: s.luck >= 0 ? 'luck-plus' : 'luck-minus' }, `${s.luck >= 0 ? '+' : '−'}${eqv(Math.abs(s.luck))}`),
       'What the dice were worth: the equity each roll gave compared with an average roll from the same position, added up (+ lucky, − unlucky)'),
-    row('Doubles', s => `${s.doubles} of ${s.rolls}`, 'Doubles rolled (one roll in six on average)'),
     row('Equity lost', s => el('span', { title: cubeSplit(s, x => `${eqv(x.moveEq)} on moves, ${eqv(x.cubeLost)} on the cube`) }, eqv(s.eqLost)),
       'Total over the game, moves and cube together'),
     row('Errors / Blunders', s => el('span', { title: cubeSplit(s, x => `moves ${x.moveError} / ${x.moveBlunder}, cube ${x.cubeError} / ${x.cubeBlunder}`) },
