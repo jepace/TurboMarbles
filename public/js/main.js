@@ -3314,3 +3314,16 @@ for (const id of ['screen-game', 'screen-gameover']) {
     queueMicrotask(() => { queued = false; dotNames(root); });
   }).observe(root, { childList: true, subtree: true, characterData: true });
 }
+
+// ---- Busy indicator while the analyser works ----
+// Spinner by the title and a progress cursor over the panel while anything is
+// being worked out: the first pass, the play-outs, Play out all, Go deeper.
+setInterval(() => {
+  const panel = $('analysis-panel');
+  if (!panel || panel.style.display === 'none') return;
+  const rep = analysisReport;
+  const busy = waitingFor != null || playingOutAll || deepening.size > 0 || cubeDeep.size > 0 ||
+    (apPhase.playout != null && rep?.timing?.playoutMs == null) ||
+    !!rep?.rolls?.some(r => r.analysis == null && r.pending) || !!rep?.cube?.some(c => c.pending);
+  panel.classList.toggle('busy', busy);
+}, 250);

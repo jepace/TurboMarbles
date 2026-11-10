@@ -717,3 +717,9 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 #ap-summary .aph .log-dot { flex: 0 0 auto; margin: 0; }
 #ap-summary .aph-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #ap-summary .aph-win { flex: 0 0 auto; }
+/* Analyser at work: spinner by the title, progress cursor over the panel. */
+.ap-spinner { display: none; width: 0.85em; height: 0.85em; margin-left: 0.4em; vertical-align: -0.05em;
+  border: 2px solid #ffffff33; border-top-color: #f0c040; border-radius: 50%; animation: ap-spin 0.8s linear infinite; }
+#analysis-panel.busy .ap-spinner { display: inline-block; }
+#analysis-panel.busy, #analysis-panel.busy * { cursor: progress !important; }
+@keyframes ap-spin { to { transform: rotate(360deg); } }
