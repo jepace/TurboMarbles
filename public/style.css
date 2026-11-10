@@ -712,3 +712,8 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 #analysis-panel { overflow-y: auto; min-height: 0; max-height: 100%; }
 #ap-detail { flex: 0 1 auto; max-height: 45%; min-height: 3rem; }
 #ap-moves { min-height: 80px; }
+/* Summary header: the name shortens, the dot and the winner's trophy always show. */
+#ap-summary .aph { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; justify-content: flex-end; }
+#ap-summary .aph .log-dot { flex: 0 0 auto; margin: 0; }
+#ap-summary .aph-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ap-summary .aph-win { flex: 0 0 auto; }

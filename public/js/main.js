@@ -1513,8 +1513,8 @@ function renderSummary() {
   // Summary table, one column per player.
   const stats = rep.players.map((_, i) => playerStats(rep, i));
   const head = el('tr', {}, el('th'), ...rep.players.map((p, i) =>
-    el('th', {}, el('span', { class: 'log-dot', style: `background:${colorVar(p.color)};margin-right:4px` }),
-      p.name + (rep.winner === i ? ' 🏆' : ''))));
+    el('th', { title: p.name }, el('span', { class: 'aph' }, el('span', { class: 'log-dot', style: `background:${colorVar(p.color)}` }),
+      el('span', { class: 'aph-name' }, p.name), rep.winner === i ? el('span', { class: 'aph-win' }, '🏆') : ''))));
   const row = (label, f, title) => el('tr', title ? { title } : {}, el('td', {}, label), ...stats.map(s => el('td', {}, f(s))));
   const table = el('table', {}, el('thead', {}, head), el('tbody', {},
     row('PR', s => analysisPending() ? el('span', { class: 'muted', title: 'Waiting for the play-outs' }, '…')
