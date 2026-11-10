@@ -1220,8 +1220,8 @@ on('storedGame', ({ game, report }) => {
 on('moveFeedback', fb => {
   if (fb.playerIndex !== myPlayerIndex || !settings.feedback) return;
   // A forced roll was played the only way it could be — the robot agrees.
-  if (fb.forced) { pendingFeedback = { text: '✓ Robot agrees', cls: 'agree' }; return; }
-  let text = fb.robotAgrees ? '✓ Robot agrees' : `Robot would play ${fb.robotMoves}`;
+  if (fb.forced) { pendingFeedback = { text: '✓ Coach agrees', cls: 'agree' }; return; }
+  let text = fb.robotAgrees ? '✓ Coach agrees' : `Coach would play ${fb.robotMoves}`;
   if (fb.endgame) {
     text += fb.endgame.best ? ' · exact: best play'
       : ` · exact: costs +${fb.endgame.cost.toFixed(2)} turns (best ${fb.endgame.bestMoves})`;
@@ -1876,7 +1876,7 @@ function selectRoll(idx, opt = null) {
         : a.valued === 'money' ? 'Equity: points expected per unit of cube, counting aggros (2) and baggros (3)' : 'Equity: 2 × win chance − 1' }, a.valued === 'match' ? 'EMG' : 'Equity'),
       el('span', { class: 'num' }, 'vs best')));
     a.options.forEach((o, k) => {
-      const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'robot'].filter(Boolean).join(' · ');
+      const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'coach'].filter(Boolean).join(' · ');
       const cls = o.played ? (a.severity === 'ok' ? ' good' : ` ${a.severity}`) : '';
       const line = el('div', { class: 'ap-opt' + cls + (view === k ? ' sel' : ''), title: `${o.n} playouts` },
         el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
@@ -1891,7 +1891,7 @@ function selectRoll(idx, opt = null) {
       : `${SEV_LABEL[a.severity]}: −${eqOf(a.loss)}${a.estimate ? ' (estimate)' : ` ± ${eqOf(1.96 * a.se)}`}`;
     kids.push(el('div', { class: 'muted' }, `${verdict} · ${r.options} plays`,
       help(a.estimate ? 'From the instant evaluator; go deeper to play it out.'
-        : `Equity lost against the best play, with its 95% noise range; a loss inside the noise counts as correct. The best few plays, yours and the robot's were played out.`)));
+        : `Equity lost against the best play, with its 95% noise range; a loss inside the noise counts as correct. The best few plays, yours and the coach's were played out.`)));
     const lvl = a.level ?? 0;
     const games = Math.max(...a.options.map(o => o.n ?? 0));
     const depth = el('div', { class: 'ap-depth' },
@@ -3009,7 +3009,7 @@ function flushTurnLog() {
   // A roll with no legal move ("--") is never committed, so the server sends
   // no feedback for it; it was played the only way it could be.
   if (!pendingFeedback && pi === myPlayerIndex && settings.feedback && !turnLogMoves.length) {
-    pendingFeedback = { text: '✓ Robot agrees', cls: 'agree' };
+    pendingFeedback = { text: '✓ Coach agrees', cls: 'agree' };
   }
   if (pendingFeedback && pi === myPlayerIndex && settings.feedback) log(`↳ ${pendingFeedback.text}`, null, `log-feedback ${pendingFeedback.cls}`);
   pendingFeedback = null;

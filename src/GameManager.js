@@ -544,15 +544,15 @@ function sendCubeFeedback(room, ws, entry, est) {
     if (entry.kind === 'double') {
       agrees = sd.double === entry.action;
       if (agrees && !entry.action) return;              // a quiet no-double: nothing to say
-      text = agrees ? '✓ Robot agrees: double'
-        : (entry.action ? 'Robot would not double' : 'Robot would have doubled here')
+      text = agrees ? '✓ Coach agrees: double'
+        : (entry.action ? 'Coach would not double' : 'Coach would have doubled here')
           + ` (no double ${f(sd.nd)} · double/take ${f(sd.dt)} · double/drop ${f(sd.dp)})`;
     } else {
       const takeEq = -sd.dt, dropEq = -sd.dp;
       const shouldTakeIt = room.match ? sd.take : takeEq > dropEq;
       agrees = shouldTakeIt === entry.action;
-      text = agrees ? `✓ Robot agrees: ${entry.action ? 'take' : 'drop'}`
-        : `Robot would ${shouldTakeIt ? 'take' : 'drop'} (take ${room.match ? (-emg(sd.dt, sd)).toFixed(3) : f(takeEq)} · drop ${room.match ? (-emg(sd.dp, sd)).toFixed(3) : f(dropEq)})`;
+      text = agrees ? `✓ Coach agrees: ${entry.action ? 'take' : 'drop'}`
+        : `Coach would ${shouldTakeIt ? 'take' : 'drop'} (take ${room.match ? (-emg(sd.dt, sd)).toFixed(3) : f(takeEq)} · drop ${room.match ? (-emg(sd.dp, sd)).toFixed(3) : f(dropEq)})`;
     }
     sendTo(ws, { event: 'cubeFeedback', playerIndex: entry.pi, kind: entry.kind, agrees, text, exact: !!est.exact });
   }
