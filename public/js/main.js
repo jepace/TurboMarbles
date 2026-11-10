@@ -3209,6 +3209,7 @@ function log(msg, color, cls) {
     dot.className = 'log-dot';
     dot.style.background = COLOR_MAP[dc(color)] ?? '#888';
     entry.appendChild(dot);
+    entry.dataset.dot = dc(color);
   }
   entry.appendChild(document.createTextNode(msg));
   el.appendChild(entry);
@@ -3244,4 +3245,57 @@ setSeatLabels(pi => { const p = gameState?.players?.[pi]; return p ? (pi === myP
 // Development aid: with ?debug in the address, a report can be shown directly.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__tm = { showReport: rep => { analysisReport = rep; openAnalysis(); } };
+}
+
+// ---- A colour dot before every player name (game screen, analysis, game over) ----
+// Text is scanned as it appears; each name of a player in the current game or
+// the open analysis gets its colour dot. Places that already draw one (player
+// list, lobby, a log line's leading dot) are left alone.
+const NAME_SKIP = '#player-list, #lobby-slots, select, option, input, textarea, .pname, canvas';
+function nameColors() {
+  const m = new Map();
+  for (const p of [...(analysisReport?.players ?? []), ...(gameState?.players ?? [])])
+    if (p?.name && p.color && p.name.length > 1) m.set(p.name, p.color);
+  return m;
+}
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function dotNames(root) {
+  const colors = nameColors();
+  if (!colors.size) return;
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(${[...colors.keys()].sort((a, b) => b.length - a.length).map(reEsc).join('|')})(?![\\p{L}\\p{N}])`, 'gu');
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const todo = [];
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.data.trim() || n.parentElement?.closest(NAME_SKIP)) continue;
+    re.lastIndex = 0;
+    if (re.test(n.data)) todo.push(n);
+  }
+  for (const n of todo) {
+    const frag = document.createDocumentFragment();
+    let last = 0;
+    re.lastIndex = 0;
+    for (const m of n.data.matchAll(re)) {
+      frag.append(n.data.slice(last, m.index));
+      const prev = m.index === 0 ? n.previousSibling : null;
+      const hasDot = (prev?.nodeType === 1 && /(^|\s)(log-dot|player-dot|slot-dot)(\s|$)/.test(prev.className))
+        || n.parentElement?.closest('.log-entry')?.dataset.dot === dc(colors.get(m[1]));
+      const span = el('span', { class: 'pname' });
+      if (!hasDot) span.append(el('span', { class: 'name-dot', style: `background:${COLOR_MAP[dc(colors.get(m[1]))] ?? '#888'}` }));
+      span.append(m[1]);
+      frag.append(span);
+      last = m.index + m[1].length;
+    }
+    frag.append(n.data.slice(last));
+    n.replaceWith(frag);
+  }
+}
+for (const id of ['screen-game', 'screen-gameover']) {
+  const root = $(id);
+  if (!root) continue;
+  let queued = false;
+  new MutationObserver(() => {
+    if (queued) return;
+    queued = true;
+    queueMicrotask(() => { queued = false; dotNames(root); });
+  }).observe(root, { childList: true, subtree: true, characterData: true });
 }
