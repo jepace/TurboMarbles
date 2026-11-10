@@ -89,6 +89,10 @@ export function allPlays(game, pi) {
     return [g2, r2];
   };
   for (const d of [0, 1]) {
+    // A die with no move at all can't be given up first while the other die
+    // is unplayed: playing that one may open a move for it (hub/7 then 7/4).
+    // The other order covers it (the die is skipped second if still stuck).
+    if (!(allLegalMoves(game, pi)[d] ?? []).length && (allLegalMoves(game, pi)[1 - d] ?? []).length) continue;
     for (const m1 of dieChoices(game, pi, d)) {
       const [g1, rec1] = play(game, d, m1, []);
       const second = dieChoices(g1, pi, 1 - d);
