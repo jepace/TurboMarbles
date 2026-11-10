@@ -707,3 +707,8 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 /* Status line at the bottom of the analysis panel: never squeezed; the detail pane gives way instead. */
 #ap-status { flex: 0 0 auto; }
 #ap-detail { flex: 0 1 45%; height: auto; min-height: 0; }
+/* Analysis panel fits the window: the detail pane shrinks (and scrolls) first;
+   if the window is very short the panel scrolls rather than cutting the status off. */
+#analysis-panel { overflow-y: auto; min-height: 0; max-height: 100%; }
+#ap-detail { flex: 0 1 auto; max-height: 45%; min-height: 3rem; }
+#ap-moves { min-height: 80px; }

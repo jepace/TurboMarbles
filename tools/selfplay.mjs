@@ -17,7 +17,7 @@
 // Example: a candidate winning 52.3% ± 0.8% of 2-player games is better.
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
-import { createGame, applyMove, earnsExtraRoll, rollDice } from '../src/GameEngine.js';
+import { createGame, applyMove, earnsExtraRoll, rollDice, skipDie } from '../src/GameEngine.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i === -1 ? def : args[i + 1]; };
@@ -50,7 +50,7 @@ for (let g = 0; g < N; g++) {
       while (!(game.diceUsed[0] && game.diceUsed[1]) && game.winner == null) {
         const mv = pick(game, pi);
         if (mv) applyMove(game, pi, mv);
-        else game.diceUsed[game.diceUsed[0] ? 1 : 0] = true;
+        else skipDie(game, game.diceUsed[0] ? 1 : 0);
       }
       again = earnsExtraRoll(game.dice);
     }
