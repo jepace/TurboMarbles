@@ -25,7 +25,7 @@ import * as store from './Store.js';
 import { sendMail, publicUrl } from './Mailer.js';
 
 const WINDOW_MS = 60 * 60 * 1000;
-const LIMITS = { register: 10, linkFail: 10, identifyFail: 30, loginFail: 30, loginAcct: 15, mail: 6 };    // per IP (or account) per hour
+const LIMITS = { register: 10, linkFail: 10, identifyFail: 30, loginFail: 30, loginAcct: 15, mail: 6, report: 20 };    // per IP (or account) per hour
 const hits = new Map();       // `${kind}:${ip}` → [timestamps]
 function limited(kind, ip) {
   const k = `${kind}:${ip}`, t = Date.now();
@@ -36,7 +36,8 @@ function limited(kind, ip) {
 function hit(kind, ip) { const k = `${kind}:${ip}`; (hits.get(k) ?? hits.set(k, []).get(k)).push(Date.now()); }
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some(x => t - x < WINDOW_MS)) hits.delete(k); }, 10 * 60 * 1000).unref();
 
-export const ACCOUNT_ACTIONS = new Set(['login', 'logout', 'setPassword', 'setEmail', 'clearEmail', 'verifyEmail', 'forgotPassword', 'resetPassword', 'leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
+export const ACCOUNT_ACTIONS = new Set(['report', 'adminUnlock', 'adminStatus', 'adminSearch', 'adminBan', 'adminUnban', 'adminRename',
+  'adminResetRating', 'adminDelete', 'adminReports', 'adminResolve', 'login', 'logout', 'setPassword', 'setEmail', 'clearEmail', 'verifyEmail', 'forgotPassword', 'resetPassword', 'leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
   'block', 'unblock', 'dm', 'conversation', 'invite', 'setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
   'deleteAccount', 'profile', 'history', 'openGame']);
 
@@ -63,6 +64,49 @@ export function accountDisconnected(ws) {
   set.delete(ws);
   if (!set.size) { online.delete(id); if (store.storeEnabled()) for (const f of friendIds(id)) pushTo(f, { event: 'presence', id, online: false }); }
 }
+// Admin actions (the caller is an unlocked admin).
+function adminAction(ws, me, msg, { send, err, cleanName, serverStatus }) {
+  const id = typeof msg.id === 'string' ? msg.id : null;
+  const done = what => { console.log(`[admin] ${me.name}: ${what}`); send(ws, { event: 'adminDone', what }); };
+  switch (msg.action) {
+    case 'adminStatus':
+      return send(ws, { event: 'adminStatus', counts: store.adminCounts(), online: online.size, server: serverStatus?.() ?? null });
+    case 'adminSearch':
+      return send(ws, { event: 'adminPlayers', players: store.adminSearch(msg.q) });
+    case 'adminReports':
+      return send(ws, { event: 'adminReports', reports: store.reportsList({ open: msg.all !== true }) });
+    case 'adminResolve':
+      if (!Number.isInteger(msg.reportId)) return;
+      store.resolveReport(msg.reportId, me.id, msg.note);
+      return done(`resolved report ${msg.reportId}`);
+  }
+  if (!id || !store.playerName(id)) return err('NOT_FOUND', 'No such player.');
+  const name = store.playerName(id);
+  if (id === me.id && msg.action !== 'adminRename') return err('FORBIDDEN', "Not on your own account.");
+  switch (msg.action) {
+    case 'adminBan':
+      store.ban(id, msg.reason);
+      // Signed out everywhere, now.
+      for (const w of online.get(id) ?? []) { try { sendFn?.(w, { event: 'banned', reason: msg.reason ?? null }); w.close(); } catch { /* gone */ } }
+      return done(`banned ${name}${msg.reason ? ` (${msg.reason})` : ''}`);
+    case 'adminUnban': store.unban(id); return done(`unbanned ${name}`);
+    case 'adminRename': {
+      const n = cleanName(msg.name);
+      if (!n) return err('MISSING_FIELDS', 'Choose a name.');
+      const r = store.rename(id, n);
+      if (r.error) return err(r.error, `"${n}" is taken.`);
+      for (const w of online.get(id) ?? []) { if (w._player) w._player.name = n; sendFn?.(w, { event: 'identity', player: w._player, prefs: store.getPrefs(id) }); }
+      return done(`renamed ${name} to ${n}`);
+    }
+    case 'adminResetRating': store.resetRating(id); return done(`reset ${name}'s rating`);
+    case 'adminDelete':
+      if (msg.confirm !== name) return err('CONFIRM_MISMATCH', 'Type the name exactly to confirm.');
+      for (const w of online.get(id) ?? []) { try { sendFn?.(w, { event: 'accountDeleted' }); w.close(); } catch { /* gone */ } }
+      store.deletePlayer(id);
+      return done(`deleted ${name}`);
+  }
+}
+
 // Messages: at most 20 a minute per player.
 const dmTimes = new Map();
 function dmLimited(id) {
@@ -86,7 +130,7 @@ function friendsPayload(id) {
 
 // send(ws, msg); cleanName(raw) → '' if unusable; onOpenGame(ws, game) shows a stored game;
 // roomCodeOf(ws) → the code of the room this connection is in (for invites), or null.
-export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, roomCodeOf }) {
+export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, roomCodeOf, seatAccount, serverStatus }) {
   sendFn = send;
   const err = (code, message) => send(ws, { event: 'error', code, message });
   if (!store.storeEnabled()) return err('STATS_UNAVAILABLE', 'Accounts and stats are not available on this server.');
@@ -101,7 +145,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       if (!p) { hit('identifyFail', ip); return send(ws, { event: 'identity', player: null }); }
       setPlayer(ws, p);
       ws._key = msg.key;
-      return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id),
+      return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id), admin: store.isAdmin(p.id),
         needsPassword: !store.hasPassword(p.id) });
     }
     case 'register': {
@@ -175,8 +219,9 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       if (limited('loginFail', ip) || limited('loginAcct', acct)) return err('RATE_LIMITED', 'Too many tries. Wait a while, or reset your password.');
       const r = store.login(msg.name, msg.password);
       if (!r) { hit('loginFail', ip); hit('loginAcct', acct); return err('BAD_LOGIN', 'Wrong name or password.'); }
+      if (r.banned) return err('BANNED', `This account is banned${r.reason ? `: ${r.reason}` : '.'}`);
       setPlayer(ws, r.player); ws._key = r.key;
-      return send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id) });
+      return send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id), admin: store.isAdmin(r.player.id) });
     }
     case 'logout': {
       if (ws._key) store.revokeSession(ws._key);
@@ -227,6 +272,31 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       if (r.error) return err(r.error, r.error === 'BAD_PASSWORD' ? `Choose a password of ${store.PASSWORD_MIN} to ${store.PASSWORD_MAX} characters.` : 'That link is wrong or has expired.');
       setPlayer(ws, r.player); ws._key = r.key;
       return send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id), reset: true });
+    }
+    // ---- Reports (any signed-in player) ----
+    case 'report': {
+      if (!needMe()) return;
+      if (limited('report', 'id:' + me.id)) return err('RATE_LIMITED', 'Too many reports. Try again later.');
+      // A player by id (a friend), or a seat in my current room.
+      const target = typeof msg.id === 'string' ? msg.id : seatAccount?.(ws, Number(msg.seat));
+      if (!target || target === me.id) return err('NOT_FOUND', 'That player has no account to report.');
+      hit('report', 'id:' + me.id);
+      store.addReport(me.id, target, msg.context, msg.body);
+      return send(ws, { event: 'reported' });
+    }
+    // ---- Admin: an admin account, unlocked with its password for 30 minutes ----
+    case 'adminUnlock': {
+      if (!needMe() || !store.isAdmin(me.id)) return err('FORBIDDEN', 'Not allowed.');
+      if (limited('loginFail', ip)) return err('RATE_LIMITED', 'Too many tries.');
+      if (!store.checkPassword(me.id, msg.password)) { hit('loginFail', ip); return err('BAD_LOGIN', 'Wrong password.'); }
+      ws._adminUntil = Date.now() + 30 * 60_000;
+      return send(ws, { event: 'adminUnlocked', until: ws._adminUntil });
+    }
+    case 'adminStatus': case 'adminSearch': case 'adminBan': case 'adminUnban': case 'adminRename':
+    case 'adminResetRating': case 'adminDelete': case 'adminReports': case 'adminResolve': {
+      if (!needMe() || !store.isAdmin(me.id)) return err('FORBIDDEN', 'Not allowed.');
+      if (!(ws._adminUntil > Date.now())) return send(ws, { event: 'adminLocked' });
+      return adminAction(ws, me, msg, { send, err, cleanName, serverStatus });
     }
     case 'leaderboard':
       return send(ws, { event: 'leaderboard', players: store.leaderboard({ limit: 100 }), me: me ? store.ratingOf(me.id) : null });

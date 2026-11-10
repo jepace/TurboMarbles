@@ -117,6 +117,19 @@ function migrate() {
   if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
   const gcols = new Set(db.prepare('PRAGMA table_info(games)').all().map(c => c.name));
   if (!gcols.has('dice_seed')) db.exec('ALTER TABLE games ADD COLUMN dice_seed TEXT');   // revealed after the game
+  if (!pcols.has('is_admin')) db.exec('ALTER TABLE players ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
+  if (!pcols.has('banned_at')) db.exec('ALTER TABLE players ADD COLUMN banned_at INTEGER');
+  if (!pcols.has('ban_reason')) db.exec('ALTER TABLE players ADD COLUMN ban_reason TEXT');
+  db.exec(`CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporter TEXT REFERENCES players(id) ON DELETE SET NULL,
+      target   TEXT REFERENCES players(id) ON DELETE CASCADE,
+      context  TEXT,                -- where: 'game', 'chat', 'message', 'name'
+      body     TEXT,                -- what the reporter wrote
+      created_at INTEGER NOT NULL,
+      resolved_at INTEGER, resolved_by TEXT, note TEXT
+    );
+    CREATE INDEX IF NOT EXISTS reports_open ON reports(resolved_at, created_at);`);
   if (!pcols.has('pw_hash')) db.exec('ALTER TABLE players ADD COLUMN pw_hash TEXT');
   if (!pcols.has('email')) db.exec('ALTER TABLE players ADD COLUMN email TEXT');            // verified only
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS players_email ON players(email) WHERE email IS NOT NULL;
@@ -192,8 +205,8 @@ export function register(name) {
 // The player a device key belongs to, or null.
 export function authenticate(key) {
   if (!db || typeof key !== 'string' || key.length < 20 || key.length > 100) return null;
-  const row = db.prepare('SELECT p.id, p.name FROM devices d JOIN players p ON p.id = d.player_id WHERE d.key_hash = ?').get(sha(key));
-  if (!row) return null;
+  const row = db.prepare('SELECT p.id, p.name, p.banned_at FROM devices d JOIN players p ON p.id = d.player_id WHERE d.key_hash = ?').get(sha(key));
+  if (!row || row.banned_at) return null;
   db.prepare('UPDATE devices SET last_used = ? WHERE key_hash = ?').run(now(), sha(key));
   return { id: row.id, name: row.name };
 }
@@ -273,9 +286,10 @@ export function setPassword(id, pw) { db.prepare('UPDATE players SET pw_hash = ?
 // A missing account costs the same time as a wrong password.
 export function login(name, pw) {
   if (!db || typeof pw !== 'string' || pw.length > PASSWORD_MAX) return null;
-  const row = db.prepare('SELECT id, name, pw_hash FROM players WHERE name_key = ?').get(nameKey(String(name ?? '')));
+  const row = db.prepare('SELECT id, name, pw_hash, banned_at, ban_reason FROM players WHERE name_key = ?').get(nameKey(String(name ?? '')));
   const ok = checkHash(pw, row?.pw_hash ?? DUMMY_HASH) && !!row?.pw_hash;
   if (!ok) return null;
+  if (row.banned_at) return { banned: true, reason: row.ban_reason };
   return { player: { id: row.id, name: row.name }, key: newSession(row.id) };
 }
 export function checkPassword(id, pw) {
@@ -350,6 +364,62 @@ export function revokeOtherDevices(playerId, keepKey) {
 
 // Delete the account: the player and their devices go; their seats in past
 // games stay (other players' history) but lose the link and the name.
+// ---- Admin ----------------------------------------------------------------------
+export function isAdmin(id) { return !!db?.prepare('SELECT is_admin FROM players WHERE id = ?').get(id)?.is_admin; }
+export function setAdmin(name, on) {
+  const r = db?.prepare('UPDATE players SET is_admin = ? WHERE name_key = ?').run(on ? 1 : 0, nameKey(name));
+  return !!r?.changes;
+}
+// Players by name (substring), newest first, with what an admin needs to see.
+export function adminSearch(q, limit = 50) {
+  if (!db) return [];
+  const like = `%${String(q ?? '').toLowerCase().replace(/[%_]/g, '')}%`;
+  return db.prepare(`SELECT p.id, p.name, p.created_at, p.rating, p.rated_games, p.is_admin, p.banned_at, p.ban_reason, p.email,
+      (SELECT COUNT(*) FROM seats s WHERE s.player_id = p.id) games,
+      (SELECT MAX(last_used) FROM devices d WHERE d.player_id = p.id) last_seen,
+      (SELECT COUNT(*) FROM reports r WHERE r.target = p.id) reports
+    FROM players p WHERE p.name_key LIKE ? ORDER BY p.created_at DESC LIMIT ?`).all(like, limit)
+    .map(r => ({ id: r.id, name: r.name, createdAt: r.created_at, rating: Math.round(r.rating), ratedGames: r.rated_games, admin: !!r.is_admin,
+      bannedAt: r.banned_at, banReason: r.ban_reason, email: r.email, games: r.games, lastSeen: r.last_seen, reports: r.reports }));
+}
+// Ban: blocks sign-in and ends every session. Unban lifts it.
+export function ban(id, reason) {
+  db.prepare('UPDATE players SET banned_at = ?, ban_reason = ? WHERE id = ?').run(now(), String(reason ?? '').slice(0, 200) || null, id);
+  db.prepare('DELETE FROM devices WHERE player_id = ?').run(id);
+}
+export function unban(id) { db.prepare('UPDATE players SET banned_at = NULL, ban_reason = NULL WHERE id = ?').run(id); }
+export function resetRating(id) {
+  db.prepare('UPDATE players SET rating = ?, rated_games = 0 WHERE id = ?').run(RATING_START, id);
+  db.prepare('DELETE FROM rating_history WHERE player_id = ?').run(id);
+}
+export function playerName(id) { return db?.prepare('SELECT name FROM players WHERE id = ?').get(id)?.name ?? null; }
+export function adminCounts() {
+  if (!db) return {};
+  const one = sql => db.prepare(sql).get().n;
+  return { players: one('SELECT COUNT(*) n FROM players'), games: one('SELECT COUNT(*) n FROM games'),
+    gamesToday: one(`SELECT COUNT(*) n FROM games WHERE ended_at > ${now() - 864e5}`),
+    unanalysed: one('SELECT COUNT(*) n FROM games WHERE report_gz IS NULL'), openReports: one('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL'),
+    banned: one('SELECT COUNT(*) n FROM players WHERE banned_at IS NOT NULL') };
+}
+// ---- Reports --------------------------------------------------------------------
+export function addReport(reporter, target, context, body) {
+  if (!db || !target || reporter === target) return false;
+  db.prepare('INSERT INTO reports (reporter, target, context, body, created_at) VALUES (?, ?, ?, ?, ?)')
+    .run(reporter, target, String(context ?? '').slice(0, 20), String(body ?? '').slice(0, 1000), now());
+  return true;
+}
+export function reportsList({ open = true, limit = 100 } = {}) {
+  if (!db) return [];
+  return db.prepare(`SELECT r.*, a.name reporter_name, t.name target_name, t.banned_at target_banned, b.name resolver_name
+    FROM reports r LEFT JOIN players a ON a.id = r.reporter LEFT JOIN players t ON t.id = r.target LEFT JOIN players b ON b.id = r.resolved_by
+    WHERE ${open ? 'r.resolved_at IS NULL' : '1'} ORDER BY r.created_at DESC LIMIT ?`).all(limit)
+    .map(r => ({ id: r.id, reporter: r.reporter_name, target: r.target, targetName: r.target_name, targetBanned: !!r.target_banned,
+      context: r.context, body: r.body, createdAt: r.created_at, resolvedAt: r.resolved_at, resolvedBy: r.resolver_name, note: r.note }));
+}
+export function resolveReport(id, by, note) {
+  db.prepare('UPDATE reports SET resolved_at = ?, resolved_by = ?, note = ? WHERE id = ?').run(now(), by, String(note ?? '').slice(0, 300) || null, id);
+}
+
 export function deletePlayer(playerId) {
   if (!db) return false;
   db.prepare("UPDATE seats SET name = 'deleted player' WHERE player_id = ?").run(playerId);

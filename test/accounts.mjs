@@ -167,6 +167,48 @@ console.log('background analysis (idle)');
   assert(!!getGame(id).report, 'an unanalysed stored game gets analysed when the server is idle');
 }
 
+console.log('admin');
+{
+  const { setAdmin, authenticate } = await import('../src/Store.js');
+  const adm = mockWs(), bad = mockWs(), rep = mockWs();
+  for (const w of [adm, bad, rep]) w._ip = '10.6.6.6';
+  act(adm, { action: 'register', name: 'Boss', password: 'boss password' });
+  act(bad, { action: 'register', name: 'Troll', password: 'troll password' });
+  act(rep, { action: 'register', name: 'Victim', password: 'victim password' });
+  const trollKey = bad.find('registered').pop().key, T = bad._player.id;
+  act(adm, { action: 'adminStatus' });
+  assert(adm.find('error').pop()?.code === 'FORBIDDEN', 'not an admin: refused');
+  setAdmin('Boss', true);
+  act(adm, { action: 'adminStatus' });
+  assert(adm.find('adminLocked').length === 1, 'an admin must unlock with their password first');
+  act(adm, { action: 'adminUnlock', password: 'wrong one!!' });
+  assert(adm.find('error').pop()?.code === 'BAD_LOGIN', 'wrong password: still locked');
+  act(adm, { action: 'adminUnlock', password: 'boss password' });
+  act(adm, { action: 'adminStatus' });
+  assert(adm.find('adminStatus').pop()?.counts.players >= 3, 'unlocked: server status');
+  act(rep, { action: 'report', id: T, context: 'chat', body: 'rude' });
+  act(adm, { action: 'adminReports' });
+  const r = adm.find('adminReports').pop().reports.find(x => x.targetName === 'Troll');
+  assert(r?.body === 'rude' && r.reporter === 'Victim', 'a report reaches the admin');
+  act(adm, { action: 'adminSearch', q: 'tro' });
+  assert(adm.find('adminPlayers').pop().players[0]?.name === 'Troll', 'search players by name');
+  act(adm, { action: 'adminRename', id: T, name: 'Renamed' });
+  assert(bad.find('identity').pop()?.player.name === 'Renamed', 'rename reaches the player');
+  act(adm, { action: 'adminBan', id: T, reason: 'abuse' });
+  assert(bad.find('banned').length === 1 && !authenticate(trollKey), 'ban: signed out, the session no longer works');
+  const again = mockWs(); again._ip = '10.6.6.7';
+  act(again, { action: 'login', name: 'Renamed', password: 'troll password' });
+  assert(again.find('error').pop()?.code === 'BANNED', 'a banned player cannot log in');
+  act(adm, { action: 'adminUnban', id: T });
+  act(again, { action: 'login', name: 'Renamed', password: 'troll password' });
+  assert(again._player?.id === T, 'unbanned: can log in again');
+  act(adm, { action: 'adminResolve', reportId: r.id, note: 'warned' });
+  act(adm, { action: 'adminReports' });
+  assert(!adm.find('adminReports').pop().reports.some(x => x.id === r.id), 'resolved reports leave the open list');
+  act(adm, { action: 'adminBan', id: adm._player.id });
+  assert(adm.find('error').pop()?.code === 'FORBIDDEN', 'an admin cannot ban themselves');
+}
+
 closeStore();
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

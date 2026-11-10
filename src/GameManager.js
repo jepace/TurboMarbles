@@ -1506,6 +1506,23 @@ export function handleChat(ws, roomId, text) {
   }
 }
 
+// For reports: the account sitting in seat `seat` of this connection's room.
+export function seatAccountOf(ws, seat) {
+  const room = rooms.get(sessions.get(ws._id)?.roomId);
+  return room?.slots[seat]?.accountId ?? null;
+}
+// For the admin page: what the server is doing.
+export function serverSnapshot() {
+  const list = [...rooms.values()];
+  return {
+    rooms: list.length, lobbies: list.filter(r => r.state === 'lobby').length, playing: list.filter(r => r.state === 'playing').length,
+    peopleInGames: list.filter(r => r.state === 'playing').reduce((n, r) => n + r.slots.filter(s => !s.isRobot && s.ws).length, 0),
+    analyses: analysesRunning, analysisQueue: analysisQueue.length, checks: checksRunning, checkQueue: checkQueue.length,
+    games: list.filter(r => r.state !== 'lobby').slice(0, 30).map(r => ({ code: r.code, state: r.state,
+      players: r.slots.map(s => (s.name ?? '—') + (s.isRobot ? ' 🤖' : '')), match: r.match ? `${r.match.score.join('–')} of ${r.match.length}` : null })),
+  };
+}
+
 // The code of the lobby this connection is in (for invites), else null.
 export function roomCodeOf(ws) {
   const room = rooms.get(sessions.get(ws._id)?.roomId);

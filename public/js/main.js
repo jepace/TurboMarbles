@@ -122,7 +122,71 @@ function renderNavMe() {
     el('div', { class: 'muted' }, me ? (myRating ? `Rating ${myRating.rating}` : '') : 'guest'));
 }
 let myRating = null;
+// ---- Admin ----
+let isAdminUser = false, adminTab = 'reports';
+function setAdminUser(on) { isAdminUser = on; for (const b of document.querySelectorAll('#side-nav .admin-only')) b.style.display = on ? '' : 'none'; }
+const fmtTime = t => (t ? new Date(t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—');
+function adminLoad() { send({ action: adminTab === 'reports' ? 'adminReports' : adminTab === 'players' ? 'adminSearch' : 'adminStatus', q: $('admin-q')?.value ?? '' }); }
+on('adminLocked', () => { $('admin-lock').style.display = 'flex'; $('admin-body').style.display = 'none'; setTimeout(() => $('admin-pass').focus(), 0); });
+on('adminUnlocked', () => { $('admin-lock').style.display = 'none'; $('admin-body').style.display = ''; $('admin-pass').value = ''; adminLoad(); });
+$('admin-lock').addEventListener('submit', e => { e.preventDefault(); send({ action: 'adminUnlock', password: $('admin-pass').value }); });
+for (const b of document.querySelectorAll('#admin-tabs .chip')) b.addEventListener('click', () => {
+  adminTab = b.dataset.t; for (const x of document.querySelectorAll('#admin-tabs .chip')) x.classList.toggle('on', x === b);
+  $('admin-content').replaceChildren(); adminLoad();
+});
+on('adminDone', ({ what }) => { toastAnywhere(`✓ ${what}`); adminLoad(); });
+function playerActions(p) {
+  return [
+    p.bannedAt ? smallBtn('Unban', () => send({ action: 'adminUnban', id: p.id }))
+      : smallBtn('Ban', () => { const reason = prompt(`Ban ${p.name}? Reason (shown to them):`); if (reason != null) send({ action: 'adminBan', id: p.id, reason }); }, 'secondary danger'),
+    smallBtn('Rename', () => { const n = prompt(`New name for ${p.name}:`, p.name); if (n && n.trim() !== p.name) send({ action: 'adminRename', id: p.id, name: n.trim() }); }),
+    smallBtn('Reset rating', () => { if (confirm(`Reset ${p.name}'s rating to 1400?`)) send({ action: 'adminResetRating', id: p.id }); }),
+    smallBtn('Delete', () => { const c = prompt(`Delete ${p.name} for good? Type the name to confirm:`); if (c) send({ action: 'adminDelete', id: p.id, confirm: c }); }, 'secondary danger'),
+  ];
+}
+on('adminReports', ({ reports }) => {
+  $('badge-admin').textContent = reports.length || '';
+  $('admin-content').replaceChildren(...(reports.length ? reports.map(r => el('div', { class: 'friend-row admin-row' },
+    el('div', { class: 'fname' }, el('b', {}, r.targetName ?? '(deleted)'), r.targetBanned ? el('span', { class: 'muted' }, ' · banned') : '',
+      el('div', { class: 'muted' }, `${r.context || 'report'} · by ${r.reporter ?? '(deleted)'} · ${fmtTime(r.createdAt)}`),
+      r.body ? el('div', {}, `“${r.body}”`) : ''),
+    ...(r.target ? playerActions({ id: r.target, name: r.targetName, bannedAt: r.targetBanned }).slice(0, 2) : []),
+    smallBtn('Resolve', () => { const note = prompt('Note (optional):') ?? ''; send({ action: 'adminResolve', reportId: r.id, note }); }, 'btn-go')))
+    : [el('p', { class: 'muted' }, 'No open reports.')]));
+});
+on('adminPlayers', ({ players }) => {
+  const q = $('admin-q')?.value ?? '';
+  const search = el('form', { class: 'form-row' }, el('input', { id: 'admin-q', type: 'text', placeholder: 'Name', value: q }), el('button', { type: 'submit' }, 'Search'));
+  search.addEventListener('submit', e => { e.preventDefault(); adminLoad(); });
+  $('admin-content').replaceChildren(search, ...players.map(p => el('div', { class: 'friend-row admin-row' },
+    el('div', { class: 'fname' }, el('b', {}, p.name), p.admin ? ' 🛡' : '', p.bannedAt ? el('span', { class: 'sev-blunder' }, ` · banned${p.banReason ? `: ${p.banReason}` : ''}`) : '',
+      el('div', { class: 'muted' }, `rating ${p.rating} · ${p.games} games · ${p.reports} report${p.reports === 1 ? '' : 's'} · joined ${fmtTime(p.createdAt)} · seen ${fmtTime(p.lastSeen)}${p.email ? ' · ' + p.email : ''}`)),
+    ...(p.admin ? [] : playerActions(p)))));
+  const inp = $('admin-q'); if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length); }
+});
+on('adminStatus', ({ counts, online: on_, server }) => {
+  const kv = (k, v) => el('div', { class: 'stat' }, el('div', { class: 'v' }, String(v)), el('div', { class: 'k' }, k));
+  $('badge-admin').textContent = counts.openReports || '';
+  $('admin-content').replaceChildren(
+    el('div', { class: 'stat-grid' }, kv('online accounts', on_), kv('games in progress', server?.playing ?? '—'), kv('people in games', server?.peopleInGames ?? '—'),
+      kv('waiting rooms', server?.lobbies ?? '—'), kv('players', counts.players), kv('games stored', counts.games), kv('games today', counts.gamesToday),
+      kv('not analysed', counts.unanalysed), kv('analysis running / queued', `${server?.analyses ?? 0}+${server?.checks ?? 0} / ${server?.analysisQueue ?? 0}+${server?.checkQueue ?? 0}`),
+      kv('open reports', counts.openReports), kv('banned', counts.banned), kv('up · memory', `${server?.uptimeMin ?? '?'} min · ${server?.memoryMB ?? '?'} MB`)),
+    el('h3', {}, 'Games now'),
+    ...(server?.games?.length ? server.games.map(g => el('div', { class: 'muted' }, `${g.code} · ${g.state}${g.match ? ' · match ' + g.match : ''} · ${g.players.join(', ')}`)) : [el('p', { class: 'muted' }, 'None.')]),
+    el('h3', {}, 'Recent errors'),
+    ...(server?.errors?.length ? server.errors.slice().reverse().map(e => el('pre', { class: 'admin-err' }, `${fmtTime(e.at)}  ${e.text}`)) : [el('p', { class: 'muted' }, 'None.')]));
+});
+// Banned while signed in: signed out at once.
+on('banned', ({ reason }) => { saveKey(null); me = null; setAdminUser(false); updateLanding(); show('screen-landing'); loginMsg(`This account is banned${reason ? `: ${reason}` : '.'}`); });
+on('reported', () => toastAnywhere('Thanks — the report has been sent.'));
+function reportPlayer(target, context) {
+  const body = prompt('What happened? (optional)');
+  if (body == null) return;
+  send({ action: 'report', ...target, context, body });
+}
 function navigate(id) {
+  if (id === 'screen-admin') { show(id); send({ action: 'adminStatus' }); return; }
   // Leaving a waiting room through the menu leaves the room.
   if ($('screen-lobby').classList.contains('active') && id !== 'screen-lobby') { send({ action: 'quit' }); setReconnectInfo(null); }
   if (id === 'screen-profile' || id === 'screen-settings') { openProfile(id, 'screen-home'); return; }
@@ -239,7 +303,8 @@ function renderMessages() {
   $('dm-input').disabled = $('btn-dm-send').disabled = !f;
   $('dm-head').replaceChildren(...(f ? [el('b', {}, f.name), el('span', { class: 'muted' }, ` ${f.rating}`), el('span', { style: 'flex:1' }),
     smallBtn('Remove', () => { if (confirm(`Remove ${f.name} from your friends?`)) send({ action: 'friendRemove', id: f.id }); }),
-    smallBtn('Block', () => { if (confirm(`Block ${f.name}?`)) send({ action: 'block', id: f.id }); })] : [el('span', { class: 'muted' }, friendsData.friends.length ? 'Pick a friend.' : 'No friends yet.')]));
+    smallBtn('Block', () => { if (confirm(`Block ${f.name}?`)) send({ action: 'block', id: f.id }); }),
+    smallBtn('Report', () => reportPlayer({ id: f.id }, 'message'))] : [el('span', { class: 'muted' }, friendsData.friends.length ? 'Pick a friend.' : 'No friends yet.')]));
   if (f && $('screen-friends').classList.contains('active') && !dmLogs.has(f.id)) send({ action: 'conversation', with: f.id });
   if (f && f.unread && $('screen-friends').classList.contains('active')) { send({ action: 'conversation', with: f.id }); f.unread = 0; }
   renderDmLog();
@@ -913,7 +978,8 @@ updateLanding();
 
 let myPrefs = {};                  // account preferences (signed in)
 on('prefs', ({ prefs }) => { myPrefs = prefs ?? {}; });
-on('identity', ({ player, prefs, needsPassword }) => {
+on('identity', ({ player, prefs, needsPassword, admin }) => {
+  setAdminUser(!!player && !!admin);
   if (player && profileData) setTimeout(() => renderAccountSection(), 0);   // a rename shows at once
   if (player && needsPassword) { $('pw-pop-name').textContent = player.name; $('pw-pop').style.display = 'flex'; }
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
@@ -924,7 +990,8 @@ on('identity', ({ player, prefs, needsPassword }) => {
   // Signed in already: skip the login screen.
   if (me && $('screen-landing').classList.contains('active')) { myName = me.name; goHome(); }
 });
-on('registered', ({ player, key, linked, prefs }) => {
+on('registered', ({ player, key, linked, prefs, admin }) => {
+  setAdminUser(!!admin);
   saveKey(key);
   me = player; myPrefs = prefs ?? {};
   updateLanding();
@@ -3037,6 +3104,13 @@ function renderSidebar() {
     pips.title = 'Pip count: squares still to travel by the shortest route (stars and hub included), plus the empty home slots';
     row.appendChild(dot);
     row.appendChild(label);
+    // Report another person (signed-in players; robots can't be reported).
+    if (me && p.index !== myPlayerIndex && !p.isRobot) {
+      const rb = document.createElement('button');
+      rb.className = 'report-btn'; rb.textContent = '⚑'; rb.title = `Report ${p.name}`;
+      rb.addEventListener('click', () => reportPlayer({ seat: p.index }, 'game'));
+      row.appendChild(rb);
+    }
     row.appendChild(pips);
     list.appendChild(row);
   }

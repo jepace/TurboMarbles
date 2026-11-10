@@ -67,6 +67,7 @@
   <button class="nav-item" data-go="screen-leaderboard">🏆 Leaderboard</button>
   <button class="nav-item" data-go="screen-board">🎨 Board</button>
   <button class="nav-item acct" data-go="screen-settings">⚙ Settings</button>
+  <button class="nav-item admin-only" data-go="screen-admin" style="display:none">🛡 Admin <span class="nav-badge" id="badge-admin"></span></button>
   <div class="nav-foot">
     <div id="nav-me"></div>
     <button id="btn-switch-user" class="link-btn">Log out</button>
@@ -128,6 +129,22 @@
         <div id="dm-log"></div>
         <div class="form-row"><input id="dm-input" type="text" maxlength="500" placeholder="Message" disabled><button id="btn-dm-send" disabled>Send</button></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin (admin accounts; unlocked with the password for 30 minutes) -->
+<div id="screen-admin" class="screen page">
+  <div class="card">
+    <h2>Admin</h2>
+    <form id="admin-lock" class="form-row" style="display:none">
+      <input id="admin-pass" type="password" placeholder="Your password" autocomplete="current-password">
+      <button type="submit">Unlock</button>
+      <span class="muted">for 30 minutes</span>
+    </form>
+    <div id="admin-body" style="display:none">
+      <div class="chips" id="admin-tabs"><button class="chip on" data-t="reports">Reports</button><button class="chip" data-t="players">Players</button><button class="chip" data-t="server">Server</button></div>
+      <div id="admin-content"></div>
     </div>
   </div>
 </div>

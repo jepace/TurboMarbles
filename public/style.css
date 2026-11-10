@@ -693,3 +693,11 @@ body.with-nav #screen-profile.active { padding: 2.2rem 3rem; height: auto; min-h
 .luck-plus { color: #7ee08a; } .luck-minus { color: #ff9a8a; }
 .tip-value { display: flex; align-items: center; gap: 5px; font-weight: 700; }
 .tip-sep { height: 1px; background: #ffffff1f; margin: 4px 0; }
+
+.admin-row { align-items: flex-start; }
+.admin-row .fname { display: flex; flex-direction: column; gap: 2px; font-weight: 500; }
+pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; padding: 0.4rem 0.6rem; border-radius: 6px; margin: 0 0 4px; max-height: 8rem; overflow: auto; }
+.player-row .report-btn { margin-left: 6px; background: none; color: var(--muted); padding: 0 4px; font-size: 0.85rem; border: none; opacity: 0; }
+.player-row:hover .report-btn { opacity: 1; }
+#admin-content { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+#admin-content h3 { margin: 12px 0 2px; }

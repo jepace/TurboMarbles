@@ -7,12 +7,21 @@ import { dirname, join } from 'path';
 import {
   createRoom, joinRoom, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
-  handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf,
+  handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf, seatAccountOf, serverSnapshot,
   handleUndo, handleCommit, handleAnalyzeGame,
   handleDouble, handleTake, handleDrop, handleRematch, handleQuit, handleChat, handleSwapSeats, handleResign, handleResignAnswer, handleAnalyzeDeeper, handlePlayOutAll, handleAnalyzeDeeperCube, handleAnalyzeMatch,
   storedGameReport,
 } from './GameManager.js';
 import { handleAccountAction, ACCOUNT_ACTIONS, accountDisconnected } from './Accounts.js';
+
+// The last server errors, for the admin page.
+const recentErrors = [];
+const origError = console.error.bind(console);
+console.error = (...args) => {
+  if (!/ExperimentalWarning|--trace-warnings/.test(String(args[0]))) recentErrors.push({ at: Date.now(), text: args.map(a => (a instanceof Error ? a.stack ?? a.message : typeof a === 'string' ? a : JSON.stringify(a))).join(' ').slice(0, 500) });
+  if (recentErrors.length > 100) recentErrors.shift();
+  origError(...args);
+};
 import { openStore, isNameTaken } from './Store.js';
 
 openStore();
@@ -224,7 +233,8 @@ function dispatch(ws, msg) {
   }
 
   if (ACCOUNT_ACTIONS.has(msg.action)) {
-    return handleAccountAction(ws, msg, { send, cleanName, roomCodeOf,
+    return handleAccountAction(ws, msg, { send, cleanName, roomCodeOf, seatAccount: seatAccountOf,
+      serverStatus: () => ({ ...serverSnapshot(), uptimeMin: Math.round(process.uptime() / 60), memoryMB: Math.round(process.memoryUsage().rss / 1e6), errors: recentErrors.slice(-30) }),
       onOpenGame: (w, g) => send(w, { event: 'storedGame',
         game: { id: g.id, endedAt: g.endedAt, cube: g.cube, seats: g.seats, winnerSeat: g.winnerSeat },
         report: storedGameReport(g) }) });
