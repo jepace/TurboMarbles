@@ -520,6 +520,7 @@ function recordCube(room, entry) {
   if (game._cubeLog.length >= 400) return;
   const rollIdx = (game._rolls?.length ?? 0) + (game._pendingRoll ? 1 : 0);
   const dEntry = entry.kind === 'double' ? entry.pi : entry.doubler;
+  entry.turn = game._turnNo ?? 1;
   game._cubeLog.push({ ...entry, turn: game._turnNo ?? 1, rollIdx, match: matchCtx(room, dEntry) });
   const slot = room.slots[entry.pi];
   if (!slot || slot.isRobot || !slot.ws) return;
@@ -544,9 +545,13 @@ function sendCubeFeedback(room, ws, entry, est) {
     if (entry.kind === 'double') {
       agrees = sd.double === entry.action;
       if (agrees && !entry.action) return;              // a quiet no-double: nothing to say
+      // How much the choice cost (doubler's equity, cube units): a tiny
+      // difference is a close call, not a mistake.
+      const dbl = Math.min(sd.dt, sd.dp), cost = Math.abs(dbl - sd.nd) * (room.match ? 1 : v);
+      const close = cost < 0.06 ? `close call, −${cost.toFixed(3)}; ` : `−${cost.toFixed(3)}; `;
       text = agrees ? '✓ Coach agrees: double'
-        : (entry.action ? 'Coach would not double' : 'Coach would have doubled here')
-          + ` (no double ${f(sd.nd)} · double/take ${f(sd.dt)} · double/drop ${f(sd.dp)})`;
+        : (entry.action ? 'Coach would not double' : `Coach would have doubled at the start of your turn ${entry.turn}`)
+          + ` (${close}no double ${f(sd.nd)} · double/take ${f(sd.dt)} · double/drop ${f(sd.dp)})`;
     } else {
       const takeEq = -sd.dt, dropEq = -sd.dp;
       const shouldTakeIt = room.match ? sd.take : takeEq > dropEq;
