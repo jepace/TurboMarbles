@@ -18,7 +18,7 @@ import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
 import { LeagueTracker } from './LeagueTracker.js';
-import { COACHES } from '../public/js/league.js';
+import { TEAMS, ROBOT_STYLES, styleInfo } from '../public/js/league.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
@@ -162,11 +162,8 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     // default 1.5× a robot move comes every ~0.9 s and a turn starts after
     // ~1.2 s, about two beats of the music at its middle tempo.
     room.pace = Math.min(3, Math.max(0.5, Number(pace) || 1.5));
-    const taken = new Set();
     for (const s of slots) {
-      const free = ROBOT_NAMES.filter(n => !taken.has(n.toLowerCase()));
-      s.name = free.length ? free[Math.floor(Math.random() * free.length)] : `Robot ${s.index + 1}`;
-      taken.add(s.name.toLowerCase());
+      s.name = TEAMS[s.color]?.short ?? `Robot ${s.index + 1}`;   // the team (assignTeams sets it again each game)
       s.isRobot = true;
       s.accountId = null;
       s.ws = null;
@@ -176,7 +173,7 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     room.watchers.add(hostWs);
     // The AI commentator (it only calls out while it's switched on and someone watches).
     room._ai = new AICommentator(room, { send: msg => broadcast(room, msg) });
-    // The league: teams, coaches, marbles, careers and records (robot stream rooms only).
+    // The league: teams, marbles, careers and records (robot stream rooms only).
     room._league = new LeagueTracker(room, { send: msg => broadcast(room, msg) });
     room.league = true;
   }
@@ -222,24 +219,22 @@ export function joinRoom(ws, code, playerName) {
   return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room), reconnectToken: playerId };
 }
 
-// Robot names: the league's coaches (public/js/league.js), picked at random
-// when a robot is added. In ordinary games robots play the balanced style; in
-// the league (robot stream rooms) each coach plays their own style.
-export const ROBOT_NAMES = COACHES.map(c => c.name);
+// Robot names: a robot is named after its playing style (public/js/league.js
+// ROBOT_STYLES): "Robot" for the balanced default, "Bonker", "Racer"…; more of
+// the same are numbered ("Bonker 2").
+export const ROBOT_NAMES = ROBOT_STYLES.map(x => x.name);
 
-// What beginGame needs from the seats (the coach's style rides along in league rooms).
+// What beginGame needs from the seats (a robot's style rides along).
 const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot, ...(s.style ? { style: s.style } : {}) }));
 
-// League rooms: a fresh set of coaches for every game (they rotate between teams).
-function rotateCoaches(room) {
-  const pool = [...COACHES].sort(() => Math.random() - 0.5);
-  room.slots.forEach((s, i) => { const c = pool[i % pool.length]; s.name = c.name; s.style = c.style; });
+// League rooms: each seat is its colour's team, playing the team's style.
+function assignTeams(room) {
+  for (const s of room.slots) { const t = TEAMS[s.color]; if (t) { s.name = t.short; s.style = t.style; } }
 }
 
-// coachName: a coach from the league (public/js/league.js) to play this seat in
-// their style, or none for a random coach. The same coach can play several
-// seats ("Okafor", "Okafor 2"…).
-export function addRobot(ws, roomId, coachName = null) {
+// style: a playing style for this robot (league.js ROBOT_STYLES), or none for
+// the balanced default. The same style can fill several seats ("Bonker 2"…).
+export function addRobot(ws, roomId, style = null) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
   if (!isHost(ws, room)) return { error: 'Only host can add robots' };
@@ -248,17 +243,12 @@ export function addRobot(ws, roomId, coachName = null) {
   if (!slot) return { error: 'No empty slots' };
 
   const taken = new Set(room.slots.map(s => s.name?.toLowerCase()).filter(Boolean));
-  let coach = COACHES.find(c => c.name === coachName) ?? null;
-  if (!coach) {
-    // A random coach nobody in the room is using yet.
-    const free = COACHES.filter(c => !taken.has(c.name.toLowerCase()));
-    coach = (free.length ? free : COACHES)[Math.floor(Math.random() * (free.length || COACHES.length))];
-  }
-  let name = coach.name;
-  for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${coach.name} ${k}`;
+  const info = styleInfo(style) ?? styleInfo('balanced');
+  let name = info.name;
+  for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${info.name} ${k}`;
   slot.isRobot = true;
   slot.name = name;
-  slot.style = coach.style;
+  slot.style = info.style === 'balanced' ? null : info.style;
   slot.playerId = 'robot-' + slot.index;
 
   broadcast(room, {
@@ -354,7 +344,7 @@ export function startGame(ws, roomId) {
 }
 
 function beginGame(room, players) {
-  if (room.league) { rotateCoaches(room); players = seatPlayers(room); }
+  if (room.league) { assignTeams(room); players = seatPlayers(room); }
   // Match play: a fresh match after one has ended; the Crawford game is the
   // first game after someone reaches match point (no doubling in it).
   const m = room.match;

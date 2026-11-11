@@ -166,12 +166,12 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   (win, bonk the leader near home, end a 2+ turn wait in hub/base) and sends `envy` with `rolled`), shown left of the board when there's room (gear option "Commentary"; on by default on the
   stream page, `commentary=0` turns it off). Lines about moves wait for the animation (afterAnimations).
 - Marble League, "The Grand Marble Circuit" (robot stream rooms only): `public/js/league.js` has six permanent teams,
-  one per colour, each with four named marbles (trait, bio, catchphrase), and twelve original robot COACHES (also the
-  robot names everywhere). In league rooms the coaches rotate every game (`rotateCoaches`) and each plays a real style
-  (`STYLES` in `src/RobotPlayer.js`: balanced, bonker, racer, cautious, hub, gambler, packer; coaches go by last name in games — multipliers on risk,
-  bump value, home bonus, home tidiness and star/hub/base waiting costs; `game.players[pi].style`). Elsewhere robots
-  play balanced unless the host picks a coach: the lobby's + Robot lists every coach (same one allowed several times:
-  "Okafor", "Okafor 2"), and that robot plays the coach's style. Coaches go by last name in games. `src/LeagueTracker.js`
+  one per colour — the teams are the players — each with four named marbles (trait, bio, catchphrase; one is the
+  captain) and its own playing style (`STYLES` in `src/RobotPlayer.js`: balanced, bonker, racer, gambler, cautious, hub,
+  packer — multipliers on risk, bump value, home bonus, home tidiness and star/hub/base waiting costs;
+  `game.players[pi].style`; league rooms set seats to their team and style in `assignTeams`). In other games robots
+  are named after their style ("Robot" = balanced, "Bonker", "Racer"…, ROBOT_STYLES); the lobby's + Robot picks the
+  style, the same one may fill several seats ("Bonker 2"); plain + Robot is the balanced robot. `src/LeagueTracker.js`
   watches the room's broadcasts and keeps per-game numbers (bonks by marble — the engine reports a bump before the
   attacker's move, so the attacker is found by position —, homes, hub trips/turns, rolls/sixes/doubles, lead changes,
   wire-to-wire, comeback deficit, finish margin, length, spaces travelled = the die each move used, star-circle hops, times in the hub, hub escapes /

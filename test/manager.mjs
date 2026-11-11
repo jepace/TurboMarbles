@@ -1071,13 +1071,13 @@ describe('analyzeGame — reports every roll of every player', () => {});
   assert(room.records.at(-1).analysis.result.rolls.filter(r => r.analysis).every(r => r.analysis.level === 2), 'every decision is now at the deep level');
 }
 
-describe('addRobot — random names from the list, no duplicates', () => {
+describe('addRobot — named after the style, numbered, no duplicates', () => {
   setup();
   const host = mockWs();
   const { roomId } = createRoom(host, 'Alice', 6);
   for (let i = 0; i < 5; i++) addRobot(host, roomId);
   const names = _getRoom(roomId).slots.filter(s => s.isRobot).map(s => s.name);
-  assert(names.length === 5 && names.every(n => ROBOT_NAMES.includes(n)), `robot names from the list (${names.join(', ')})`);
+  assert(names.length === 5 && names.every(n => ROBOT_NAMES.includes(n.replace(/ \d+$/, ''))), `robot names from the styles (${names.join(', ')})`);
   assert(new Set(names).size === 5, 'all different');
   assert(!names.includes('Alice'), "never the host's name");
 });
@@ -1160,19 +1160,19 @@ describe('watching a human game', () => {
   assert(!_getRoom(r.roomId), 'nobody watching a robots-only game: it ends');
 });
 
-describe('robot coaches: pick them, repeat them, they play their style', () => {
+describe('robot styles: pick them, repeat them, they play their style', () => {
   setup();
   const host = mockWs();
   const r = createRoom(host, 'Alice', 4);
-  addRobot(host, r.roomId, 'Okafor');
-  addRobot(host, r.roomId, 'Okafor');
+  addRobot(host, r.roomId, 'bonker');
+  addRobot(host, r.roomId, 'bonker');
   addRobot(host, r.roomId);
   const room = _getRoom(r.roomId);
-  assert(room.slots[1].name === 'Okafor' && room.slots[2].name === 'Okafor 2', 'the same coach twice: numbered');
-  assert(room.slots[1].style === 'bonker' && room.slots[2].style === 'bonker', 'each plays the coach\'s style');
-  assert(room.slots[3].isRobot && room.slots[3].style, 'a random coach has a style too');
+  assert(room.slots[1].name === 'Bonker' && room.slots[2].name === 'Bonker 2', 'the same style twice: numbered, named after the style');
+  assert(room.slots[1].style === 'bonker' && room.slots[2].style === 'bonker', 'each plays the style');
+  assert(room.slots[3].name === 'Robot' && !room.slots[3].style, 'plain + Robot: the balanced robot');
   startGame(host, r.roomId);
-  assert(room.game.players[1].style === 'bonker' && !room.game.players[0].style, 'styles reach the game (the human has none)');
+  assert(room.game.players[1].style === 'bonker' && !room.game.players[0].style && !room.game.players[3].style, 'styles reach the game');
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

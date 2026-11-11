@@ -1,7 +1,7 @@
 // LeagueTracker.js — turns robot stream games into a sport.
 //
 // One per robot watch room. It sees every broadcast (like the AI commentator)
-// and keeps the game's numbers for each team (colour), coach (the robot in the
+// and keeps the game's numbers for each team (colour; the team is the player,
 // seat) and marble (TEAMS in public/js/league.js): bonks dealt and taken,
 // marbles home and in what order, hub trips and turns stuck there, rolls,
 // sixes and doubles (luck), the lead (changes, wire-to-wire, the biggest
@@ -9,9 +9,9 @@
 // At the end it writes careers, streaks, rivalries, the month's season table
 // and all-time records to the store, keeps the room's session table, and
 // sends notable facts to the room as { event: 'leagueNote', level, parts }
-// (parts: strings and { team }, { marble: [color, id] }, { coach } tokens),
+// (parts: strings and { team }, { marble: [color, id] } tokens),
 // plus { event: 'leagueState' } snapshots for the page.
-import { TEAMS, marbleName, teamName, teamShort, COACHES, coachByName, STYLE_LABELS, LEAGUE_NAME } from '../public/js/league.js';
+import { TEAMS, marbleName, teamName, teamShort, STYLE_LABELS, STYLE_PHRASES, LEAGUE_NAME, captainOf } from '../public/js/league.js';
 import { pipCount, PLAYER_CONFIG, ALL_STARS } from '../public/js/constants.js';
 import * as store from './Store.js';
 
@@ -29,7 +29,6 @@ export class LeagueTracker {
   }
 
   colorOf(pi) { return this.room.game?.players[pi]?.config.color; }
-  coachOf(pi) { return this.room.slots[pi]?.name ?? `Coach ${pi + 1}`; }
   note(level, ...parts) { this.send({ event: 'leagueNote', level, parts }); }
 
   // ---- live game ----
@@ -127,7 +126,7 @@ export class LeagueTracker {
     const teams = {}, marbles = {};
     game.players.forEach((p, pi) => {
       const color = p.config.color;
-      teams[color] = { color, pi, coach: this.coachOf(pi), distance: 0, starSpaces: 0, rolls: 0, sixes: 0, doubles: 0, hubTurns: 0, bonks: 0, bonked: 0, maxDeficit: 0, ledEver: false, lostLead: false };
+      teams[color] = { color, pi, distance: 0, starSpaces: 0, rolls: 0, sixes: 0, doubles: 0, hubTurns: 0, bonks: 0, bonked: 0, maxDeficit: 0, ledEver: false, lostLead: false };
       p.marbles.forEach((_, id) => { marbles[`${color}:${id}`] = { color, id, distance: 0, starSpaces: 0, hubTurns: 0, hubExits: 0, hubPassThrough: 0, goArounds: 0, hubHits: 0, circleHits: 0, bonks: 0, bonked: 0, exits: 0, hubTrips: 0, homeOrder: null, firstHome: false }; });
     });
     this.g = { at: Date.now(), teams, marbles, rolls: 0, bonks: 0, homes: 0, leader: null, leadChanges: 0, said: new Set(), rivals: {} };
@@ -137,13 +136,14 @@ export class LeagueTracker {
     for (const t of Object.values(teams)) {
       const s = store.leagueGet('team', t.color);
       if ((s.streak ?? 0) >= 3) notes.push([2, { team: t.color }, ` come in on a ${s.streak}-game winning streak.`]);
-      if ((s.lossStreak ?? 0) >= 6) notes.push([1, { team: t.color }, ` haven't won in ${s.lossStreak} games. Can `, { coach: t.coach }, ' turn it around?']);
+      if ((s.lossStreak ?? 0) >= 6) notes.push([1, { team: t.color }, ` haven't won in ${s.lossStreak} games. Can captain `, { marble: [t.color, captainOf(t.color)] }, ' turn it around?']);
     }
-    // One coach in the spotlight.
-    const spot = Object.values(teams)[Math.floor(Math.random() * Object.keys(teams).length)], c = coachByName(spot?.coach);
-    if (c) {
-      const rec = store.leagueGet('coach', c.name);
-      notes.push([1, { coach: c.full }, ' coaches ', { team: spot.color }, ` today. ${c.bio}`, rec.games ? ` Career: ${rec.wins ?? 0} wins from ${rec.games}.` : '', ` "${c.line}"`]);
+    // One team in the spotlight: its style and its captain.
+    const spot = Object.values(teams)[Math.floor(Math.random() * Object.keys(teams).length)], tm = spot && TEAMS[spot.color];
+    if (tm) {
+      const rec = store.leagueGet('team', spot.color), cap = captainOf(spot.color);
+      notes.push([1, { team: spot.color }, ` ${STYLE_PHRASES[tm.style] ?? 'play it balanced'}, led by captain `, { marble: [spot.color, cap] }, '.',
+        rec.games ? ` ${rec.wins ?? 0} wins from ${rec.games} so far.` : '', ` "${tm.marbles[cap]?.cheer ?? ''}"`]);
     }
     notes.slice(0, 3).forEach((n, i) => setTimeout(() => this.note(...n), 4000 + i * 5000));
   }
@@ -196,11 +196,6 @@ export class LeagueTracker {
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
       store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks });
-      // The coach (a robot name) has a career too.
-      const cb = store.leagueGet('coach', t.coach);
-      const cStreak = won ? (cb.streak ?? 0) + 1 : 0;
-      store.leagueAdd('coach', t.coach, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0 });
-      store.leagueSet('coach', t.coach, { streak: cStreak, bestStreak: Math.max(cb.bestStreak ?? 0, cStreak) });
       // Session table.
       const st = (this.session.teams[t.color] ??= { wins: 0, points: 0, games: 0, bonks: 0 });
       st.games++; st.wins += won ? 1 : 0; st.points += pts[t.color] ?? 0; st.bonks += t.bonks;
@@ -230,7 +225,7 @@ export class LeagueTracker {
     if (topBonker?.bonks >= 2) rec('mostBonksMarbleGame', topBonker.bonks, `${topBonker.color}:${topBonker.id}`, `${marbleName(topBonker.color, topBonker.id)} (${teamName(topBonker.color)})`,
       `${marbleName(topBonker.color, topBonker.id)} with ${topBonker.bonks} bonks in one game`);
     if (g.bonks) rec('mostBonksGame', g.bonks, wColor, `${n}-player game won by ${teamName(wColor)}`, `${g.bonks} bonks in a single game`);
-    if (w.maxDeficit >= 30) rec('biggestComeback', w.maxDeficit, wColor, `${teamName(wColor)} (coach ${w.coach})`, `the biggest comeback: ${teamName(wColor)} from ${w.maxDeficit} pips behind`);
+    if (w.maxDeficit >= 30) rec('biggestComeback', w.maxDeficit, wColor, `${teamName(wColor)}`, `the biggest comeback: ${teamName(wColor)} from ${w.maxDeficit} pips behind`);
     rec('longestGame', turns, wColor, `${turns} rolls, ${Math.round(ms / 60000)} min`, `the longest game: ${turns} rolls`);
     if (margin > 0 && margin <= 40) rec('closestFinish', margin, wColor, `${teamName(wColor)} by ${margin} pips`, `the closest finish: ${margin} pips`, { lowerIsBetter: true });
     const tw = store.leagueGet('team', wColor);
@@ -251,9 +246,9 @@ export class LeagueTracker {
     const lead = Object.entries(this.session.teams).sort((a, b) => b[1].wins - a[1].wins || b[1].points - a[1].points)[0];
     if (lead && this.session.games >= 3) notes.push([1, { team: lead[0] }, ` lead the session with ${lead[1].wins} win${lead[1].wins === 1 ? '' : 's'} from ${this.session.games} games.`]);
 
-    store.leagueLogGame({ players: n, winner: wColor, coach: w.coach, summary: {
+    store.leagueLogGame({ players: n, winner: wColor, coach: null, summary: {
       turns, ms, bonks: g.bonks, margin, leadChanges: g.leadChanges, deficit: w.maxDeficit, wire, mvp: mvp ? `${mvp.color}:${mvp.id}` : null,
-      teams: Object.values(g.teams).map(t => ({ color: t.color, coach: t.coach, points: pts[t.color] ?? 0, bonks: t.bonks, sixes: t.sixes, distance: t.distance })) } });
+      teams: Object.values(g.teams).map(t => ({ color: t.color, points: pts[t.color] ?? 0, bonks: t.bonks, sixes: t.sixes, distance: t.distance })) } });
 
     this.sendState({ mvp: mvp ? [mvp.color, mvp.id] : null, gamePoints: pts });
     // Spread the notes out after the win line.
@@ -268,7 +263,7 @@ export class LeagueTracker {
       season: mon,
       teams: game.players.map((p, pi) => {
         const c = p.config.color, career = store.leagueGet('team', c), sea = store.leagueGet('season:' + mon, c);
-        return { color: c, name: teamName(c), short: teamShort(c), emoji: TEAMS[c]?.emoji, coach: this.coachOf(pi),
+        return { color: c, name: teamName(c), short: teamShort(c), emoji: TEAMS[c]?.emoji, style: TEAMS[c]?.style, captain: captainOf(c),
           marbles: (TEAMS[c]?.marbles ?? []).map(m => m.name),
           session: this.session.teams[c] ?? { wins: 0, points: 0, games: 0, bonks: 0 },
           season: { wins: sea.wins ?? 0, points: sea.points ?? 0, games: sea.games ?? 0 },
@@ -301,21 +296,16 @@ export function leagueOverview() {
   const mon = season();
   const teams = Object.keys(TEAMS).map(c => {
     const t = store.leagueGet('team', c), s = store.leagueGet('season:' + mon, c);
-    return { color: c, name: teamName(c), emoji: TEAMS[c].emoji, career: t, season: s };
+    const cap = captainOf(c);
+    return { color: c, name: teamName(c), emoji: TEAMS[c].emoji, style: TEAMS[c].style, styleLabel: STYLE_LABELS[TEAMS[c].style], captain: TEAMS[c].marbles[cap]?.name, career: t, season: s };
   });
   const marbles = store.leagueAll('marble').map(m => {
     const [color, id] = m.id.split(':');
     const info = TEAMS[color]?.marbles[+id];
-    return { ...m, color, mid: +id, name: info?.name, trait: info?.trait, bio: info?.bio, team: teamName(color) };
+    return { ...m, color, mid: +id, name: info?.name, trait: info?.trait, bio: info?.bio, captain: !!info?.captain, team: teamName(color) };
   });
-  const byName = Object.fromEntries(store.leagueAll('coach').map(c => [c.id, c]));
-  const coaches = COACHES.map(c => ({ ...(byName[c.name] ?? {}), id: c.name, full: c.full, style: c.style, styleLabel: STYLE_LABELS[c.style], bio: c.bio }))
-    .sort((a, b) => ((b.wins ?? 0) / Math.max(1, b.games ?? 0)) - ((a.wins ?? 0) / Math.max(1, a.games ?? 0)));
   const rivals = store.leagueAll('rival').sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0)).slice(0, 8);
-  // Styles: how each approach is doing, all coaches of a style together.
-  const styles = Object.entries(STYLE_LABELS).map(([k, label]) => {
-    const cs = coaches.filter(c => c.style === k);
-    return { style: k, label, coaches: cs.map(c => c.id), games: cs.reduce((t, c) => t + (c.games ?? 0), 0), wins: cs.reduce((t, c) => t + (c.wins ?? 0), 0), points: cs.reduce((t, c) => t + (c.points ?? 0), 0) };
-  }).filter(x => x.coaches.length);
-  return { league: LEAGUE_NAME, season: mon, teams, marbles, coaches, styles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
+  // Styles: each team plays one; how is each approach doing?
+  const styles = teams.map(t => ({ style: TEAMS[t.color].style, label: STYLE_LABELS[TEAMS[t.color].style], team: t.name, games: t.career.games ?? 0, wins: t.career.wins ?? 0, points: t.career.points ?? 0 }));
+  return { league: LEAGUE_NAME, season: mon, teams, marbles, styles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
 }

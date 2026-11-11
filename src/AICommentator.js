@@ -17,9 +17,9 @@
 import { setting, settingOn, settingNum, aiPrices } from './SiteSettings.js';
 import { complete as providerComplete, PROVIDERS } from './ai/providers.js';
 import { pipCount, countdown, PLAYER_CONFIG } from '../public/js/constants.js';
-import { TEAMS, teamName, teamShort, marbleName, COACHES, STYLE_LABELS, LEAGUE_NAME } from '../public/js/league.js';
+import { TEAMS, teamName, teamShort, marbleName, STYLE_LABELS, LEAGUE_NAME } from '../public/js/league.js';
 
-const SYSTEM = `You are the live commentator on a 24/7 stream of TurboMarbles, a marble racing board game played by robot coaches. Viewers watch the board; you add colour, like a friendly, witty sports commentator.
+const SYSTEM = `You are the live commentator on a 24/7 stream of TurboMarbles, a marble racing board game played by robot teams. Viewers watch the board; you add colour, like a friendly, witty sports commentator.
 
 The game: 2-6 players, each with 4 marbles. Each turn a player rolls two dice; each die moves one marble. A 1 or 6 brings a marble out of base. Rolling a 6 earns another roll. Star spaces give shortcuts along a star track, and the hub in the centre is a shortcut that needs a 1 to leave. Landing on an opponent sends their marble back to base: call that a "bonk" (or bump). Marbles in the home row can't be bonked. First to get all 4 marbles home wins. Losers pay the winner 1 point, 2 for an aggro (the loser has no marbles home), 3 for a baggro (all four still in base). Once every player has a marble home, aggros are off the table. "Pips" is how far a player still has to travel (lower is better; about 346 at the start). A tidy home row is packed from the top; an untidy one (low marbles with gaps above) needs exact rolls later, which is risky. Having every marble out of base is "full mobility": say it in varied ways (the whole squad out, base empty, all hands on deck…).
 
@@ -32,8 +32,8 @@ How to commentate:
 - If nothing interesting happened, reply with exactly: PASS`;
 
 // The league roster (fixed): teams by colour, their marbles and personalities.
-const ROSTER = `\n\n${LEAGUE_NAME} (stats tracked include each marble's bonks and spaces travelled): six permanent teams, one per colour, each with four named marbles. The robot in a colour's seat is that game's coach; coaches rotate between teams every game, and each has a real playing style that changes how the team plays. Coaches: ${COACHES.map(c => `${c.full} (${STYLE_LABELS[c.style]}: ${c.bio})`).join('; ')}. Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
-  + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "the ${t.short}"): ` + t.marbles.map(m => `${m.name}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
+const ROSTER = `\n\n${LEAGUE_NAME} (stats tracked include each marble's bonks and spaces travelled): six permanent teams, one per colour; the teams are the players. Each team has four named marbles (one is the captain) and its own playing style, which really changes how it plays. Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
+  + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "the ${t.short}", plays ${STYLE_LABELS[t.style]}): ` + t.marbles.map(m => `${m.name}${m.captain ? ' (captain)' : ''}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
 
 const MAX_EVENTS = 30;
 
@@ -58,8 +58,8 @@ export class AICommentator {
   stop() { clearInterval(this.timer); }
 
   name(pi) {
-    const coach = this.room.slots[pi]?.name ?? `Player ${pi + 1}`, c = this.room.game?.players[pi]?.config.color;
-    return this.room.league && c && TEAMS[c] ? `${TEAMS[c].name} (coach ${coach})` : coach;
+    const name = this.room.slots[pi]?.name ?? `Player ${pi + 1}`, c = this.room.game?.players[pi]?.config.color;
+    return this.room.league && c && TEAMS[c] ? TEAMS[c].name : name;
   }
   marble(pi, id) {
     const c = this.room.game?.players[pi]?.config.color;
@@ -96,7 +96,7 @@ export class AICommentator {
         if (msg.score) note += ' Session points: ' + msg.score.map((s, i) => `${N(i)} ${s > 0 ? '+' : ''}${s}`).join(', ') + '.';
         break;
       }
-      case 'leagueNote': note = (msg.parts ?? []).map(x => typeof x === 'string' ? x : x.team ? teamName(x.team) : x.marble ? `${marbleName(...x.marble)} (${teamShort(x.marble[0])})` : x.coach ?? '').join(''); break;
+      case 'leagueNote': note = (msg.parts ?? []).map(x => typeof x === 'string' ? x : x.team ? teamName(x.team) : x.marble ? `${marbleName(...x.marble)} (${teamShort(x.marble[0])})` : '').join(''); break;
       case 'robotTookOver': note = `${N(msg.playerIndex)} is now played by a robot.`; break;
     }
     if (!note) return;
