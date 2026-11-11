@@ -41,6 +41,7 @@ export class LeagueTracker {
         if (!g) return;
         const t = g.teams[this.colorOf(msg.playerIndex)];
         if (!t) return;
+        g.dice = msg.dice;
         g.rolls++; t.rolls++; t.sixes += msg.dice.filter(d => d === 6).length; if (msg.dice[0] === msg.dice[1]) t.doubles++;
         // Stuck in the hub: a turn starting with a marble there.
         if (game?.players[msg.playerIndex]?.marbles.some(m => m.zone === 'center')) t.hubTurns++;
@@ -53,6 +54,13 @@ export class LeagueTracker {
         if (!g) return;
         const color = this.colorOf(msg.playerIndex), m = g.marbles[`${color}:${msg.marbleId}`];
         g.lastMover = { color, id: msg.marbleId };
+        // Spaces travelled: the die the move used.
+        const steps = g.dice?.[msg.dieIndex] ?? 0;
+        if (m) { m.distance += steps; g.teams[color].distance += steps; }
+        if (m && steps) {
+          const career = (store.leagueGet('marble', `${color}:${msg.marbleId}`).distance ?? 0) + m.distance, before = career - steps;
+          if (Math.floor(career / 1000) > Math.floor(before / 1000)) this.note(2, { marble: [color, msg.marbleId] }, ` passes ${(Math.floor(career / 1000) * 1000).toLocaleString('en')} career spaces!`);
+        }
         if (m && msg.from?.zone === 'base') m.exits++;
         if (m && msg.to?.zone === 'center') m.hubTrips++;
         if (m && msg.to?.zone === 'home' && msg.from?.zone !== 'home') {
@@ -92,8 +100,8 @@ export class LeagueTracker {
     const teams = {}, marbles = {};
     game.players.forEach((p, pi) => {
       const color = p.config.color;
-      teams[color] = { color, pi, coach: this.coachOf(pi), rolls: 0, sixes: 0, doubles: 0, hubTurns: 0, bonks: 0, bonked: 0, maxDeficit: 0, ledEver: false, lostLead: false };
-      p.marbles.forEach((_, id) => { marbles[`${color}:${id}`] = { color, id, bonks: 0, bonked: 0, exits: 0, hubTrips: 0, homeOrder: null, firstHome: false }; });
+      teams[color] = { color, pi, coach: this.coachOf(pi), distance: 0, rolls: 0, sixes: 0, doubles: 0, hubTurns: 0, bonks: 0, bonked: 0, maxDeficit: 0, ledEver: false, lostLead: false };
+      p.marbles.forEach((_, id) => { marbles[`${color}:${id}`] = { color, id, distance: 0, bonks: 0, bonked: 0, exits: 0, hubTrips: 0, homeOrder: null, firstHome: false }; });
     });
     this.g = { at: Date.now(), teams, marbles, rolls: 0, bonks: 0, homes: 0, leader: null, leadChanges: 0, said: new Set(), rivals: {} };
     this.sendState();
@@ -150,7 +158,7 @@ export class LeagueTracker {
       const won = t.color === wColor, big = losers.find(l => this.colorOf(l.pi) === t.color)?.mult ?? 1;
       const before = store.leagueGet('team', t.color);
       const streak = won ? (before.streak ?? 0) + 1 : 0, lossStreak = won ? 0 : (before.lossStreak ?? 0) + 1;
-      store.leagueAdd('team', t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
+      store.leagueAdd('team', t.color, { distance: t.distance, games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
       store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks });
@@ -171,7 +179,7 @@ export class LeagueTracker {
     if (aggroed?.length === 1) notes.push([1, { team: aggroed[0] }, pick([' take an aggro: nothing home at the end.', ' are aggro\'d: not one marble home.'])]);
     else if (aggroed?.length > 1) notes.push([1, 'Aggros all round: ', ...aggroed.flatMap((c, i) => [i ? (i === aggroed.length - 1 ? ' and ' : ', ') : '', { team: c }]), ' finish with nothing home.']);
     for (const m of Object.values(g.marbles)) {
-      store.leagueAdd('marble', `${m.color}:${m.id}`, { games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
+      store.leagueAdd('marble', `${m.color}:${m.id}`, { distance: m.distance, games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
     }
     for (const [pair, c] of Object.entries(g.rivals)) store.leagueAdd('rival', pair, { bonks: c });
     this.session.games++;
@@ -193,6 +201,9 @@ export class LeagueTracker {
     if (margin > 0 && margin <= 40) rec('closestFinish', margin, wColor, `${teamName(wColor)} by ${margin} pips`, `the closest finish: ${margin} pips`, { lowerIsBetter: true });
     const tw = store.leagueGet('team', wColor);
     if ((tw.streak ?? 0) >= 2) rec('longestStreak', tw.streak, wColor, `${teamName(wColor)}`, `${teamName(wColor)} with ${tw.streak} straight wins`);
+    const roamer = Object.values(g.marbles).sort((a, b) => b.distance - a.distance)[0];
+    if (roamer?.distance) rec('mostDistanceGame', roamer.distance, `${roamer.color}:${roamer.id}`, `${marbleName(roamer.color, roamer.id)} (${teamName(roamer.color)})`,
+      `${marbleName(roamer.color, roamer.id)} travelled ${roamer.distance} spaces in one game`);
     const luckiest = Object.values(g.teams).sort((a, b) => b.sixes - a.sixes)[0];
     if (luckiest?.sixes >= 5) rec('mostSixesGame', luckiest.sixes, luckiest.color, `${teamName(luckiest.color)}`, `${teamName(luckiest.color)} with ${luckiest.sixes} sixes in one game`);
 
@@ -201,13 +212,14 @@ export class LeagueTracker {
     else if (wire && g.leadChanges === 0) notes.unshift([2, 'Wire to wire for ', { team: wColor }, '!']);
     if (margin > 0 && margin <= 8) notes.push([2, `Won by just ${margin} pip${margin === 1 ? '' : 's'}!`]);
     if (g.leadChanges >= 6) notes.push([1, `${g.leadChanges} lead changes in that one. A classic.`]);
+    if (roamer && roamer.distance >= 150 && Math.random() < 0.5) notes.push([1, 'The workhorse: ', { marble: [roamer.color, roamer.id] }, ` covered ${roamer.distance} spaces.`]);
     if (mvp) notes.push([2, '⭐ Marble of the game: ', { marble: [mvp.color, mvp.id] }, mvpWhy(mvp), '.']);
     const lead = Object.entries(this.session.teams).sort((a, b) => b[1].wins - a[1].wins || b[1].points - a[1].points)[0];
     if (lead && this.session.games >= 3) notes.push([1, { team: lead[0] }, ` lead the session with ${lead[1].wins} win${lead[1].wins === 1 ? '' : 's'} from ${this.session.games} games.`]);
 
     store.leagueLogGame({ players: n, winner: wColor, coach: w.coach, summary: {
       turns, ms, bonks: g.bonks, margin, leadChanges: g.leadChanges, deficit: w.maxDeficit, wire, mvp: mvp ? `${mvp.color}:${mvp.id}` : null,
-      teams: Object.values(g.teams).map(t => ({ color: t.color, coach: t.coach, points: pts[t.color] ?? 0, bonks: t.bonks, sixes: t.sixes })) } });
+      teams: Object.values(g.teams).map(t => ({ color: t.color, coach: t.coach, points: pts[t.color] ?? 0, bonks: t.bonks, sixes: t.sixes, distance: t.distance })) } });
 
     this.sendState({ mvp: mvp ? [mvp.color, mvp.id] : null, gamePoints: pts });
     // Spread the notes out after the win line.

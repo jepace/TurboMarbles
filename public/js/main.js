@@ -3754,16 +3754,16 @@ function renderLeague() {
       d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',
       d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');
   } else if (leagueTab === 'marbles') {
-    const sorts = { bonks: 'Bonks', mvps: 'Marble of the game', homes: 'Homes', firstHomes: 'First home', bonked: 'Bonked', hubTrips: 'Hub trips' };
+    const sorts = { bonks: 'Bonks', distance: 'Spaces travelled', mvps: 'Marble of the game', homes: 'Homes', firstHomes: 'First home', bonked: 'Bonked', hubTrips: 'Hub trips' };
     const sel = el('select', {}, ...Object.entries(sorts).map(([k, v]) => el('option', { value: k, textContent: 'Sort: ' + v })));
     sel.value = marbleSort; sel.addEventListener('change', () => { marbleSort = sel.value; renderLeague(); });
     const ms = [...d.marbles].sort((a, b) => (b[marbleSort] ?? 0) - (a[marbleSort] ?? 0));
-    box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'Hub trips'],
-      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), m.name ?? m.id), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0)])));
+    box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'Hub trips'],
+      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), m.name ?? m.id), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0)])));
   } else if (leagueTab === 'coaches') {
     box.replaceChildren(lgTable(['Coach', 'Games', 'Won', 'Win %', 'Points', 'Streak', 'Best'], d.coaches.map(c => [c.id, String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0)])));
   } else if (leagueTab === 'records') {
-    const names = { mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
+    const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
     box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', fmtTime(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
   } else {
     box.replaceChildren(d.recent.length ? lgTable(['When', 'Players', 'Winner', 'Coach', 'Bonks', 'Rolls', 'Margin', '⭐'], d.recent.map(g => {

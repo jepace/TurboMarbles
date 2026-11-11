@@ -41,13 +41,14 @@ for (let i = 0; i < 6; i++) { const w = playGame(); const c = room.game.players[
 const colors = room.game.players.map(p => p.config.color);
 const teams = colors.map(c => ({ c, ...store.leagueGet('team', c) }));
 assert(teams.every(t => t.games === 6), 'every team played 6 games');
-assert(teams.reduce((s, t) => s + t.wins, 0) === 6 && colors.every(c => (store.leagueGet('team', c).wins ?? 0) === (wins[c] ?? 0)), 'wins add up');
-assert(teams.reduce((s, t) => s + t.points, 0) === 0, 'points are zero-sum');
+assert(teams.reduce((s, t) => s + (t.wins ?? 0), 0) === 6 && colors.every(c => (store.leagueGet('team', c).wins ?? 0) === (wins[c] ?? 0)), 'wins add up');
+assert(teams.reduce((s, t) => s + (t.points ?? 0), 0) === 0, 'points are zero-sum');
 const marbles = store.leagueAll('marble');
 assert(marbles.length === 16 && marbles.every(m => m.games === 6), '16 marbles, each with 6 games');
 const bonks = marbles.reduce((s, m) => s + (m.bonks ?? 0), 0), bonked = marbles.reduce((s, m) => s + (m.bonked ?? 0), 0);
 assert(bonks === bonked && bonks > 0, `bonks dealt = bonks taken (${bonks})`);
 assert(marbles.reduce((s, m) => s + (m.mvps ?? 0), 0) === 6, 'one marble of the game per game');
+assert(marbles.every(m => m.distance > 0) && marbles.reduce((s, m) => s + m.distance, 0) === colors.reduce((s, c) => s + store.leagueGet('team', c).distance, 0), 'spaces travelled: every marble moved, marbles add up to teams');
 assert(store.leagueAll('rival').every(r => { const [a, b] = r.id.split('|'); return a !== b; }) && store.leagueAll('rival').reduce((s, r) => s + r.bonks, 0) === bonks, 'every bonk is between two different teams');
 const recs = Object.fromEntries(store.leagueRecords().map(r => [r.k, r]));
 assert(recs.longestGame && recs.mostBonksGame, 'records kept (longest game, most bonks)');

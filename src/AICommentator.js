@@ -32,7 +32,7 @@ How to commentate:
 - If nothing interesting happened, reply with exactly: PASS`;
 
 // The league roster (fixed): teams by colour, their marbles and personalities.
-const ROSTER = `\n\nThe TurboMarbles League: six permanent teams, one per colour, each with four named marbles. The robot in a colour's seat is that game's coach (coaches rotate between teams). Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
+const ROSTER = `\n\nThe TurboMarbles League (stats tracked include each marble's bonks and spaces travelled): six permanent teams, one per colour, each with four named marbles. The robot in a colour's seat is that game's coach (coaches rotate between teams). Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
   + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "the ${t.short}"): ` + t.marbles.map(m => `${m.name}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
 
 const MAX_EVENTS = 30;
