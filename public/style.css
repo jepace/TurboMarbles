@@ -779,3 +779,13 @@ body.kiosk #score-line .standings { font-size: 1.05rem; }
 .gear-pop label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .gp-head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-top: 2px; }
 .gear-pop .link-btn { align-self: flex-start; padding: 0; margin-top: 2px; }
+/* Live commentary, left of the board */
+#commentary { position: absolute; left: 16px; bottom: 24px; z-index: 3; flex-direction: column; justify-content: flex-end; gap: 10px; pointer-events: none; }
+.cm-line { background: #0b1626d9; border-left: 3px solid #f0c04066; border-radius: 6px; padding: 8px 12px; font-size: 1rem; line-height: 1.35; color: var(--text);
+  animation: cm-in 0.35s ease-out; transition: opacity 0.6s; }
+.cm-line.lvl3 { border-left-color: #f0c040; font-weight: 700; font-size: 1.12rem; }
+.cm-line.lvl1 { color: #c7d2e0; font-size: 0.92rem; }
+.cm-name { font-weight: 700; white-space: nowrap; }
+.cm-name .log-dot { display: inline-block; margin-right: 4px; vertical-align: 0.05em; }
+@keyframes cm-in { from { opacity: 0; transform: translateY(8px); } }
+body.kiosk .cm-line { font-size: 1.2rem; } body.kiosk .cm-line.lvl3 { font-size: 1.35rem; } body.kiosk .cm-line.lvl1 { font-size: 1.05rem; }

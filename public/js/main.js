@@ -8,7 +8,8 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset } from './music.js';
+import { createCommentator } from './commentary.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -36,7 +37,7 @@ let pendingFeedback = null; // { text, cls } — robot comparison for my roll, l
 // ---- Player options (remembered in this browser) ----
 // Move feedback: after committing a roll, show how the robot would have played it.
 // Post-game analysis: offer the "Analyze Game" button when a game ends.
-const settings = { feedback: true, analysis: true, numbers: true, sfx: true, music: false, musicVol: 0.7, sfxVol: 0.8 };
+const settings = { feedback: true, analysis: true, numbers: true, sfx: true, music: false, musicVol: 0.7, sfxVol: 0.8, commentary: true };
 try {
   const saved = JSON.parse(localStorage.getItem('tm.settings') ?? '{}');
   if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
@@ -45,6 +46,7 @@ try {
   if (typeof saved.myColor === 'string') settings.myColor = saved.myColor;
   if (typeof saved.music === 'boolean') settings.music = saved.music;
   if (typeof saved.sfx === 'boolean') settings.sfx = saved.sfx;
+  if (typeof saved.commentary === 'boolean') settings.commentary = saved.commentary;
   else if (typeof saved.muted === 'boolean') settings.sfx = !saved.muted;   // the old Mute option
   for (const k of ['musicVol', 'sfxVol']) if (typeof saved[k] === 'number') settings[k] = saved[k];
   if (typeof saved.boardTrack === 'string') settings.boardTrack = saved.boardTrack;
@@ -2212,6 +2214,7 @@ function updateStartButton() {
 }
 
 on('gameStarted', ({ gameState: gs }) => {
+  setTimeout(() => commentator.start(gs.players.map(p => ({ name: p.name, color: p.color })), settings.music || KIOSK ? songName() : null), 0);
   clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
   musicReset();
   applyWatch(gs);
@@ -2246,6 +2249,7 @@ on('gameStarted', ({ gameState: gs }) => {
 
 on('rolled', ({ playerIndex, dice, moves, combos }) => {
   musicRoll(dice, gameState?.players?.[playerIndex]?.color);
+  commentator.roll(playerIndex, dice);
   gameState.dice = dice;
   gameState.diceUsed = [false, false];
   gameState.phase = 'AWAITING_MOVE';
@@ -2307,6 +2311,11 @@ on('legalMoves', ({ moves, diceUsed, combos }) => {
 
 on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
+  if (to?.zone === 'home' && from?.zone !== 'home') {
+    const count = gameState.players[playerIndex].marbles.filter((m, i) => i !== marbleId && m.zone === 'home').length + 1;
+    afterAnimations(() => commentator.home(playerIndex, count));
+  } else if (to?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, true));
+  else if (from?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, false));
   // Grey out the die this move used — for everyone watching, not just the mover.
   if ((dieIndex === 0 || dieIndex === 1) && gameState.diceUsed) {
     gameState.diceUsed[dieIndex] = true;
@@ -2386,6 +2395,11 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   musicDuck(gameState?.players?.[ownerIndex]?.color);
+  {
+    const by = gameState?.turnIndex, arm = playerArm(ownerIndex);
+    const dist = from?.zone === 'track' ? squareNumber(arm, from.space) : null;
+    afterAnimations(() => commentator.hit(by, ownerIndex, dist));
+  }
   const marble = gameState.players[ownerIndex].marbles[marbleId];
 
   // Capture the pre-bump position so the marble lingers there (via override)
@@ -2641,6 +2655,7 @@ on('doubleDropped', ({ playerIndex }) => {
   log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
 });
 on('gameResult', ({ winnerIndex, result, score, wins, match, game, ratings }) => {
+  afterAnimations(() => commentator.win(winnerIndex, result));
   if (watching) afterAnimations(() => showWatchCard(winnerIndex, result, score));
   const myR = ratings?.[myPlayerIndex];
   if (myR) { myRating = { ...(myRating ?? {}), rating: myR.rating }; renderNavMe(); log(`Your rating: ${myR.rating} (${myR.change >= 0 ? '+' : ''}${myR.change})`); }
@@ -2693,6 +2708,7 @@ on('playerDisconnected', ({ playerIndex, timeoutMs }) => {
 });
 
 on('robotTookOver', ({ playerIndex }) => {
+  commentator.note(`${playerName(playerIndex)} has left; a robot takes over the ${gameState?.players?.[playerIndex]?.color ?? ''} marbles.`, 2);
   if (gameState?.players?.[playerIndex]) gameState.players[playerIndex].isRobot = true;
   log(`${playerName(playerIndex)} is now a robot 🤖`, gameState?.players?.[playerIndex]?.color);
   if (playerIndex !== myPlayerIndex) toast(`${playerName(playerIndex)} left — a robot plays for them now 🤖`);
@@ -3196,11 +3212,13 @@ function renderSidebar() {
 // Refresh the pip counts in the player list (after every move or bump).
 function updatePips() {
   if (!gameState) return;
-  musicUpdate(gameState.players.map(p => {
+  const standing = gameState.players.map(p => {
     const arm = PLAYER_CONFIG.findIndex(c => c.color === p.color);
     return { color: p.color, pips: arm >= 0 ? pipCount(arm, p.marbles) : 346,
       home: p.marbles.filter(m => m.zone === 'home').length, base: p.marbles.filter(m => m.zone === 'base').length };
-  }));
+  });
+  musicUpdate(standing);
+  afterAnimations(() => commentator.update(standing));
   for (const el of document.querySelectorAll('#player-list .pips')) {
     const p = gameState.players[Number(el.dataset.player)];
     const arm = PLAYER_CONFIG.findIndex(c => c.color === p?.color);
@@ -3337,7 +3355,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 // Text is scanned as it appears; each name of a player in the current game or
 // the open analysis gets its colour dot. Places that already draw one (player
 // list, lobby, a log line's leading dot) are left alone.
-const NAME_SKIP = '#player-list, #lobby-slots, .aph, .gc-name, .standings, #watch-card, .live-games, select, option, input, textarea, .pname, canvas';
+const NAME_SKIP = '#commentary, #player-list, #lobby-slots, .aph, .gc-name, .standings, #watch-card, .live-games, select, option, input, textarea, .pname, canvas';
 function nameColors() {
   const m = new Map();
   for (const p of [...(analysisReport?.players ?? []), ...(gameState?.players ?? [])])
@@ -3523,3 +3541,33 @@ $('btn-gear').addEventListener('click', e => { e.stopPropagation(); setGear($('g
 document.addEventListener('click', e => { if (!e.target.closest('#gear-pop, #btn-gear')) setGear(false); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') setGear(false); });
 $('btn-game-profile').addEventListener('click', () => setGear(false));
+
+
+// ---- Commentary: a feed in the space beside the board ----
+// Shown where the board leaves room on the left (the stream page always has it);
+// in a game it is a gear option. Newest line at the bottom, older ones fade.
+const COMMENT_MAX = 7;
+const commentator = createCommentator((parts, level) => {
+  const box = $('commentary');
+  if (!box) return;
+  const line = el('div', { class: 'cm-line lvl' + level },
+    ...parts.map(x => typeof x === 'string' ? x : (() => {
+      const p = gameState?.players?.[x.player];
+      return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(p?.color)] ?? '#888'}` }), p?.name ?? '?');
+    })()));
+  box.append(line);
+  while (box.children.length > COMMENT_MAX) box.firstChild.remove();
+  [...box.children].forEach((c, i, all) => { c.style.opacity = String(Math.max(0.25, 1 - (all.length - 1 - i) * 0.14)); });
+});
+function placeCommentary() {
+  const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
+  if (!box || !area || !cv) return;
+  const room = (area.clientWidth - cv.clientWidth) / 2 - 28;
+  const on = (KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : settings.commentary) && room >= 180;
+  box.style.display = on ? 'flex' : 'none';
+  if (on) box.style.width = Math.min(room, 460) + 'px';
+}
+new ResizeObserver(placeCommentary).observe($('board-area'));
+new ResizeObserver(placeCommentary).observe($('board-canvas'));
+$('opt-commentary').checked = settings.commentary;
+$('opt-commentary').addEventListener('change', e => { settings.commentary = e.target.checked; saveSettings(); placeCommentary(); });
