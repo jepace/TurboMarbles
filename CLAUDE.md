@@ -155,7 +155,8 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
 - Commentary: `public/js/commentary.js` turns game events into paced text lines (hits with revenge / near-home
   heartbreak, double hits, 6-6 and three-sixes runs, hub trips, marbles home with tidy/untidy home rows (home debt),
   full mobility gained/lost, final lap, lead changes, aggro/baggro watch with an occasional explanation, tight race,
-  runaway, the win), shown left of the board when there's room (gear option "Commentary"; on by default on the
+  runaway, the win, and "the roll someone else needed": the server's rollEnvy tries each roll for the other players
+  (win, bonk the leader near home, end a 2+ turn wait in hub/base) and sends `envy` with `rolled`), shown left of the board when there's room (gear option "Commentary"; on by default on the
   stream page, `commentary=0` turns it off). Lines about moves wait for the animation (afterAnimations).
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),

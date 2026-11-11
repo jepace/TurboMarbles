@@ -2248,7 +2248,8 @@ on('gameStarted', ({ gameState: gs }) => {
   renderCube();
 });
 
-on('rolled', ({ playerIndex, dice, moves, combos }) => {
+on('rolled', ({ playerIndex, dice, moves, combos, envy }) => {
+  if (envy) commentator.envy(envy, playerIndex, dice);
   musicRoll(dice, gameState?.players?.[playerIndex]?.color);
   commentator.roll(playerIndex, dice);
   gameState.dice = dice;

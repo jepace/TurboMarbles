@@ -15,7 +15,9 @@ import { think } from './RobotThinker.js';
 import { worthThinking } from './RobotRollout.js';
 import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
-import { moveFeedback, describeRoll } from './Analysis.js';
+import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
+import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
+const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
 import { availableParallelism } from 'os';
 
@@ -783,6 +785,49 @@ function liveDice(game) {
 
 // Performs a dice roll and transitions game to AWAITING_MOVE.
 // Called by both human handleRoll() and doRobotTurn() so roll logic stays in one place.
+// ---------- "That's the roll X needed!" ----------
+// For the commentary: would this roll have been a big deal for someone else?
+// Each other player is tried with the same dice on a copy of the position
+// (the real engine): it would have won them the game, let them bonk the
+// leader's marble near home, or ended a long wait in the hub (a 1) or in base
+// (a 1 or 6, all four stuck). Only the biggest one, and only clear cases.
+function updateWaits(game, pi, dice) {
+  const w = (game._waits ??= {})[pi] ??= { hub: 0, base: 0 };
+  const ms = game.players[pi].marbles;
+  w.hub = ms.some(m => m.zone === 'center') && !dice.includes(1) ? w.hub + 1 : 0;
+  w.base = ms.every(m => m.zone === 'base') && !dice.includes(1) && !dice.includes(6) ? w.base + 1 : 0;
+}
+export function _rollEnvy(game, roller, dice) { return rollEnvy(game, roller, dice); }
+function rollEnvy(game, roller, dice) {
+  try {
+    const n = game.players.length;
+    const pips = game.players.map(p => pipCount(armOfPlayer(p), p.marbles));
+    let best = null;
+    const rank = { win: 4, hit: 3, hub: 2, base: 1 };
+    const consider = e => { if (!best || rank[e.kind] > rank[best.kind]) best = e; };
+    for (let o = 0; o < n; o++) {
+      if (o === roller) continue;
+      const P = game.players[o], home = P.marbles.filter(m => m.zone === 'home').length;
+      const w = game._waits?.[o];
+      if (w?.hub >= 2 && dice.includes(1)) consider({ pi: o, kind: 'hub', turns: w.hub });
+      if (w?.base >= 2 && (dice.includes(1) || dice.includes(6))) consider({ pi: o, kind: 'base', turns: w.base });
+      // The engine checks: a win needs 2+ home; a hit on the leader near home.
+      const leader = pips.reduce((b, x, i) => (i !== o && x < pips[b] ? i : b), o === 0 ? 1 : 0);
+      const target = game.players[leader].marbles.some(m => m.zone === 'track' && countdown(armOfPlayer(game.players[leader]), m.space) < 12);
+      if (home < 2 && !target) continue;
+      const g = { players: structuredClone(game.players), turnIndex: o, phase: 'AWAITING_MOVE', dice: dice.slice(), diceUsed: [false, false], winner: null, cube: null };
+      for (const play of allPlays(g, o)) {
+        if (play.game.winner === o) { consider({ pi: o, kind: 'win' }); break; }
+        if (target && leader !== roller) {
+          const lost = game.players[leader].marbles.some((m, id) => m.zone === 'track' && countdown(armOfPlayer(game.players[leader]), m.space) < 12 && play.game.players[leader].marbles[id].zone === 'base');
+          if (lost) consider({ pi: o, kind: 'hit', victim: leader });
+        }
+      }
+    }
+    return best;
+  } catch (err) { return null; }
+}
+
 function performRoll(game) {
   const dice = liveDice(game);
   game.dice = dice;
@@ -849,7 +894,8 @@ export function handleRoll(ws, roomId) {
   const dice = performRoll(game);
   // Compute legal moves and include in the event so clients can highlight destinations.
   const moves = allLegalMoves(game, game.turnIndex);
-  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, moves, combos: twoDiceTargets(game, game.turnIndex) });
+  const envy = rollEnvy(game, game.turnIndex, dice); updateWaits(game, game.turnIndex, dice);
+  broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, moves, combos: twoDiceTargets(game, game.turnIndex), envy });
   // Auto-forfeit and advance turn if this roll leaves no legal moves (e.g. all marbles
   // in base with a 3+4 roll).  No-op when at least one die has available moves.
   advanceTurnIfDone(room);
@@ -1352,7 +1398,8 @@ function doRobotTurn(room) {
   // Roll using the shared helper (same logic path as a human roll)
   if (game.phase === 'IN_TURN' || game.phase === 'EXTRA_ROLL') {
     const dice = performRoll(game);
-    broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice });
+    const envy = rollEnvy(game, game.turnIndex, dice); updateWaits(game, game.turnIndex, dice);
+    broadcast(room, { event: 'rolled', playerIndex: game.turnIndex, dice, envy });
   }
   room.robotPlan = null;
 

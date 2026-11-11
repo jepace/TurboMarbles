@@ -185,6 +185,22 @@ export function createCommentator(onLine) {
       say(3, P(pi), pick([' wins it!', ' takes the game!', ' crosses the line first!', ' — winner!']), tail);
     },
 
+    // The roll someone else needed (from the server: { pi, kind, turns?, victim? }).
+    envy(e, roller, dice) {
+      if (!e || e.pi === roller) return;
+      const now = Date.now();
+      if (e.kind !== 'win' && now - (this._envyAt ?? 0) < 40000) return;
+      this._envyAt = now;
+      const d = dice ? dice.join('-') : '';
+      if (e.kind === 'win') return say(3, P(roller), pick([` rolls ${d}… exactly what `, ` gets ${d}, the very roll `, ` throws ${d}. That's the number `]), P(e.pi),
+        pick([' needed to win!', ' was praying for!', ' needed to finish it. Wrong player!']));
+      if (e.kind === 'hit') return say(2, P(roller), pick([` rolls ${d}. In `, ` gets ${d}. Give that to `]), P(e.pi), pick(['\'s hands that bonks ', ' and they bonk ']), P(e.victim), '!');
+      if (e.kind === 'hub') return say(2, pick(['A 1 for ', 'There\'s a 1, for ']), P(roller), pick(['… while ', '. Meanwhile ']), P(e.pi),
+        pick([` has been stuck in the hub for ${e.turns} turns.`, ` sits in the hub begging for one.`, ` would love that 1 to get out of the hub.`]));
+      if (e.kind === 'base') return say(2, P(roller), pick([` rolls ${d}. `, ` gets the ${dice?.includes(6) ? '6' : '1'}. `]), P(e.pi),
+        pick([` would kill for that: all four still in base.`, ` has waited ${e.turns} turns for one of those.`, ` is still stuck in base, needing exactly that.`]));
+    },
+
     note(text, level = 1) { say(level, text); },
   };
 }
