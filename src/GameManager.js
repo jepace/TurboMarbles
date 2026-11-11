@@ -54,7 +54,7 @@ export const config = {
   cubeLevels: [400, 1600, 6400],
   backgroundAnalysis: true,  // analyse stored, never-analysed games when the server is idle
   dropNextGameMs: 1500,
-  watchNextGameMs: 7000, // watch mode: pause after a game (the last move, then 5 s of the result card)  // match play: pause after a game (not the last) before the next one starts
+  watchNextGameMs: 12000, // watch mode: pause after a game (the last move, then 10 s of the result card)  // match play: pause after a game (not the last) before the next one starts
   // Late in the game the robot plays its options out in a background thread
   // before moving. The game never waits longer than this (ms); 0 turns it off.
   secureDice: true,      // live dice from crypto.randomInt (tests turn it off to script rolls)

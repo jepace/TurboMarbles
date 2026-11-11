@@ -3610,7 +3610,7 @@ function showWatchCard(winnerIndex, result, score) {
     score ? el('div', { class: 'wc-head' }, 'Session') : '', score ? standings(score) : '');
   card.style.display = 'flex';
   clearTimeout(watchCardTimer);
-  watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 5000);
+  watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 10000);
 }
 
 
