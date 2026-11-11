@@ -48,6 +48,9 @@ assert(marbles.length === 16 && marbles.every(m => m.games === 6), '16 marbles, 
 const bonks = marbles.reduce((s, m) => s + (m.bonks ?? 0), 0), bonked = marbles.reduce((s, m) => s + (m.bonked ?? 0), 0);
 assert(bonks === bonked && bonks > 0, `bonks dealt = bonks taken (${bonks})`);
 assert(marbles.reduce((s, m) => s + (m.mvps ?? 0), 0) === 6, 'one marble of the game per game');
+const sumM = k => marbles.reduce((s, m) => s + (m[k] ?? 0), 0);
+console.log(`  (totals: star spaces ${sumM('starSpaces')}, in hub ${sumM('hubTrips')}, hub exits ${sumM('hubExits')} / hub turns ${sumM('hubTurns')}, home line ${sumM('goArounds')}, hub hits ${sumM('hubHits')}, star hits ${sumM('circleHits')})`);
+assert(sumM('hubExits') <= sumM('hubTurns') && sumM('hubExits') <= sumM('hubTrips') && sumM('hubHits') + sumM('circleHits') <= bonks && sumM('starSpaces') > 0, 'hub, star circle and hit locations tracked and consistent');
 assert(marbles.every(m => m.distance > 0) && marbles.reduce((s, m) => s + m.distance, 0) === colors.reduce((s, c) => s + store.leagueGet('team', c).distance, 0), 'spaces travelled: every marble moved, marbles add up to teams');
 assert(store.leagueAll('rival').every(r => { const [a, b] = r.id.split('|'); return a !== b; }) && store.leagueAll('rival').reduce((s, r) => s + r.bonks, 0) === bonks, 'every bonk is between two different teams');
 const recs = Object.fromEntries(store.leagueRecords().map(r => [r.k, r]));
@@ -59,5 +62,18 @@ const ov = leagueOverview();
 assert(ov.teams.length === 6 && ov.marbles.length === 16 && ov.recent.length === 6, 'overview: all teams, marbles, recent games');
 console.log('\n  sample notes:\n' + [...new Set(notes)].slice(0, 12).map(n => '    ' + n).join('\n'));
 globalThis.setTimeout = realSetTimeout;
+// Crossing the home line: a hand-made move past the home entry.
+{
+  const before = store.leagueGet('marble', 'blue:0').goArounds ?? 0;
+  room.game = createGame(room.slots.map(x => ({ name: x.name })), undefined, 0);
+  lt.observe({ event: 'gameStarted' });
+  const entry = room.game.players[0].config.homeEntry, after = entry % 84 + 1;
+  lt.observe({ event: 'rolled', playerIndex: 0, dice: [3, 2] });
+  lt.observe({ event: 'marbleMoved', playerIndex: 0, marbleId: 0, dieIndex: 0, from: { zone: 'track', space: entry - 1 }, to: { zone: 'track', space: after + 1 },
+    path: [{ zone: 'track', space: entry }, { zone: 'track', space: after }, { zone: 'track', space: after + 1 }] });
+  room.game.players[0].marbles.forEach(m => Object.assign(m, { zone: 'home', slot: 4 }));
+  lt.observe({ event: 'gameResult', winnerIndex: 0, result: { winner: 0, points: 1, losers: [1, 2, 3].map(pi => ({ pi, points: 1, mult: 1 })) } });
+  assert((store.leagueGet('marble', 'blue:0').goArounds ?? 0) === before + 1, 'crossing the home line is counted');
+}
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed ? 1 : 0);

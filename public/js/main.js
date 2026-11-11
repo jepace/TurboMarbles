@@ -6,7 +6,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
-import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
+import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS } from './league.js';
@@ -2405,7 +2405,8 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
     const dist = from?.zone === 'track' ? squareNumber(arm, from.space) : null;
     const rn = commentator.rollId();
     // The bump is announced before the attacker's move: look the attacker up once that has arrived.
-    afterAnimations(() => commentator.hit(by, ownerIndex, dist, rn, lastMover[by], marbleId));
+    const where = from?.zone === 'center' ? 'hub' : from?.zone === 'track' && ALL_STARS.has(from.space) ? 'star' : null;
+    afterAnimations(() => commentator.hit(by, ownerIndex, dist, rn, lastMover[by], marbleId, where));
   }
   const marble = gameState.players[ownerIndex].marbles[marbleId];
 
@@ -3749,17 +3750,21 @@ function renderLeague() {
       el('h3', {}, `Season ${d.season}`),
       lgTable(['#', 'Team', 'Played', 'Won', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
       el('h3', {}, 'All time'),
-      lgTable(['Team', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggros taken', 'Sixes / roll'],
-        career.map(t => { const c = t.career; return [teamCell(t), String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? (c.sixes / c.rolls).toFixed(2) : '–']; })),
+      lgTable(['Team', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggros taken', 'Sixes / roll', 'Spaces', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+        career.map(t => { const c = t.career; return [teamCell(t), String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–',
+          (c.distance ?? 0).toLocaleString(), String(c.starSpaces ?? 0), c.hubWaits ? `${Math.round(100 * (c.hubExits ?? 0) / c.hubWaits)}%` : '–', String(c.goArounds ?? 0), String(c.hubHits ?? 0), String(c.circleHits ?? 0)]; })),
       d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',
       d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');
   } else if (leagueTab === 'marbles') {
-    const sorts = { bonks: 'Bonks', distance: 'Spaces travelled', mvps: 'Marble of the game', homes: 'Homes', firstHomes: 'First home', bonked: 'Bonked', hubTrips: 'Hub trips' };
+    const sorts = { bonks: 'Bonks', distance: 'Spaces travelled', starSpaces: 'Star circle spaces', hubTrips: 'Times in the hub', hubRate: 'Hub escape rate', goArounds: 'Home line crossings', hubHits: 'Hits in the hub', circleHits: 'Hits on the stars', mvps: 'Marble of the game', homes: 'Homes', firstHomes: 'First home', bonked: 'Bonked', hubTrips: 'Hub trips' };
     const sel = el('select', {}, ...Object.entries(sorts).map(([k, v]) => el('option', { value: k, textContent: 'Sort: ' + v })));
     sel.value = marbleSort; sel.addEventListener('change', () => { marbleSort = sel.value; renderLeague(); });
-    const ms = [...d.marbles].sort((a, b) => (b[marbleSort] ?? 0) - (a[marbleSort] ?? 0));
-    box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'Hub trips'],
-      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), m.name ?? m.id), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0)])));
+    const rate = m => (m.hubTurns ? (m.hubExits ?? 0) / m.hubTurns : -1);
+    const val = (m, k) => (k === 'hubRate' ? rate(m) : m[k] ?? 0);
+    const ms = [...d.marbles].sort((a, b) => val(b, marbleSort) - val(a, marbleSort));
+    box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Star circle', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'In hub', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), m.name ?? m.id), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
+        m.hubTurns ? `${Math.round(100 * (m.hubExits ?? 0) / m.hubTurns)}%` : '–', String(m.goArounds ?? 0), String(m.hubHits ?? 0), String(m.circleHits ?? 0)])));
   } else if (leagueTab === 'coaches') {
     box.replaceChildren(lgTable(['Coach', 'Games', 'Won', 'Win %', 'Points', 'Streak', 'Best'], d.coaches.map(c => [c.id, String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0)])));
   } else if (leagueTab === 'records') {

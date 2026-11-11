@@ -109,7 +109,7 @@ export function createCommentator(onLine) {
     // The current roll's number (taken when a hit happens; the line comes later, after the animation).
     rollId() { return rollNo; },
 
-    hit(byPi, victimPi, dist, roll = rollNo, byMarble = null, victimMarble = null) {
+    hit(byPi, victimPi, dist, roll = rollNo, byMarble = null, victimMarble = null, where = null) {
       // Count it, and maybe add one stat to the call.
       const byName = players[byPi]?.name ?? byPi, ofName = players[victimPi]?.name ?? victimPi;
       bonks.total++; bonks.by[byPi] = (bonks.by[byPi] ?? 0) + 1; bonks.of[victimPi] = (bonks.of[victimPi] ?? 0) + 1;
@@ -139,6 +139,9 @@ export function createCommentator(onLine) {
       if (revenge) return say(3, A, pick([' gets revenge on ', ' pays back ', ' settles the score with ']), V, pick(['!', '! Sweet revenge.', '. That one was personal.']));
       if (dist != null && dist <= 14) return say(3, pick(['Heartbreak! ', 'Ouch! ', 'Brutal! ', 'Oh no! ', 'BONK! ']), A, ' sends ', V,
         pick([` back to base from just ${dist} squares out.`, ` home… to base, ${dist} squares from safety.`, ` all the way back, with home in sight (${dist} away).`]));
+      // Where it happened: in the hub, or out on the star circle.
+      if (where === 'hub' && Math.random() < 0.6) return say(2, A, pick([' swoops into the hub and bonks ', ' crashes the hub party: bonk on ', ' takes the hub from ']), V, pick(['!', '. No hiding in the middle!', '. The hub is not a safe place.']));
+      if (where === 'star' && Math.random() < 0.5) return say(2, A, pick([' bonks ', ' catches ', ' knocks ']), V, pick([' right on the star!', ' off the star circle!', ' on the shortcut. Bonk!']));
       // A marble's personality, now and then.
       const ai = info(byPi, byMarble), vi = info(victimPi, victimMarble);
       if (league && ai && Math.random() < 0.3) {
