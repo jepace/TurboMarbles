@@ -3588,7 +3588,7 @@ function standings(score) {
     el('span', { class: 'st-name' }, inLeague() ? teamLabel(x.p.index, { coach: false }) : x.p.name),
     el('span', { class: 'st-pts' + (x.pts > 0 ? ' plus' : x.pts < 0 ? ' minus' : '') }, `${x.pts > 0 ? '+' : x.pts < 0 ? '−' : ''}${Math.abs(x.pts)}`))));
 }
-// "McCoy wins!" over the board for 5 s: this game's points, then the session.
+// "Embers win!" over the board for 10 s: this game's points, then the session.
 let watchCardTimer = null;
 function showWatchCard(winnerIndex, result, score) {
   const g = gameState;
