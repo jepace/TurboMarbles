@@ -149,7 +149,9 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
 - Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; `music=1`
   on the stream page). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
   win): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
-  motif + instrument per colour with the leader's in front. `window.__music()` shows its state.
+  motif + instrument per colour with the leader's in front. Ten song bases (`SONGS`: key, scales, chord loops, tempo,
+  beat, bass, chord style, swing, echo, motif twist); each game picks one at random. Console: `__music()`,
+  `__musicSong(i)`, `__musicSet({...})`.
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),
   server status and recent errors. Players report others from the game's player list (⚑) and from a friend's chat.

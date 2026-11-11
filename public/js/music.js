@@ -20,12 +20,47 @@ let enabled = false, muted = false;
 
 // ---- Musical material ----------------------------------------------------------
 
-const ROOT = 48;                        // C3 (MIDI) — the key moves from here
 const MAJOR = [0, 2, 4, 5, 7, 9, 11];
 const MINOR = [0, 2, 3, 5, 7, 8, 10];
-// Four-bar progressions (scale degrees of the chord roots).
-const PROG_MAJOR = [0, 5, 3, 4];        // I vi IV V
-const PROG_MINOR = [0, 5, 2, 6];        // i VI III VII
+const DORIAN = [0, 2, 3, 5, 7, 9, 10];
+const LYDIAN = [0, 2, 4, 6, 7, 9, 11];
+const MIXO = [0, 2, 4, 5, 7, 9, 10];
+const PHRYG = [0, 1, 3, 5, 7, 8, 10];
+const HARM = [0, 2, 3, 5, 7, 8, 11];
+
+// Song bases: each game picks one at random (never the same twice in a row).
+// A song sets the key, the scales (bright, and dark for aggro risk), the
+// four-bar chord loops (scale degrees of the chord roots), the tempo range,
+// the beat, the bass line, how the chords are played, swing, echo, and a twist
+// on every colour's motif (shift = scale degrees up; the colours keep their
+// own instruments and tunes, so the leader is still recognisable).
+//   groove: per intensity tier [calm, mid, busy] → { k: kick steps, s: snare steps, h: hat every n 16ths, x: extra }
+const G = {
+  pop:    [{ k: [0], s: [], h: 0 }, { k: [0, 8], s: [4, 12], h: 2 }, { k: [0, 8, 10], s: [4, 12], h: 1 }],
+  floor:  [{ k: [0], s: [], h: 0 }, { k: [0, 4, 8, 12], s: [], h: 2, x: 'clap' }, { k: [0, 4, 8, 12], s: [4, 12], h: 1, x: 'clap' }],
+  half:   [{ k: [0], s: [], h: 0 }, { k: [0], s: [8], h: 2 }, { k: [0, 3, 10], s: [8], h: 1 }],
+  funk:   [{ k: [0], s: [], h: 2 }, { k: [0, 3, 10], s: [4, 12], h: 1 }, { k: [0, 3, 6, 10, 11], s: [4, 12, 15], h: 1 }],
+  march:  [{ k: [0], s: [], h: 0 }, { k: [0, 8], s: [4, 12, 14], h: 4 }, { k: [0, 4, 8, 12], s: [2, 4, 10, 12, 14], h: 2 }],
+  swing:  [{ k: [0], s: [], h: 4 }, { k: [0, 8], s: [12], h: 2 }, { k: [0, 6, 8], s: [4, 12], h: 2 }],
+  reggae: [{ k: [8], s: [], h: 0 }, { k: [8], s: [8], h: 2 }, { k: [0, 8], s: [8], h: 2, x: 'rim' }],
+  tom:    [{ k: [0], s: [], h: 0, x: 'tom' }, { k: [0, 10], s: [8], h: 2, x: 'tom' }, { k: [0, 3, 10], s: [4, 12], h: 1, x: 'tom' }],
+  chip:   [{ k: [0], s: [], h: 0 }, { k: [0, 8], s: [4, 12], h: 2 }, { k: [0, 6, 8, 14], s: [4, 12], h: 1 }],
+  sparse: [{ k: [], s: [], h: 0 }, { k: [0], s: [], h: 4 }, { k: [0, 10], s: [8], h: 2 }],
+};
+const SONGS = [
+  { name: 'Sunny Circuit', root: 48, bright: MAJOR, dark: MINOR, prog: [0, 4, 5, 3], darkProg: [0, 5, 2, 6], bpm: [84, 128], groove: G.pop,   bass: 'roots',  pad: 'sustain', swing: 0,    delay: [0.27, 0.28], shift: 0 },
+  { name: 'Midnight Hub',  root: 45, bright: MINOR, dark: HARM,  prog: [0, 6, 5, 6], darkProg: [0, 5, 3, 4], bpm: [72, 116], groove: G.half,  bass: 'pulse',  pad: 'swell',   swing: 0,    delay: [0.42, 0.38], shift: 2 },
+  { name: 'Star Track',    root: 50, bright: MAJOR, dark: DORIAN, prog: [0, 3, 0, 4], darkProg: [0, 3, 6, 3], bpm: [92, 138], groove: G.floor, bass: 'octave', pad: 'stabs',   swing: 0,    delay: [0.22, 0.25], shift: 4 },
+  { name: 'Lazy Marbles',  root: 53, bright: MAJOR, dark: DORIAN, prog: [1, 4, 0, 5], darkProg: [0, 3, 1, 4], bpm: [70, 110], groove: G.swing, bass: 'walk',   pad: 'stabs',   swing: 0.55, delay: [0.33, 0.2],  shift: 0 },
+  { name: 'Bump Funk',     root: 52, bright: DORIAN, dark: MINOR, prog: [0, 3, 0, 3], darkProg: [0, 6, 5, 6], bpm: [90, 124], groove: G.funk,  bass: 'funk',   pad: 'stabs',   swing: 0.18, delay: [0.18, 0.2],  shift: 2 },
+  { name: 'Home Stretch',  root: 55, bright: MAJOR, dark: MINOR, prog: [0, 5, 1, 4], darkProg: [0, 3, 4, 0], bpm: [88, 132], groove: G.march, bass: 'roots',  pad: 'sustain', swing: 0,    delay: [0.3, 0.22],  shift: 4 },
+  { name: 'Glass Garden',  root: 51, bright: LYDIAN, dark: MINOR, prog: [0, 1, 0, 1], darkProg: [0, 5, 0, 6], bpm: [66, 104], groove: G.sparse, bass: 'pulse', pad: 'arp',     swing: 0,    delay: [0.5, 0.45],  shift: 2 },
+  { name: 'Arcade',        root: 46, bright: MIXO,  dark: MINOR, prog: [0, 6, 3, 0], darkProg: [0, 5, 6, 4], bpm: [100, 150], groove: G.chip, bass: 'octave', pad: 'arp',     swing: 0,    delay: [0.15, 0.2],  shift: 0, chip: true },
+  { name: 'Desert Lap',    root: 50, bright: PHRYG, dark: HARM,  prog: [0, 1, 0, 6], darkProg: [0, 1, 5, 4], bpm: [80, 120], groove: G.tom,   bass: 'pulse',  pad: 'swell',   swing: 0.1,  delay: [0.37, 0.33], shift: 4 },
+  { name: 'Reggae Roll',   root: 57, bright: MAJOR, dark: MINOR, prog: [0, 3, 0, 4], darkProg: [0, 6, 5, 6], bpm: [74, 108], groove: G.reggae, bass: 'reggae', pad: 'skank',  swing: 0.12, delay: [0.38, 0.4],  shift: 2 },
+];
+let song = SONGS[0];
+let delayNode = null, delayFb = null;
 
 // Each colour: an instrument and a two-bar motif. Motif notes are
 // [step (0–31, 16ths over two bars), scale degree (relative to the chord), length in steps].
@@ -67,7 +102,8 @@ function ensure() {
   bus.connect(comp); comp.connect(master); master.connect(ctx.destination);
   // A short feedback delay for space.
   const d = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
-  d.delayTime.value = 0.27; fb.gain.value = 0.28; wet.gain.value = 0.22;
+  d.delayTime.value = song.delay[0]; fb.gain.value = song.delay[1]; wet.gain.value = 0.22;
+  delayNode = d; delayFb = fb;
   bus.connect(d); d.connect(fb); fb.connect(d); d.connect(wet); wet.connect(comp);
 }
 
@@ -125,18 +161,18 @@ const snare = (t, vol) => { noise(t, 0.16, vol, 1500); note('bell', 62, t, 0.05,
 // ---- Harmony helpers -----------------------------------------------------------
 
 let keyShift = 0;            // semitones (final lap lifts it)
-const scale = () => (S.dark > 0.5 ? MINOR : MAJOR);
-const prog = () => (S.dark > 0.5 ? PROG_MINOR : PROG_MAJOR);
+const scale = () => (S.dark > 0.5 ? song.dark : song.bright);
+const prog = () => (S.dark > 0.5 ? song.darkProg : song.prog);
 // MIDI note for a scale degree above a chord root (degrees wrap into octaves).
 function degree(rootDeg, deg, oct = 0) {
   const sc = scale(), i = rootDeg + deg;
-  return ROOT + keyShift + 12 * (oct + Math.floor(i / 7)) + sc[((i % 7) + 7) % 7];
+  return song.root + keyShift + 12 * (oct + Math.floor(i / 7)) + sc[((i % 7) + 7) % 7];
 }
 
 // ---- Scheduler ---------------------------------------------------------------
 
 let step = 0, nextTime = 0;
-const bpm = () => 78 + 54 * S.intensity;
+const bpm = () => song.bpm[0] + (song.bpm[1] - song.bpm[0]) * S.intensity;
 const stepDur = () => 60 / bpm() / 4;
 
 function tick() {
@@ -157,17 +193,41 @@ function playStep(n, t) {
   // Key change for the final lap, on a bar line.
   if (s16 === 0) keyShift = S.finalLap ? 2 : 0;
 
-  // Pad: the chord, each bar.
-  if (s16 === 0) for (const d of [0, 2, 4]) note('pad', degree(chordDeg, d, 1), t, stepDur() * 16, 0.5);
+  // Swing: the off-beat 8ths come a little late.
+  if (s16 % 4 === 2) t += song.swing * stepDur() * 0.66;
+  const sd = stepDur();
+  // Chords, played the song's way.
+  const chord = [0, 2, 4].map(d => degree(chordDeg, d, 1));
+  if (song.pad === 'sustain' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.5);
+  if (song.pad === 'swell' && s16 === 0 && bar % 2 === 0) for (const m of chord) note('pad', m, t, sd * 32, 0.55);
+  if (song.pad === 'stabs' && [0, 6, 10].includes(s16) && I > 0.15) for (const m of chord) note(song.chip ? 'pluck' : 'epiano', m + 12, t, sd * 1.5, 0.28);
+  if (song.pad === 'stabs' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.25);
+  if (song.pad === 'skank' && s16 % 8 === 4) for (const m of chord) note('pluck', m + 12, t, sd, 0.35);
+  if (song.pad === 'skank' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.2);
+  if (song.pad === 'arp' && s16 % (I > 0.5 ? 1 : 2) === 0) note(song.chip ? 'pluck' : 'glass', chord[(s16 >> (I > 0.5 ? 0 : 1)) % 3] + 12 * (1 + ((s16 >> 2) % 2)), t, sd * 1.2, 0.3);
+  if (song.pad === 'arp' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.25);
   // Drone when it's dark.
-  if (s16 === 0 && bar % 2 === 0 && S.dark > 0.3) note('drone', degree(0, 0, -1), t, stepDur() * 32, 0.5 * S.dark);
-  // Bass: roots, busier as intensity rises.
-  const bassHits = I < 0.3 ? [0, 8] : I < 0.6 ? [0, 6, 8, 14] : [0, 3, 6, 8, 11, 14];
-  if (bassHits.includes(s16)) note('bass', degree(chordDeg, s16 === 14 && I > 0.6 ? 4 : 0, -1), t, stepDur() * 2, 0.8);
-  // Drums.
-  if (I > 0.12 && (s16 === 0 || (I > 0.45 && s16 === 8) || (I > 0.75 && s16 === 10))) kick(t, 0.5);
-  if (I > 0.35 && (s16 === 4 || s16 === 12)) snare(t, 0.12 + 0.12 * I);
-  if (I > 0.2 && s16 % (I > 0.65 ? 1 : 2) === 0) noise(t, 0.03, 0.02 + 0.04 * I * (s16 % 4 === 2 ? 1.6 : 1));
+  if (s16 === 0 && bar % 2 === 0 && S.dark > 0.3) note('drone', degree(0, 0, -1), t, sd * 32, 0.5 * S.dark);
+  // Bass line.
+  const tier = I < 0.3 ? 0 : I < 0.6 ? 1 : 2;
+  const root = degree(chordDeg, 0, -1);
+  const B = {
+    roots:  [[0, 8], [0, 6, 8, 14], [0, 3, 6, 8, 11, 14]][tier].map(st => [st, st === 14 && tier === 2 ? 4 : 0]),
+    pulse:  [[0], [0, 4, 8, 12], [0, 2, 4, 6, 8, 10, 12, 14]][tier].map(st => [st, 0]),
+    octave: [[0, 8], [0, 4, 8, 12], [0, 2, 4, 6, 8, 10, 12, 14]][tier].map(st => [st, (st / 2) % 2 ? 7 : 0]),
+    walk:   [[[0, 0], [8, 4]], [[0, 0], [4, 2], [8, 4], [12, 5]], [[0, 0], [4, 2], [8, 4], [12, 5], [14, 6]]][tier],
+    funk:   [[[0, 0], [10, 0]], [[0, 0], [3, 0], [7, 7], [10, 0]], [[0, 0], [3, 0], [6, 7], [7, 7], [10, 0], [13, 4], [14, 5]]][tier],
+    reggae: [[[0, 0]], [[0, 0], [6, 4], [10, 2]], [[0, 0], [3, 0], [6, 4], [10, 2], [14, 4]]][tier],
+  }[song.bass] ?? [];
+  for (const [st, deg] of B) if (st === s16) note('bass', deg === 7 ? root + 12 : degree(chordDeg, deg, -1), t, sd * (song.bass === 'walk' ? 3.5 : 2), 0.8);
+  // Drums: the song's beat for this intensity.
+  const gr = song.groove[tier];
+  if (gr.k.includes(s16)) kick(t, 0.5);
+  if (gr.s.includes(s16)) snare(t, 0.12 + 0.12 * I);
+  if (gr.h && s16 % gr.h === 0) noise(t, 0.03, 0.02 + 0.04 * I * (s16 % 4 === 2 ? 1.6 : 1));
+  if (gr.x === 'clap' && (s16 === 4 || s16 === 12)) noise(t, 0.09, 0.07, 1200);
+  if (gr.x === 'rim' && s16 % 8 === 4) note('marimba', 79, t, sd, 0.15);
+  if (gr.x === 'tom' && [6, 7, 14].includes(s16)) note('bass', degree(0, s16 === 14 ? 4 : 0, 0), t, sd, 0.35);
 
   // Motifs: the leader carries the tune; chasers answer, louder as they close in.
   const pos = n % 32;
@@ -180,7 +240,7 @@ function playStep(n, t) {
     const answering = rank > 0;
     if (answering && !(bar % 4 >= 2 && pos >= 16)) return;
     for (const [st, deg, len] of v.motif) {
-      if (st === pos) note(v.inst, degree(chordDeg, deg, v.oct), t, len * stepDur(), (answering ? 0.55 : 1) * w * 0.9);
+      if (st === pos) note(song.chip && v.inst !== 'glass' ? 'pluck' : v.inst, degree(chordDeg, deg + song.shift, v.oct), t, len * stepDur(), (answering ? 0.55 : 1) * w * 0.9);
     }
   });
 
@@ -291,12 +351,25 @@ export function musicWin(color) {
   queue.push({ kind: 'win', color });
   S.target = 0.15;  // calm again for the next game
 }
-export function musicReset() { S.intensity = S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {}; }
+export function musicReset() {
+  S.intensity = S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {};
+  pickSong();
+}
+// A new song for the new game (any but the last one). The next bar starts it.
+export function pickSong(i) {
+  const others = SONGS.filter(x => x !== song);
+  song = SONGS[i] ?? others[Math.floor(Math.random() * others.length)];
+  if (ctx && delayNode) {
+    delayNode.delayTime.setTargetAtTime(song.delay[0], ctx.currentTime, 0.2);
+    delayFb.gain.setTargetAtTime(song.delay[1], ctx.currentTime, 0.2);
+  }
+}
+export const songName = () => song.name;
 
 // Browsers start audio only after a click or key press; resume then.
 for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => { if (ctx?.state === 'suspended') ctx.resume(); });
 // For checking from the console: what the music is doing.
-window.__music = () => ({ state: ctx?.state, time: ctx?.currentTime, step, bpm: Math.round(bpm()), intensity: +S.intensity.toFixed(2), dark: S.dark, finalLap: S.finalLap, leader: S.leader,
+window.__music = () => ({ song: song.name, state: ctx?.state, time: ctx?.currentTime, step, bpm: Math.round(bpm()), intensity: +S.intensity.toFixed(2), dark: S.dark, finalLap: S.finalLap, leader: S.leader,
   weights: Object.fromEntries(Object.entries(S.weights).map(([k, v]) => [k, +v.toFixed(2)])) });
 // Record what the music plays for ms milliseconds (a sample to listen to): resolves to a data URL.
 window.__musicRecord = ms => new Promise(res => {
@@ -308,3 +381,6 @@ window.__musicRecord = ms => new Promise(res => {
   rec.onstop = () => { master.disconnect(dest); const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(new Blob(parts, { type: rec.mimeType })); };
   rec.start(); setTimeout(() => rec.stop(), ms);
 });
+// Console helpers for trying the songs: __musicSong(0–9), __musicSet({ target: 0.6 }).
+window.__musicSong = i => { pickSong(i); return song.name; };
+window.__musicSet = o => Object.assign(S, o);
