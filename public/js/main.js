@@ -947,6 +947,7 @@ $('board-canvas').addEventListener('mouseleave', () => { $('board-tip').style.di
 on('error', ({ code, message }) => {
   // A reconnect to a game that is gone (closed, or the server restarted):
   // stop trying, and say so quietly instead of a popup.
+  if (KIOSK && (code === 'GAME_GONE' || code === 'RECONNECT_FAILED' || code === 'CREATE_FAILED')) { setReconnectInfo(null); setTimeout(startKiosk, 3000); return; }
   if (code === 'GAME_GONE' && !gameState) { setReconnectInfo(null); watching = false; alert(message); loadLiveGames(); return; }
   if (code === 'GAME_GONE' || code === 'RECONNECT_FAILED') {
     setReconnectInfo(null);
@@ -3261,7 +3262,11 @@ function log(msg, color, cls) {
     entry.appendChild(dot);
     entry.dataset.dot = dc(color);
   }
-  entry.appendChild(document.createTextNode(msg));
+  // One text element, so names given a colour dot stay inline (the entry is a flex row).
+  const text = document.createElement('span');
+  text.className = 'log-text';
+  text.textContent = msg;
+  entry.appendChild(text);
   el.appendChild(entry);
   // Prevent unbounded growth on long games
   while (el.children.length > LOG_MAX) el.removeChild(el.firstChild);
@@ -3383,6 +3388,7 @@ on('liveGames', ({ games }) => {
   }));
 });
 on('watchEnded', () => {
+  if (KIOSK) { setReconnectInfo(null); setTimeout(startKiosk, 3000); return; }
   if (!watching) return;
   watching = false; watchRoomId = null; setReconnectInfo(null);
   toastAnywhere('The game you were watching has ended.');
@@ -3392,3 +3398,22 @@ on('watchEnded', () => {
 });
 setInterval(loadLiveGames, 5000);
 document.addEventListener('visibilitychange', loadLiveGames);
+
+
+// ---- Kiosk (for streaming, e.g. an OBS Browser Source) ----
+// ?watch=robots[&players=2-6][&sound=1]: starts a robots-only watch room at
+// once, no sign-in, no menus or buttons; starts a new one if the room goes
+// (server restart). Sound is off unless sound=1.
+var KIOSK = new URLSearchParams(location.search).get('watch') === 'robots';
+function startKiosk() {
+  const q = new URLSearchParams(location.search);
+  const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
+  myName = 'Viewer' + Math.floor(1000 + Math.random() * 9000);
+  connect();
+  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true });
+}
+if (KIOSK) {
+  document.body.classList.add('kiosk');
+  setMuted(new URLSearchParams(location.search).get('sound') !== '1');
+  startKiosk();
+}

@@ -732,3 +732,11 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 .lg-players { display: flex; flex-wrap: wrap; gap: 4px 12px; }
 .lg-player { display: inline-flex; align-items: center; gap: 5px; }
 .lg-info { font-size: 0.8rem; }
+
+/* ---- Kiosk (?watch=robots): board, dice, players, log and score only ---- */
+body.kiosk #settings, body.kiosk #game-chat-input, body.kiosk #action-slot, body.kiosk #move-hint,
+body.kiosk #win-overlay, body.kiosk #nav, body.kiosk .report-btn, body.kiosk #btn-roll { display: none !important; }
+body.kiosk { cursor: none; }
+body.kiosk #score-line { font-size: 1.05rem; font-weight: 700; color: #f0c040; padding: 0.3rem 0; }
+body.kiosk #sidebar::before { content: 'TurboMarbles'; display: block; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.5px; color: #f0c040; margin-bottom: 0.4rem; }
+body.kiosk #game-log { flex: 1 1 auto; }
