@@ -153,8 +153,9 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   beat, bass, chord style, swing, echo, motif twist); each game picks one at random. Console: `__music()`,
   `__musicSong(i)`, `__musicSet({...})`.
 - Commentary: `public/js/commentary.js` turns game events into paced text lines (hits with revenge / near-home
-  heartbreak, 6-6 and three-sixes runs, hub trips, marbles home, final lap, lead changes, aggro/baggro watch, tight
-  race, runaway, the win), shown left of the board when there's room (gear option "Commentary"; on by default on the
+  heartbreak, double hits, 6-6 and three-sixes runs, hub trips, marbles home with tidy/untidy home rows (home debt),
+  full mobility gained/lost, final lap, lead changes, aggro/baggro watch with an occasional explanation, tight race,
+  runaway, the win), shown left of the board when there's room (gear option "Commentary"; on by default on the
   stream page, `commentary=0` turns it off). Lines about moves wait for the animation (afterAnimations).
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),

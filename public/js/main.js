@@ -2313,8 +2313,9 @@ on('legalMoves', ({ moves, diceUsed, combos }) => {
 on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
   const marble = gameState.players[playerIndex].marbles[marbleId];
   if (to?.zone === 'home' && from?.zone !== 'home') {
-    const count = gameState.players[playerIndex].marbles.filter((m, i) => i !== marbleId && m.zone === 'home').length + 1;
-    afterAnimations(() => commentator.home(playerIndex, count));
+    const others = gameState.players[playerIndex].marbles.filter((m, i) => i !== marbleId && m.zone === 'home').map(m => m.slot);
+    const slots = [...others, to.slot];
+    afterAnimations(() => commentator.home(playerIndex, slots.length, slots));
   } else if (to?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, true));
   else if (from?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, false));
   // Grey out the die this move used — for everyone watching, not just the mover.
@@ -2399,7 +2400,8 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   {
     const by = gameState?.turnIndex, arm = playerArm(ownerIndex);
     const dist = from?.zone === 'track' ? squareNumber(arm, from.space) : null;
-    afterAnimations(() => commentator.hit(by, ownerIndex, dist));
+    const rn = commentator.rollId();
+    afterAnimations(() => commentator.hit(by, ownerIndex, dist, rn));
   }
   const marble = gameState.players[ownerIndex].marbles[marbleId];
 
