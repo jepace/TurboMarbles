@@ -15,6 +15,11 @@ export function createCommentator(onLine) {
   let standing = [];           // [{ pips, home, base }] by seat
   let leader = null, leaderSince = 0, lastLeadCall = 0;
   let pending = null, lastSaid = 0, timer = null;
+  const greeted = new Set(); let lastGreet = 0;   // stream chat welcomes
+  // Bonk counts: this game (by seat) and the whole session (by name, across games).
+  let bonks = { total: 0, by: {}, of: {} };
+  const session = { total: 0, by: {}, of: {} };
+  const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
   const said = new Set();      // one-off calls already made this game ("final:2", "baggro:1", …)
   const hitBy = {};            // victim seat → last seat that hit them (for revenge)
   let sixRun = { pi: null, n: 0 };
@@ -50,6 +55,7 @@ export function createCommentator(onLine) {
     pending = { level, parts, at: Date.now() };
     flush();
   }
+  const sayOut = (...a) => say(...a);
   function flush() {
     const now = Date.now();
     if (!pending) return;
@@ -64,6 +70,7 @@ export function createCommentator(onLine) {
     // A new game: who's playing (and, for fun, the soundtrack).
     start(list, song) {
       players = list; standing = []; leader = null; said.clear(); sixRun = { pi: null, n: 0 };
+      bonks = { total: 0, by: {}, of: {} };
       for (const k of Object.keys(hitBy)) delete hitBy[k];
       for (const k of Object.keys(mobile)) delete mobile[k];
       mobileOnce.clear(); lastHit = null;
@@ -85,10 +92,24 @@ export function createCommentator(onLine) {
     },
 
     // byPi sent victimPi's marble back to base from `dist` squares short of home.
+    bonkStats() { return { game: bonks, session }; },
+
     // The current roll's number (taken when a hit happens; the line comes later, after the animation).
     rollId() { return rollNo; },
 
     hit(byPi, victimPi, dist, roll = rollNo) {
+      // Count it, and maybe add one stat to the call.
+      const byName = players[byPi]?.name ?? byPi, ofName = players[victimPi]?.name ?? victimPi;
+      bonks.total++; bonks.by[byPi] = (bonks.by[byPi] ?? 0) + 1; bonks.of[victimPi] = (bonks.of[victimPi] ?? 0) + 1;
+      session.total++; session.by[byName] = (session.by[byName] ?? 0) + 1; session.of[ofName] = (session.of[ofName] ?? 0) + 1;
+      const extra = [];
+      if (session.total % 50 === 0) extra.push(` That's the ${ord(session.total)} bonk of the session!`);
+      else if (bonks.by[byPi] === 3) extra.push(pick([' A hat-trick of bonks!', ' That\'s three bonks this game.', ' Bonk number three for them!']));
+      else if (bonks.by[byPi] >= 5 && bonks.by[byPi] % 2 === 1) extra.push(` That's ${bonks.by[byPi]} bonks this game. A menace!`);
+      else if ([3, 5, 7, 10].includes(bonks.of[victimPi])) extra.push(' ', P(victimPi), pick([` has been bonked ${bonks.of[victimPi]} times now.`, ` keeps getting hit: that's ${bonks.of[victimPi]} times.`]));
+      else if ([10, 20, 25, 30, 40, 50].includes(bonks.total)) extra.push(` Bonk number ${bonks.total} this game!`);
+      else if (session.by[byName] % 25 === 0) extra.push(` ${byName}'s ${ord(session.by[byName])} bonk of the session.`);
+      const say = (level, ...parts) => sayOut(level, ...parts, ...extra);
       const revenge = hitBy[byPi] === victimPi;
       hitBy[victimPi] = byPi;
       // Two hits on the same roll: a double hit (one call for both).
@@ -182,7 +203,11 @@ export function createCommentator(onLine) {
         : big.length ? ' ' + big.map(l => [players[l.pi]?.name, l.mult === 3 ? 'a baggro' : 'an aggro']).map(([n, w]) => `${n} takes ${w}.`).join(' ')
           + explain(big.some(l => l.mult === 3) ? 'baggro' : 'aggro')
         : '';
-      say(3, P(pi), pick([' wins it!', ' takes the game!', ' crosses the line first!', ' — winner!']), tail);
+      // Bonk stats for the game.
+      const top = Object.entries(bonks.by).sort((a, b) => b[1] - a[1])[0];
+      const bonkNote = bonks.total >= 8 ? ` A bruising one: ${bonks.total} bonks${top ? `, ${players[top[0]]?.name} with ${top[1]}` : ''}.`
+        : bonks.total === 0 ? ' Not a single bonk all game!' : '';
+      say(3, P(pi), pick([' wins it!', ' takes the game!', ' crosses the line first!', ' — winner!']), tail, bonkNote);
     },
 
     // The roll someone else needed (from the server: { pi, kind, turns?, victim? }).
@@ -217,5 +242,15 @@ export function createCommentator(onLine) {
     },
 
     note(text, level = 1) { say(level, text); },
+
+    // A line from elsewhere (the AI commentator): shown at once, unpaced.
+    direct(parts, kind) { lastSaid = Date.now(); onLine(parts, kind === 'ai' ? 'ai' : 2); },
+
+    // A viewer spoke in the stream chat: welcome them (once each, not too often).
+    chatter(author) {
+      if (!author || greeted.has(author) || Date.now() - lastGreet < 60000) return;
+      greeted.add(author); lastGreet = Date.now();
+      say(1, pick([`Welcome to the chat, ${author}!`, `Hello ${author}, thanks for watching!`, `${author} joins us in the chat. Pick a favourite marble!`]));
+    },
   };
 }

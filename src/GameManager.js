@@ -16,6 +16,7 @@ import { worthThinking } from './RobotRollout.js';
 import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
+import { AICommentator } from './AICommentator.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
@@ -171,6 +172,8 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     }
     sessions.set(hostWs._id, { roomId, playerIndex: null, watcher: true });
     room.watchers.add(hostWs);
+    // The AI commentator (it only calls out while it's switched on and someone watches).
+    room._ai = new AICommentator(room, { send: msg => broadcast(room, msg) });
   }
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
@@ -1178,6 +1181,7 @@ function cleanupIfAbandoned(room) {
 // Remove a room and everything that could still act on it: every pending
 // timer, and any sessions pointing at it.
 function deleteRoom(room) {
+  room._ai?.stop();
   for (const w of room.watchers ?? []) sendTo(w, { event: 'watchEnded' });
   room.watchers?.clear();
   clearTimeout(room._unwatchedTimer);
@@ -1483,6 +1487,19 @@ function stopWatching(room, ws, { grace = true } = {}) {
   room._unwatchedTimer.unref?.();
 }
 
+// The stream's robot rooms that someone is watching (the YouTube chat is read only then).
+export function streamRoomsWatched() {
+  return [...rooms.values()].some(r => r.watch && r.watchers?.size);
+}
+// New YouTube chat messages: to every watched robot room (AI commentator + the page).
+export function streamChat(messages) {
+  for (const room of rooms.values()) {
+    if (!room.watch || !room.watchers?.size) continue;
+    for (const m of messages) room._ai?.addChat(m.author, m.text);
+    broadcast(room, { event: 'streamChat', messages: messages.map(m => ({ author: String(m.author).slice(0, 40), text: String(m.text).slice(0, 200) })) });
+  }
+}
+
 // Games in progress (or just finished), for the Watch list.
 export function liveGames() {
   return [...rooms.values()].filter(r => r.game && (r.state === 'playing' || r.state === 'finished')).map(r => ({
@@ -1512,6 +1529,7 @@ function isHost(ws, room) {
 }
 
 function broadcast(room, msg, excludeWs = null) {
+  room._ai?.observe(msg);
   const data = JSON.stringify(msg);
   for (const w of room.watchers ?? []) {
     if (w !== excludeWs && w.readyState === 1) { try { w.send(data); } catch { /* closed */ } }

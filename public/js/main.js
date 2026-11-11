@@ -137,7 +137,7 @@ let myRating = null;
 let isAdminUser = false, adminTab = 'reports';
 function setAdminUser(on) { isAdminUser = on; for (const b of document.querySelectorAll('#side-nav .admin-only')) b.style.display = on ? '' : 'none'; }
 const fmtTime = t => (t ? new Date(t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : '—');
-function adminLoad() { send({ action: adminTab === 'reports' ? 'adminReports' : adminTab === 'players' ? 'adminSearch' : 'adminStatus', q: $('admin-q')?.value ?? '' }); }
+function adminLoad() { send({ action: adminTab === 'reports' ? 'adminReports' : adminTab === 'players' ? 'adminSearch' : adminTab === 'stream' ? 'adminSettings' : 'adminStatus', q: $('admin-q')?.value ?? '' }); }
 on('adminLocked', () => { $('admin-lock').style.display = 'flex'; $('admin-body').style.display = 'none'; setTimeout(() => $('admin-pass').focus(), 0); });
 on('adminUnlocked', () => { $('admin-lock').style.display = 'none'; $('admin-body').style.display = ''; $('admin-pass').value = ''; adminLoad(); });
 $('admin-lock').addEventListener('submit', e => { e.preventDefault(); send({ action: 'adminUnlock', password: $('admin-pass').value }); });
@@ -3586,3 +3586,93 @@ fetch('/site.json').then(r => r.json()).then(({ streamUrl }) => {
   $('nav-live').href = streamUrl; $('nav-live').style.display = '';
   $('play-live-link').href = streamUrl; $('play-live').style.display = '';
 }).catch(() => {});
+
+
+// ---- Admin → Stream: the stream link, the AI commentator, the YouTube chat ----
+on('adminSettings', ({ settings: st, providers, knownPrices, status, saved, bad, persisted }) => {
+  if (adminTab !== 'stream') return;
+  if (saved === true) toastAnywhere('✓ Saved');
+  if (bad?.length) toastAnywhere('Not saved (check these): ' + bad.join(', '));
+  const field = (id, label, value, opts = {}) => el('label', { class: 'as-field' + (opts.wide ? ' wide' : '') },
+    el('span', { class: 'as-label' }, label),
+    (() => { const i = el('input', { id, type: opts.type ?? 'text', value: value ?? '', placeholder: opts.placeholder ?? '', autocomplete: 'off', spellcheck: false }); if (opts.list) i.setAttribute('list', opts.list); return i; })(),
+    opts.help ? el('span', { class: 'muted as-help' }, opts.help) : '');
+  const provSel = el('select', { id: 'as-aiProvider' }, ...Object.entries(providers).map(([k, p]) => el('option', { value: k, textContent: p.label })));
+  provSel.value = st.aiProvider;
+  const models = el('datalist', { id: 'as-models' }, ...Object.keys(knownPrices).map(m => el('option', { value: m })));
+  const on_ = el('input', { type: 'checkbox', id: 'as-aiEnabled' }); on_.checked = st.aiEnabled === '1';
+  const ai = status?.ai, yt = status?.youtube;
+  const money = x => '$' + (x < 1 ? x.toFixed(3) : x.toFixed(2));
+  // Cost estimate: measured per-call averages when there are any, else ~1,500 tokens in, ~400 out.
+  const estimate = () => {
+    const every = Math.max(6, +$('as-aiEverySec').value || 15), kp = knownPrices[$('as-aiModel').value] ?? [0, 0];
+    const pin = $('as-aiPriceIn').value !== '' ? +$('as-aiPriceIn').value : kp[0], pout = $('as-aiPriceOut').value !== '' ? +$('as-aiPriceOut').value : kp[1];
+    const inT = ai?.calls ? ai.inTok / ai.calls : 1500, outT = ai?.calls ? ai.outTok / ai.calls : 400;
+    const perHour = (3600 / every) * (inT * pin + outT * pout) / 1e6;
+    $('as-estimate').textContent = pin || pout ? `≈ ${money(perHour)} an hour at most (${Math.round(3600 / every)} lines an hour; less when nothing happens), ≈ ${money(perHour * 24)} a day if it runs all day.` : 'Enter the model\'s prices to see a cost estimate.';
+  };
+  const box = el('div', { class: 'admin-stream' },
+    persisted ? '' : el('p', { class: 'sev-blunder' }, 'The database is off on this server: settings last only until a restart.'),
+    el('h3', {}, 'Stream link'),
+    field('as-streamUrl', 'Live stream address', st.streamUrl, { wide: true, placeholder: 'https://www.youtube.com/@yourchannel/live', help: 'Shown as "Live on YouTube" in the side menu and on the Play page. Your channel\'s /live address always points at the current stream.' }),
+    el('h3', {}, 'AI commentator'),
+    el('label', { class: 'as-check' }, on_, ' On (robot stream rooms, only while someone watches)'),
+    el('label', { class: 'as-field' }, el('span', { class: 'as-label' }, 'Provider'), provSel),
+    field('as-aiModel', 'Model', st.aiModel, { list: 'as-models', placeholder: 'model id', help: 'Anthropic: claude-opus-5-5 (default), claude-sonnet-5-5, claude-haiku-5-5. Google or OpenAI-compatible: that provider\'s model id.' }), models,
+    field('as-aiKey', 'API key', st.aiKey, { type: 'password', placeholder: st.aiKey ? 'saved (type to replace, clear to remove)' : 'paste your API key', help: 'Kept on the server only.' }),
+    field('as-aiBaseUrl', 'Base URL (OpenAI-compatible)', st.aiBaseUrl, { placeholder: 'https://api.openai.com/v1', help: 'Only for the OpenAI-compatible provider: any server that speaks the OpenAI chat API.' }),
+    el('div', { class: 'as-row' },
+      field('as-aiPriceIn', '$ per 1M input tokens', st.aiPriceIn, { placeholder: String(knownPrices[st.aiModel]?.[0] ?? '') }),
+      field('as-aiPriceOut', '$ per 1M output tokens', st.aiPriceOut, { placeholder: String(knownPrices[st.aiModel]?.[1] ?? '') })),
+    el('div', { class: 'as-row' },
+      field('as-aiEverySec', 'At most one line every (s)', st.aiEverySec),
+      field('as-aiDailyCalls', 'Daily cap (calls)', st.aiDailyCalls)),
+    el('div', { id: 'as-estimate', class: 'muted' }),
+    ai ? el('div', { class: 'as-status' }, `Today: ${ai.calls} / ${ai.limit} calls · ${ai.inTok.toLocaleString()} in / ${ai.outTok.toLocaleString()} out tokens · ${money(ai.cost)}`
+      + (ai.lastAt ? ` · last ${fmtTime(ai.lastAt)}` : '') + (ai.ready ? '' : ' · not active (off, or missing model / key)'),
+      ai.lastError ? el('div', { class: 'sev-blunder' }, `Last error ${fmtTime(ai.lastError.at)}: ${ai.lastError.message}`) : '') : '',
+    el('h3', {}, 'YouTube chat'),
+    field('as-youtubeKey', 'YouTube Data API key', st.youtubeKey, { type: 'password', placeholder: st.youtubeKey ? 'saved (type to replace, clear to remove)' : 'paste a Google Cloud API key with the YouTube Data API v3 enabled', help: 'Lets the commentator read the stream chat. Kept on the server only.' }),
+    field('as-youtubeSource', 'Channel or stream', st.youtubeSource, { wide: true, placeholder: st.streamUrl || '@yourchannel, or the stream\'s URL', help: 'Blank = the stream link above.' }),
+    field('as-chatEverySec', 'Read the chat every (s)', st.chatEverySec, { help: 'YouTube allows about 10,000 quota units a day; one read costs 5, so 60 s works around the clock.' }),
+    yt ? el('div', { class: 'as-status' }, `Status: ${yt.state}` + (yt.video ? ` · video ${yt.video}` : '') + (yt.lastPoll ? ` · last read ${fmtTime(yt.lastPoll)}` : '') + ` · ${yt.messages} messages · ${yt.quota?.units ?? 0} quota units today`,
+      yt.lastError ? el('div', { class: 'sev-blunder' }, `Last error ${fmtTime(yt.lastError.at)}: ${yt.lastError.message}`) : '') : '',
+    el('div', { class: 'btn-row' }, (() => {
+      const b = el('button', { class: 'btn-go' }, 'Save');
+      b.addEventListener('click', () => {
+        const v = id => $('as-' + id).value;
+        send({ action: 'adminSaveSettings', settings: {
+          streamUrl: v('streamUrl'), aiEnabled: $('as-aiEnabled').checked ? '1' : '0', aiProvider: v('aiProvider'), aiModel: v('aiModel'),
+          aiKey: v('aiKey'), aiBaseUrl: v('aiBaseUrl'), aiPriceIn: v('aiPriceIn'), aiPriceOut: v('aiPriceOut'),
+          aiEverySec: v('aiEverySec'), aiDailyCalls: v('aiDailyCalls'), youtubeKey: v('youtubeKey'), youtubeSource: v('youtubeSource'), chatEverySec: v('chatEverySec'),
+        } });
+      });
+      return b;
+    })(), (() => { const b = el('button', { class: 'secondary' }, 'Refresh status'); b.addEventListener('click', adminLoad); return b; })()));
+  $('admin-content').replaceChildren(box);
+  for (const id of ['as-aiEverySec', 'as-aiModel', 'as-aiPriceIn', 'as-aiPriceOut']) $(id).addEventListener('input', estimate);
+  const showBase = () => { $('as-aiBaseUrl').closest('label').style.display = provSel.value === 'openai' ? '' : 'none'; };
+  provSel.addEventListener('change', showBase); showBase(); estimate();
+});
+
+// ---- AI commentary lines and the stream's YouTube chat (watch rooms) ----
+let aiLineAt = 0;
+on('aiComment', ({ text }) => {
+  aiLineAt = Date.now();
+  // Names in the line get their colour, like the template commentary.
+  const names = (gameState?.players ?? []).map((p, i) => [p.name, i]).filter(([n]) => n).sort((a, b) => b[0].length - a[0].length);
+  const parts = [];
+  let rest = String(text);
+  if (names.length) {
+    const re = new RegExp(`(${names.map(([n]) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+    let last = 0;
+    for (const m of rest.matchAll(re)) { parts.push(rest.slice(last, m.index)); parts.push({ player: names.find(([n]) => n === m[1])[1] }); last = m.index + m[1].length; }
+    parts.push(rest.slice(last));
+  } else parts.push(rest);
+  commentator.direct(['🎙 ', ...parts.filter(x => x !== '')], 'ai');
+});
+on('streamChat', ({ messages }) => {
+  // Without the AI commentator, greet new chatters now and then.
+  if (Date.now() - aiLineAt < 120000) return;
+  for (const m of messages) commentator.chatter(m.author);
+});

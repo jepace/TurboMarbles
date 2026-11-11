@@ -1,3 +1,6 @@
+import { setting } from './SiteSettings.js';
+import { YouTubeChat } from './YouTubeChat.js';
+import { usage as aiUsage, aiReady } from './AICommentator.js';
 import express from 'express';
 import helmet from 'helmet';
 import { createServer } from 'http';
@@ -5,7 +8,7 @@ import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, isWatcher, startWatchRoom, liveGames, handleWatchGame, addRobot, removeRobot, startGame,
+  createRoom, joinRoom, streamRoomsWatched, streamChat, isWatcher, startWatchRoom, liveGames, handleWatchGame, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf, seatAccountOf, serverSnapshot,
   handleUndo, handleCommit, handleAnalyzeGame,
@@ -82,8 +85,7 @@ app.use(helmet());
 // Page code must never be stale after a deploy: browsers revalidate every time
 // (a quick 304 when unchanged).
 // Site settings the page needs: the live stream link (STREAM_URL), if any.
-const STREAM_URL = /^https:\/\/[^\s"'<>]+$/.test(process.env.STREAM_URL ?? '') ? process.env.STREAM_URL : null;
-app.get('/site.json', (req, res) => res.json({ streamUrl: STREAM_URL }));
+app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null }));
 
 app.use(express.static(join(__dirname, '..', 'public'), {
   setHeaders: (res, path) => { if (/\.(html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache'); },
@@ -232,6 +234,11 @@ const KNOWN_ACTIONS = new Set([
 
 const WATCHER_BLOCKED = new Set(['roll', 'move', 'forfeitDie', 'undo', 'commit', 'double', 'take', 'drop', 'resign', 'resignAnswer', 'rematch', 'swapSeats', 'addRobot', 'removeRobot', 'chat', 'startGame']);
 
+// The YouTube live chat (when a key is set on the Admin page), read only while
+// someone watches a robot stream room.
+const ytChat = new YouTubeChat({ onMessages: streamChat, isWanted: streamRoomsWatched });
+ytChat.start();
+
 function dispatch(ws, msg) {
   if (!KNOWN_ACTIONS.has(msg.action)) {
     send(ws, { event: 'error', code: 'UNKNOWN_ACTION' });
@@ -240,6 +247,7 @@ function dispatch(ws, msg) {
 
   if (ACCOUNT_ACTIONS.has(msg.action)) {
     return handleAccountAction(ws, msg, { send, cleanName, roomCodeOf, seatAccount: seatAccountOf,
+      streamStatus: () => ({ ai: { ready: aiReady(), ...aiUsage.view() }, youtube: ytChat.status }),
       serverStatus: () => ({ ...serverSnapshot(), uptimeMin: Math.round(process.uptime() / 60), memoryMB: Math.round(process.memoryUsage().rss / 1e6), errors: recentErrors.slice(-30) }),
       onOpenGame: (w, g) => send(w, { event: 'storedGame',
         game: { id: g.id, endedAt: g.endedAt, cube: g.cube, seats: g.seats, winnerSeat: g.winnerSeat },

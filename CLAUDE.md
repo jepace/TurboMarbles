@@ -17,7 +17,7 @@ PORT=8080               # default (server.js's own fallback when PORT is unset)
 PUBLIC_URL=https://example.com  # links in emails (password reset, email confirmation); else ORIGIN
 MAIL_FROM=noreply@example.com   # sender; mail goes through /usr/sbin/sendmail (SENDMAIL=path to override);
                                 # without sendmail the links are written to the server log
-STREAM_URL=https://www.youtube.com/@channel/live  # optional: "Live on YouTube" link in the side menu and on Play (rc.conf turbomarbles_stream_url)
+STREAM_URL=…                                    # optional fallback for the stream link (normally set on the Admin page → Stream)
 ```
 
 ## Running Tests
@@ -31,6 +31,7 @@ node test/thinker.mjs     # robot background thinking: deadline / fallback guara
 node test/cube.mjs        # doubling cube: rules, scoring, robot cube decisions, rematch (no server needed)
 node test/store.mjs       # players, device keys, link codes, games, stats (in-memory SQLite)
 node test/accounts.mjs    # account actions + finished games recorded with analysis (no server needed)
+node test/ai.mjs          # AI commentator, providers, YouTube chat reader, admin settings (fake clients)
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -159,6 +160,14 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   runaway, the win, and "the roll someone else needed": the server's rollEnvy tries each roll for the other players
   (win, bonk the leader near home, end a 2+ turn wait in hub/base) and sends `envy` with `rolled`), shown left of the board when there's room (gear option "Commentary"; on by default on the
   stream page, `commentary=0` turns it off). Lines about moves wait for the animation (afterAnimations).
+- Admin → Stream (settings in the DB: `src/SiteSettings.js`, meta table `set.*`; API keys never sent to clients): the
+  stream link (`/site.json`), the AI commentator and the YouTube chat reader. AI commentator: `src/AICommentator.js`, one
+  per robot watch room, calls only while on + watched + something happened, at most every `aiEverySec`, capped by
+  `aiDailyCalls`; sends `aiComment`. Providers in `src/ai/providers.js`: Anthropic (official SDK, default
+  `claude-opus-5-5`, effort low, refusal fallback), Google Gemini, any OpenAI-compatible endpoint. YouTube chat:
+  `src/YouTubeChat.js` (Data API key; finds the live chat from a channel handle or stream URL, polls every
+  `chatEverySec`, skips the backlog); messages go to the AI as untrusted `<chat>` input and to the page (`streamChat`).
+  Bonk counts (game + session) feed both commentators. Tests: `node test/ai.mjs` (fake clients, no network).
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),
   server status and recent errors. Players report others from the game's player list (⚑) and from a friend's chat.

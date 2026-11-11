@@ -366,6 +366,18 @@ export function revokeOtherDevices(playerId, keepKey) {
 // games stay (other players' history) but lose the link and the name.
 // ---- Admin ----------------------------------------------------------------------
 export function isAdmin(id) { return !!db?.prepare('SELECT is_admin FROM players WHERE id = ?').get(id)?.is_admin; }
+// Site settings (key → string), kept in the meta table as 'set.<key>'.
+export function getSettings() {
+  if (!db) return {};
+  return Object.fromEntries(db.prepare("SELECT k, v FROM meta WHERE k LIKE 'set.%'").all().map(r => [r.k.slice(4), r.v]));
+}
+export function setSetting(key, value) {
+  if (!db) return false;
+  if (value == null || value === '') db.prepare('DELETE FROM meta WHERE k = ?').run('set.' + key);
+  else db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run('set.' + key, String(value));
+  return true;
+}
+
 export function setAdmin(name, on) {
   const r = db?.prepare('UPDATE players SET is_admin = ? WHERE name_key = ?').run(on ? 1 : 0, nameKey(name));
   return !!r?.changes;

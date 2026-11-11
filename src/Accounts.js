@@ -22,6 +22,7 @@
 //
 // A signed-in connection carries ws._player = { id, name }.
 import * as store from './Store.js';
+import { adminView, saveSettings } from './SiteSettings.js';
 import { sendMail, publicUrl } from './Mailer.js';
 
 const WINDOW_MS = 60 * 60 * 1000;
@@ -36,7 +37,7 @@ function limited(kind, ip) {
 function hit(kind, ip) { const k = `${kind}:${ip}`; (hits.get(k) ?? hits.set(k, []).get(k)).push(Date.now()); }
 setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some(x => t - x < WINDOW_MS)) hits.delete(k); }, 10 * 60 * 1000).unref();
 
-export const ACCOUNT_ACTIONS = new Set(['report', 'adminUnlock', 'adminStatus', 'adminSearch', 'adminBan', 'adminUnban', 'adminRename',
+export const ACCOUNT_ACTIONS = new Set(['report', 'adminUnlock', 'adminStatus', 'adminSettings', 'adminSaveSettings', 'adminSearch', 'adminBan', 'adminUnban', 'adminRename',
   'adminResetRating', 'adminDelete', 'adminReports', 'adminResolve', 'login', 'logout', 'setPassword', 'setEmail', 'clearEmail', 'verifyEmail', 'forgotPassword', 'resetPassword', 'leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
   'block', 'unblock', 'dm', 'conversation', 'invite', 'setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
   'deleteAccount', 'profile', 'history', 'openGame']);
@@ -65,12 +66,19 @@ export function accountDisconnected(ws) {
   if (!set.size) { online.delete(id); if (store.storeEnabled()) for (const f of friendIds(id)) pushTo(f, { event: 'presence', id, online: false }); }
 }
 // Admin actions (the caller is an unlocked admin).
-function adminAction(ws, me, msg, { send, err, cleanName, serverStatus }) {
+function adminAction(ws, me, msg, { send, err, cleanName, serverStatus, streamStatus }) {
   const id = typeof msg.id === 'string' ? msg.id : null;
   const done = what => { console.log(`[admin] ${me.name}: ${what}`); send(ws, { event: 'adminDone', what }); };
   switch (msg.action) {
     case 'adminStatus':
       return send(ws, { event: 'adminStatus', counts: store.adminCounts(), online: online.size, server: serverStatus?.() ?? null });
+    case 'adminSettings':
+      return send(ws, { event: 'adminSettings', ...adminView(), status: streamStatus?.() ?? null });
+    case 'adminSaveSettings': {
+      const r = saveSettings(msg.settings ?? {});
+      console.log(`[admin] ${me.name}: saved settings`);
+      return send(ws, { event: 'adminSettings', ...adminView(), status: streamStatus?.() ?? null, saved: r.ok, bad: r.bad });
+    }
     case 'adminSearch':
       return send(ws, { event: 'adminPlayers', players: store.adminSearch(msg.q) });
     case 'adminReports':
@@ -130,7 +138,7 @@ function friendsPayload(id) {
 
 // send(ws, msg); cleanName(raw) → '' if unusable; onOpenGame(ws, game) shows a stored game;
 // roomCodeOf(ws) → the code of the room this connection is in (for invites), or null.
-export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, roomCodeOf, seatAccount, serverStatus }) {
+export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, roomCodeOf, seatAccount, serverStatus, streamStatus }) {
   sendFn = send;
   const err = (code, message) => send(ws, { event: 'error', code, message });
   if (!store.storeEnabled()) return err('STATS_UNAVAILABLE', 'Accounts and stats are not available on this server.');
@@ -293,10 +301,11 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       return send(ws, { event: 'adminUnlocked', until: ws._adminUntil });
     }
     case 'adminStatus': case 'adminSearch': case 'adminBan': case 'adminUnban': case 'adminRename':
-    case 'adminResetRating': case 'adminDelete': case 'adminReports': case 'adminResolve': {
+    case 'adminResetRating': case 'adminDelete': case 'adminReports': case 'adminResolve':
+    case 'adminSettings': case 'adminSaveSettings': {
       if (!needMe() || !store.isAdmin(me.id)) return err('FORBIDDEN', 'Not allowed.');
       if (!(ws._adminUntil > Date.now())) return send(ws, { event: 'adminLocked' });
-      return adminAction(ws, me, msg, { send, err, cleanName, serverStatus });
+      return adminAction(ws, me, msg, { send, err, cleanName, serverStatus, streamStatus });
     }
     case 'leaderboard':
       return send(ws, { event: 'leaderboard', players: store.leaderboard({ limit: 100 }), me: me ? store.ratingOf(me.id) : null });

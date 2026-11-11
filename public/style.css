@@ -800,3 +800,19 @@ body.kiosk .cm-name .log-dot { width: 0.6em; height: 0.6em; }
 .play-live { text-align: center; margin: 0.2rem 0 0.4rem; }
 .play-live a { color: #ff8a8a; font-weight: 600; text-decoration: none; }
 .play-live a:hover { text-decoration: underline; }
+/* Admin → Stream */
+.admin-stream { display: flex; flex-direction: column; gap: 0.55rem; max-width: 46rem; }
+.admin-stream h3 { margin: 0.9rem 0 0.1rem; }
+.as-field { display: flex; flex-direction: column; gap: 3px; flex: 1 1 12rem; }
+.as-field.wide { flex-basis: 100%; }
+.as-label { font-size: 0.82rem; color: var(--muted); }
+.as-field input, .as-field select { background: var(--card); color: var(--text); border: 1px solid #ffffff26; border-radius: 6px; padding: 0.4rem 0.55rem; }
+.as-help { font-size: 0.75rem; }
+.as-row { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+.as-check { display: flex; align-items: center; gap: 6px; }
+.as-status { background: #0006; border-radius: 6px; padding: 0.45rem 0.6rem; font-size: 0.82rem; }
+/* AI commentary lines */
+.cm-line.lvlai { border-left-color: #7ee0ff; font-style: italic; }
+.admin-stream > .as-field { flex: none; }
+.as-row > .as-field { flex: 1 1 12rem; }
+.admin-stream .btn-row { justify-content: flex-start; }
