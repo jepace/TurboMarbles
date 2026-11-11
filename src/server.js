@@ -5,7 +5,7 @@ import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, addRobot, removeRobot, startGame,
+  createRoom, joinRoom, isWatcher, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf, seatAccountOf, serverSnapshot,
   handleUndo, handleCommit, handleAnalyzeGame,
@@ -226,6 +226,8 @@ const KNOWN_ACTIONS = new Set([
   'double', 'take', 'drop', 'rematch', 'quit', 'chat', 'swapSeats', 'quickMatch', 'quickMatchCancel', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
 ]);
 
+const WATCHER_BLOCKED = new Set(['roll', 'move', 'forfeitDie', 'undo', 'commit', 'double', 'take', 'drop', 'resign', 'resignAnswer', 'rematch', 'swapSeats', 'addRobot', 'removeRobot']);
+
 function dispatch(ws, msg) {
   if (!KNOWN_ACTIONS.has(msg.action)) {
     send(ws, { event: 'error', code: 'UNKNOWN_ACTION' });
@@ -240,6 +242,9 @@ function dispatch(ws, msg) {
         report: storedGameReport(g) }) });
   }
 
+  // A watch-mode viewer only watches: no acting for the robot in their seat.
+  if (WATCHER_BLOCKED.has(msg.action) && isWatcher(ws)) return;
+
   switch (msg.action) {
     case 'createRoom': {
       const name = playName(ws, msg.name);
@@ -249,10 +254,12 @@ function dispatch(ws, msg) {
       if (!Number.isInteger(n) || n < 2 || n > 6) return send(ws, { event: 'error', code: 'INVALID_PLAYER_COUNT', message: 'Players must be 2-6' });
       const hostColor = typeof msg.hostColor === 'string' ? msg.hostColor : undefined;
       const matchTo = Number.isInteger(msg.matchTo) && msg.matchTo >= 1 && msg.matchTo <= 25 ? msg.matchTo : 0;
-      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo });
+      const watch = msg.watch === true;
+      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo: watch ? 0 : matchTo, watch });
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
       ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });
+      if (watch) startGame(ws, result.roomId);
       break;
     }
 

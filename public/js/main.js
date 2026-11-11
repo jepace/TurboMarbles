@@ -11,6 +11,7 @@ import { playBonk, playClick, playHomeChime, setMuted } from './sounds.js';
 
 // ---- State ----
 let myPlayerIndex = null;
+let watching = false;      // watch mode: robots play every seat; this viewer only watches
 let myName = null;
 let roomId = null;
 let gameState = null;
@@ -449,6 +450,13 @@ $('btn-create').addEventListener('click', () => withName(() => {
   send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor,
     cube: n === 2 && (m ? m >= 2 : $('qm-cube').checked), matchTo: m });
 }));
+// Watch robots: every seat a robot, one game after another, until Quit.
+$('btn-watch').addEventListener('click', () => withName(() => {
+  const n = Number($('qm-players').value);
+  connect();
+  send({ action: 'createRoom', name: myName, totalPlayers: n, hostColor: selectedHostColor,
+    cube: n === 2 && $('qm-cube').checked, matchTo: 0, watch: true });
+}));
 // Join by code, right on the Play page.
 $('form-join-home').addEventListener('submit', e => {
   e.preventDefault();
@@ -750,7 +758,7 @@ function leaveForGood() {
 $('btn-play-again').addEventListener('click', leaveForGood);
 $('btn-quit').addEventListener('click', () => {
   const g = gameState;
-  if (!g || g.winner != null || g.phase === 'GAME_OVER') { leaveForGood(); return; }
+  if (!g || g.winner != null || g.phase === 'GAME_OVER' || watching) { leaveForGood(); return; }
   const people = g.players.filter((p, i) => i !== myPlayerIndex && !p.isRobot).length;
   if (g.players.length > 2) { if (confirm(people ? 'Quit? A robot will play your marbles.' : 'Quit this game?')) leaveForGood(); return; }
   openResignDialog();
@@ -2178,6 +2186,7 @@ function updateStartButton() {
 }
 
 on('gameStarted', ({ gameState: gs }) => {
+  applyWatch(gs);
   gameState = gs;
   if (gs.diceCommit) setTimeout(() => log(`🎲 Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`, null, 'log-dice'), 0);
   pendingFeedback = null;
@@ -2466,7 +2475,7 @@ function showGameOver(winnerIndex) {
   $('btn-rematch').textContent = 'Rematch';
   $('rematch-msg').style.display = 'none';
   // The game-over window waits for the winning move's animation.
-  afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
+  if (!watching) afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
   $('cube-offer').style.display = 'none';
   renderCube();
   // Board stays visible — no screen switch
@@ -2663,6 +2672,7 @@ function toast(msg) {
 }
 
 on('reconnected', ({ gameState: gs }) => {
+  applyWatch(gs);
   gameState = gs;
   show('screen-game');
   faceMyArm();
@@ -3195,6 +3205,12 @@ function setHint(msg) {
   const el = $('move-hint');
   el.textContent = msg;
   el.style.display = msg ? 'block' : 'none';
+}
+
+// Watch mode: no seat of my own (no "You", no controls).
+function applyWatch(gs) {
+  watching = !!gs?.watch;
+  if (watching) myPlayerIndex = null;
 }
 
 function isMyTurn() {

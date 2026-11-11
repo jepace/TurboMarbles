@@ -723,3 +723,4 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 #analysis-panel.busy .ap-spinner { display: inline-block; }
 #analysis-panel.busy, #analysis-panel.busy * { cursor: progress !important; }
 @keyframes ap-spin { to { transform: rotate(360deg); } }
+.play-watch { text-align: center; margin-top: 0.4rem; }

@@ -6,7 +6,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper, handlePlayOutAll,
-  _reset, _getRoom, handleSwapSeats,
+  _reset, _getRoom, handleSwapSeats, isWatcher, handleQuit,
 } from '../src/GameManager.js';
 import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
 gmConfig.secureDice = false;   // the tests script dice through Math.random
@@ -1126,6 +1126,20 @@ describe('seating — people spread out by default; the host can swap seats', ()
   assert(rm.slots[0].name === 'Host', 'only the host can swap');
   startGame(h2, r2.roomId);
   assert(rm.slots[3].name === 'Friend', "the host's arrangement stands at the start");
+});
+
+describe('watch mode: robots in every seat, the host only watches', () => {
+  setup();
+  const host = mockWs();
+  const r = createRoom(host, 'Zed', 6, undefined, { watch: true });
+  const room = _getRoom(r.roomId);
+  assert(r.watch && room.slots.every(s => s.isRobot), 'every seat is a robot');
+  assert(new Set(room.slots.map(s => s.name)).size === 6, 'six different robot names');
+  assert(isWatcher(host), 'the host is a watcher');
+  startGame(host, r.roomId);
+  assert(room.state === 'playing' && room.game.players.every(p => p.isRobot), 'the game starts with robots only');
+  handleQuit(host, r.roomId);
+  assert(!_getRoom(r.roomId), 'quitting closes the room');
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
