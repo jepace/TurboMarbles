@@ -22,25 +22,18 @@ import { earnsExtraRoll } from './GameEngine.js';
 // helps nor hurts (positional moves score 200 + 5 × gain).
 const NO_MOVE_SCORE = 200;
 
-// ---- Coaching styles ----
-// A robot plays in the style set on its player (game.players[pi].style; league
-// coaches, see public/js/league.js). 'balanced' is the tuned default every
-// other robot uses. The others turn the same knobs hard one way:
+// ---- Knobs ----
 //   risk  — weight of the danger of being bonked (×)      bump — value of bonking (×)
 //   enter — bonus for getting a marble home (×)            homeStep — value of a tidy home row
 //   pLand / pHub / pBase — how much waiting on a star / the hub / base costs (lower = loves shortcuts)
-export const STYLES = {
-  balanced: {},
-  bonker:   { bump: 2.0, risk: 0.35 },
-  racer:    { bump: 0.15, risk: 0.35, enter: 1.6 },
-  cautious: { risk: 3.0, bump: 0.6 },
-  hub:      { pHub: 5, pLand: 3 },
-  gambler:  { risk: 0, bump: 1.4, pBase: 2 },
-  packer:   { homeStep: 2.5, enter: 2.5, risk: 0.6 },
-};
-const BASE_STYLE = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10 };
-let S = BASE_STYLE;                // the style of the robot choosing right now (set in pickNextRobotMove)
-const styleFor = name => ({ ...BASE_STYLE, ...(STYLES[name] ?? {}) });
+// With 4+ players the robot takes more chances and leaves base sooner (self-play,
+// 6000 games each vs the old settings: 27.0% vs 25% at 4 players, 19.8% vs 16.7% at 6;
+// no gain at 3).
+const BASE_KNOBS = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10 };
+const MANY_KNOBS = { ...BASE_KNOBS, risk: 0.5, pBase: 5 };
+// Overrides for self-play tuning (tools set fields here; empty in play).
+export const TUNE = {};
+let S = BASE_KNOBS;                // the knobs for the robot choosing right now (set in pickNextRobotMove)
 
 // Pick the next move, or null to forfeit the next unused die.
 //
@@ -55,10 +48,8 @@ const styleFor = name => ({ ...BASE_STYLE, ...(STYLES[name] ?? {}) });
 // before the robot's next turn subtracted (see threatMap / risk).
 export function pickNextRobotMove(game, playerIndex) {
   if (game.diceUsed[0] && game.diceUsed[1]) return null;
-  const style = game.players[playerIndex]?.style;
-  if (!style || style === 'balanced') return pickMove(game, playerIndex);
-  S = styleFor(style);
-  try { return pickMove(game, playerIndex); } finally { S = BASE_STYLE; }
+  S = { ...(game.players.length >= 4 ? MANY_KNOBS : BASE_KNOBS), ...TUNE };
+  try { return pickMove(game, playerIndex); } finally { S = BASE_KNOBS; }
 }
 
 function pickMove(game, playerIndex) {
