@@ -5,7 +5,7 @@ import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import {
-  createRoom, joinRoom, isWatcher, addRobot, removeRobot, startGame,
+  createRoom, joinRoom, isWatcher, startWatchRoom, liveGames, handleWatchGame, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf, seatAccountOf, serverSnapshot,
   handleUndo, handleCommit, handleAnalyzeGame,
@@ -223,10 +223,10 @@ const KNOWN_ACTIONS = new Set([
   ...ACCOUNT_ACTIONS,
   'createRoom', 'joinRoom', 'addRobot', 'removeRobot', 'startGame',
   'roll', 'move', 'forfeitDie', 'undo', 'commit', 'reconnect', 'analyzeGame',
-  'double', 'take', 'drop', 'rematch', 'quit', 'chat', 'swapSeats', 'quickMatch', 'quickMatchCancel', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch',
+  'double', 'take', 'drop', 'rematch', 'quit', 'chat', 'swapSeats', 'quickMatch', 'quickMatchCancel', 'resign', 'resignAnswer', 'analyzeDeeper', 'playOutAll', 'analyzeDeeperCube', 'analyzeMatch', 'listGames', 'watchGame',
 ]);
 
-const WATCHER_BLOCKED = new Set(['roll', 'move', 'forfeitDie', 'undo', 'commit', 'double', 'take', 'drop', 'resign', 'resignAnswer', 'rematch', 'swapSeats', 'addRobot', 'removeRobot']);
+const WATCHER_BLOCKED = new Set(['roll', 'move', 'forfeitDie', 'undo', 'commit', 'double', 'take', 'drop', 'resign', 'resignAnswer', 'rematch', 'swapSeats', 'addRobot', 'removeRobot', 'chat', 'startGame']);
 
 function dispatch(ws, msg) {
   if (!KNOWN_ACTIONS.has(msg.action)) {
@@ -259,7 +259,7 @@ function dispatch(ws, msg) {
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
       ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });
-      if (watch) startGame(ws, result.roomId);
+      if (watch) startWatchRoom(result.roomId);
       break;
     }
 
@@ -428,7 +428,25 @@ function dispatch(ws, msg) {
       break;
     }
 
+    case 'listGames':
+      send(ws, { event: 'liveGames', games: liveGames() });
+      break;
+
+    case 'watchGame': {
+      if (typeof msg.roomId !== 'string') return send(ws, { event: 'error', code: 'MISSING_FIELDS', message: 'Missing fields' });
+      const result = handleWatchGame(ws, msg.roomId);
+      if (result.error) send(ws, { event: 'error', code: result.error === 'GONE' ? 'GAME_GONE' : 'WATCH_FAILED', message: result.error === 'GONE' ? 'That game has ended.' : result.error });
+      else ws._room = msg.roomId;
+      break;
+    }
+
     case 'reconnect': {
+      // A spectator coming back after a dropped connection.
+      if (msg.watch === true && typeof msg.roomId === 'string') {
+        const result = handleWatchGame(ws, msg.roomId);
+        if (result.error) send(ws, { event: 'error', code: 'GAME_GONE', message: 'That game has ended.' });
+        break;
+      }
       const { roomId, playerIndex, reconnectToken } = msg;
       if (typeof roomId !== 'string' || typeof reconnectToken !== 'string') {
         return send(ws, { event: 'error', code: 'RECONNECT_FAILED', message: 'Invalid reconnect' });

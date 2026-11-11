@@ -137,6 +137,10 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   money ±1/±2/±3 per cube unit; match: match-winning chances after the result
   at the game's starting score and cube, as EMG (`game._valueCtx`); 3+ players: plain win chance. The instant
   (evaluator) pass still judges by win chance only.
+- Watching: anyone can watch a game from the Play page's Live games list (`listGames` / `watchGame`); watchers
+  (`room.watchers`) get every broadcast and the chat but never act for a seat or post. "Watch robots play" makes a
+  room with robots in every seat (`createRoom` watch) whose games run back to back (`watchNextGameMs`). A
+  robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),
   server status and recent errors. Players report others from the game's player list (⚑) and from a friend's chat.

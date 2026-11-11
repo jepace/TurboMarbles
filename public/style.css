@@ -724,3 +724,11 @@ pre.admin-err { white-space: pre-wrap; font-size: 0.78rem; background: #0006; pa
 #analysis-panel.busy, #analysis-panel.busy * { cursor: progress !important; }
 @keyframes ap-spin { to { transform: rotate(360deg); } }
 .play-watch { text-align: center; margin-top: 0.4rem; }
+/* Live games (Play page) */
+.live-games { display: flex; flex-direction: column; gap: 6px; max-height: 18rem; overflow-y: auto; }
+.live-game { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; background: var(--card); color: var(--text);
+  border: 1px solid #ffffff14; border-radius: 8px; padding: 0.45rem 0.7rem; cursor: pointer; font-weight: 500; }
+.live-game:hover { border-color: #f0c04088; }
+.lg-players { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.lg-player { display: inline-flex; align-items: center; gap: 5px; }
+.lg-info { font-size: 0.8rem; }

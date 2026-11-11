@@ -11,7 +11,8 @@ import { playBonk, playClick, playHomeChime, setMuted } from './sounds.js';
 
 // ---- State ----
 let myPlayerIndex = null;
-let watching = false;      // watch mode: robots play every seat; this viewer only watches
+let watching = false;
+let watchRoomId = null;     // the game being watched (for reconnecting)      // watch mode: robots play every seat; this viewer only watches
 let myName = null;
 let roomId = null;
 let gameState = null;
@@ -86,6 +87,7 @@ function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById(id);
   el.classList.add('active');
+  if (id === 'screen-home') setTimeout(() => loadLiveGames(), 0);
   // Pages outside a game get the side navigation.
   document.body.classList.toggle('with-nav', el.classList.contains('page'));
   for (const b of document.querySelectorAll('#side-nav .nav-item')) b.classList.toggle('on', b.dataset.go === id);
@@ -748,6 +750,7 @@ document.addEventListener('keydown', e => {
 // a different game; during one: quit — against people, a resignation).
 function leaveForGood() {
   send({ action: 'quit' });
+  watching = false; watchRoomId = null;
   setReconnectInfo(null);
   clearTimeout(autoRollTimer);
   $('win-overlay').style.display = 'none';
@@ -944,6 +947,7 @@ $('board-canvas').addEventListener('mouseleave', () => { $('board-tip').style.di
 on('error', ({ code, message }) => {
   // A reconnect to a game that is gone (closed, or the server restarted):
   // stop trying, and say so quietly instead of a popup.
+  if (code === 'GAME_GONE' && !gameState) { setReconnectInfo(null); watching = false; alert(message); loadLiveGames(); return; }
   if (code === 'GAME_GONE' || code === 'RECONNECT_FAILED') {
     setReconnectInfo(null);
     log(code === 'GAME_GONE' ? 'This game is no longer on the server (it was closed, or the server restarted).' : 'Could not reconnect to this game.');
@@ -2127,8 +2131,11 @@ $('opt-feedback').addEventListener('change', e => { settings.feedback = e.target
 
 on('roomCreated', () => { renderLobbyInvite(); $('btn-lobby-leave').textContent = 'Cancel game'; });
 on('joinedRoom', () => { $('btn-lobby-leave').textContent = 'Leave'; });
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, matchTo }) => {
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, matchTo, watch }) => {
   roomId = rid;
+  // Watch mode: the robots' game starts at once; this viewer has no seat.
+  if (watch) { watching = true; watchRoomId = rid; myPlayerIndex = null; setReconnectInfo({ roomId: rid, watch: true }); return; }
+  watching = false;
   myPlayerIndex = 0;
   setReconnectInfo({ roomId: rid, playerIndex: 0, reconnectToken });
   $('lobby-code').textContent = code;
@@ -2142,6 +2149,7 @@ on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slo
 
 on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState, reconnectToken }) => {
   roomId = rid;
+  watching = false;
   myPlayerIndex = playerIndex;
   setReconnectInfo({ roomId: rid, playerIndex, reconnectToken });
   $('lobby-code').textContent = lobbyState.code;
@@ -2671,8 +2679,10 @@ function toast(msg) {
   setTimeout(() => t.remove(), 5000);
 }
 
-on('reconnected', ({ gameState: gs }) => {
-  applyWatch(gs);
+on('reconnected', ({ gameState: gs, watching: spectator }) => {
+  if (spectator) { watching = true; setReconnectInfo({ roomId: gs?.roomId ?? watchRoomId, watch: true }); roomId = watchRoomId ?? roomId; }
+  applyWatch(gs, spectator);
+  if (spectator && gs?.turnNo) turnNumber = gs.turnNo;
   gameState = gs;
   show('screen-game');
   faceMyArm();
@@ -3208,9 +3218,11 @@ function setHint(msg) {
 }
 
 // Watch mode: no seat of my own (no "You", no controls).
-function applyWatch(gs) {
-  watching = !!gs?.watch;
+function applyWatch(gs, spectator = false) {
+  if (gs?.watch || spectator) watching = true;
   if (watching) myPlayerIndex = null;
+  $('game-chat-input').disabled = watching;
+  $('game-chat-input').placeholder = watching ? 'Watching (chat is for the players)' : 'Chat…';
 }
 
 function isMyTurn() {
@@ -3351,3 +3363,32 @@ setInterval(() => {
     !!rep?.rolls?.some(r => r.analysis == null && r.pending) || !!rep?.cube?.some(c => c.pending);
   panel.classList.toggle('busy', busy);
 }, 250);
+
+
+// ---- Live games: watch anyone's game ----
+// The Play page lists the games on the server (refreshed while it's open);
+// clicking one joins it as a spectator.
+function loadLiveGames() { if (document.getElementById('screen-home')?.classList.contains('active')) { connect(); send({ action: 'listGames' }); } }
+on('liveGames', ({ games }) => {
+  const box = $('live-games');
+  if (!games.length) { box.replaceChildren(el('span', { class: 'muted' }, 'No games right now.')); return; }
+  box.replaceChildren(...games.map(g => {
+    const who = g.players.map(p => el('span', { class: 'lg-player' },
+      el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(p.color)] ?? '#888'}` }), (p.name ?? '?') + (p.isRobot ? ' 🤖' : '')));
+    const info = [g.players.length + ' players', g.match ? `match to ${g.match.length} (${g.match.score.join('–')})` : g.cube ? 'cube' : null,
+      `game ${g.game}`, g.state === 'finished' ? 'between games' : null, g.watchers ? `👀 ${g.watchers}` : null].filter(Boolean).join(' · ');
+    const b = el('button', { class: 'live-game', title: 'Watch this game' }, el('div', { class: 'lg-players' }, ...who), el('div', { class: 'muted lg-info' }, info));
+    b.addEventListener('click', () => { watchRoomId = g.roomId; roomId = g.roomId; send({ action: 'watchGame', roomId: g.roomId }); });
+    return b;
+  }));
+});
+on('watchEnded', () => {
+  if (!watching) return;
+  watching = false; watchRoomId = null; setReconnectInfo(null);
+  toastAnywhere('The game you were watching has ended.');
+  if ($('game-layout').classList.contains('analysis-mode')) closeAnalysis();
+  gameState = null;
+  show(myName || me ? 'screen-home' : 'screen-landing');
+});
+setInterval(loadLiveGames, 5000);
+document.addEventListener('visibilitychange', loadLiveGames);

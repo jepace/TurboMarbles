@@ -6,7 +6,7 @@ import {
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs,
   handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper, handlePlayOutAll,
-  _reset, _getRoom, handleSwapSeats, isWatcher, handleQuit,
+  _reset, _getRoom, handleSwapSeats, isWatcher, handleQuit, handleWatchGame, liveGames, startWatchRoom,
 } from '../src/GameManager.js';
 import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
 gmConfig.secureDice = false;   // the tests script dice through Math.random
@@ -1134,12 +1134,30 @@ describe('watch mode: robots in every seat, the host only watches', () => {
   const r = createRoom(host, 'Zed', 6, undefined, { watch: true });
   const room = _getRoom(r.roomId);
   assert(r.watch && room.slots.every(s => s.isRobot), 'every seat is a robot');
+  assert(room.watchers.has(host), 'the host watches (no seat)');
   assert(new Set(room.slots.map(s => s.name)).size === 6, 'six different robot names');
   assert(isWatcher(host), 'the host is a watcher');
-  startGame(host, r.roomId);
+  startWatchRoom(r.roomId);
   assert(room.state === 'playing' && room.game.players.every(p => p.isRobot), 'the game starts with robots only');
   handleQuit(host, r.roomId);
-  assert(!_getRoom(r.roomId), 'quitting closes the room');
+  assert(!_getRoom(r.roomId), 'the last watcher quitting ends a robots-only game');
+});
+
+describe('watching a human game', () => {
+  setup();
+  const host = mockWs(), fan = mockWs();
+  const r = createRoom(host, 'Alice', 3);
+  addRobot(host, r.roomId); addRobot(host, r.roomId);
+  startGame(host, r.roomId);
+  const room = _getRoom(r.roomId);
+  assert(liveGames().some(g => g.roomId === r.roomId), 'the game is listed');
+  handleWatchGame(fan, r.roomId);
+  assert(fan.find('reconnected').at(-1)?.watching === true, 'the watcher gets the game');
+  assert(isWatcher(fan) && !isWatcher(host), 'watcher, not player');
+  handleQuit(host, r.roomId);
+  assert(_getRoom(r.roomId) && room.slots[0].isRobot, 'the player left: robots play on while watched');
+  handleQuit(fan, r.roomId);
+  assert(!_getRoom(r.roomId), 'nobody watching a robots-only game: it ends');
 });
 
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);

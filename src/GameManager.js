@@ -145,6 +145,7 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     score: Array(totalPlayers).fill(0),   // money-session points across rematches (cube rooms)
     wins: Array(totalPlayers).fill(0),    // games won in this room
     gamesPlayed: 0,
+    watchers: new Set(),  // spectators' sockets (not seated)
   };
   rooms.set(roomId, room);
   // Watch mode: robots play every seat (the host's too) and each game starts
@@ -159,8 +160,11 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
       taken.add(s.name.toLowerCase());
       s.isRobot = true;
       s.accountId = null;
-      if (s.index === 0) s.watch = true; else s.playerId = 'robot-' + s.index;
+      s.ws = null;
+      s.playerId = 'robot-' + s.index;
     }
+    sessions.set(hostWs._id, { roomId, playerIndex: null, watcher: true });
+    room.watchers.add(hostWs);
   }
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
@@ -255,7 +259,7 @@ export function removeRobot(ws, roomId, playerIndex) {
 // Who sits where matters (the player just behind you is the one best placed to
 // hit you). People are spread out round the table by default — as far apart as
 // the seats allow — unless the host arranged the seats themselves (swapSeats).
-const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot', 'watch'];
+const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot'];
 function arrangeSeats(room, contents) {
   room.slots.forEach((s, i) => Object.assign(s, contents[i]));
   room.slots.forEach((s, i) => {
@@ -926,6 +930,7 @@ export function handleQuit(ws, roomId) {
   const room = rooms.get(roomId);
   const sess = sessions.get(ws._id);
   if (!room || !sess || sess.roomId !== roomId) return;
+  if (sess.watcher) { sessions.delete(ws._id); stopWatching(room, ws, { grace: false }); return; }
   const pi = sess.playerIndex, slot = room.slots[pi], game = room.game;
   if (room.state === 'playing' && game && game.winner == null && slot && !slot.isRobot) {
     const others = room.slots.filter((s, i) => i !== pi && s.playerId && !s.isRobot).length;
@@ -949,13 +954,16 @@ export function handleQuit(ws, roomId) {
   if (room.state === 'lobby') { leaveRoom(ws); return; }
   // Gone for good: no reconnecting, and a robot plays the seat in any rematch.
   sessions.delete(ws._id);
+  let tookOver = false;
   if (slot) {
     slot.ws = null;
-    if (!slot.isRobot) { slot.isRobot = true; broadcast(room, { event: 'robotTookOver', playerIndex: pi }); }
+    if (!slot.isRobot) { slot.isRobot = true; tookOver = true; broadcast(room, { event: 'robotTookOver', playerIndex: pi }); }
   }
   const t = room.disconnectTimers.get(pi);
   if (t) { clearTimeout(t); room.disconnectTimers.delete(pi); }
-  cleanupIfAbandoned(room);
+  if (cleanupIfAbandoned(room)) return;
+  // Robots only now, but still watched: the robot takes the seat's turn.
+  if (tookOver && room.state === 'playing' && game && game.winner == null && (game.turnIndex === pi || game.cubeOffer?.to === pi)) scheduleCurrentTurn(room);
 }
 
 // ---------- Disconnect handling ----------
@@ -973,18 +981,9 @@ function leaveRoom(ws) {
 
   const room = rooms.get(sess.roomId);
   if (!room) return;
+  if (sess.watcher) { stopWatching(room, ws); return; }
 
   const slot = room.slots[sess.playerIndex];
-  if (slot?.watch) {
-    // The watcher's connection dropped: keep the room a little while for a
-    // reconnect (a phone pausing the tab), then close it.
-    if (slot.ws !== ws) return;
-    slot.ws = null;
-    const t = setTimeout(() => { room.disconnectTimers.delete(slot.index); if (rooms.has(room.id) && !slot.ws) deleteRoom(room); }, DISCONNECT_TIMEOUT_MS);
-    t.unref?.();
-    room.disconnectTimers.set(slot.index, t);
-    return;
-  }
   if (!slot || slot.isRobot) return;
   // A reconnect may already have moved this seat to a newer socket; the old
   // socket's late close must not detach the player.
@@ -1057,7 +1056,7 @@ export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
   const pi = Number(playerIndex);
   if (!Number.isInteger(pi) || pi < 0 || pi >= room.slots.length) return { error: 'Invalid player index' };
   const slot = room.slots[pi];
-  if (!slot || (slot.isRobot && !slot.watch)) return { error: 'Slot not available' };
+  if (!slot || slot.isRobot) return { error: 'Slot not available' };
 
   // Validate using the playerId issued at join time, not just the player name.
   // A name-only check would allow any client who knows the name to hijack the slot.
@@ -1109,7 +1108,7 @@ export function handleReconnect(ws, roomId, playerIndex, reconnectToken) {
 // Returns the number of human (non-robot) players that have been assigned a slot.
 // Robots and empty slots don't count.
 function humanCount(room) {
-  return room.slots.filter(s => s.playerId && (!s.isRobot || (s.watch && s.ws))).length;
+  return room.slots.filter(s => s.playerId && !s.isRobot).length;
 }
 
 // Delete the room if no human players remain.
@@ -1120,6 +1119,8 @@ function humanCount(room) {
 // Returns true if the room was deleted.
 function cleanupIfAbandoned(room) {
   if (humanCount(room) > 0) return false;
+  // Robots only: it goes on while someone watches (not in the lobby).
+  if (room.state !== 'lobby' && room.watchers?.size > 0) return false;
   deleteRoom(room);
   return true;
 }
@@ -1127,6 +1128,9 @@ function cleanupIfAbandoned(room) {
 // Remove a room and everything that could still act on it: every pending
 // timer, and any sessions pointing at it.
 function deleteRoom(room) {
+  for (const w of room.watchers ?? []) sendTo(w, { event: 'watchEnded' });
+  room.watchers?.clear();
+  clearTimeout(room._unwatchedTimer);
   if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
   if (room.skipTimer)      { clearTimeout(room.skipTimer);      room.skipTimer = null; }
   for (const t of room.disconnectTimers.values()) clearTimeout(t);
@@ -1400,10 +1404,56 @@ function applyNextRobotMove(room) {
   }, ROBOT_MOVE_DELAY_MS);
 }
 
+// Watch mode: start the robots' first game (the host is already watching).
+export function startWatchRoom(roomId) {
+  const room = rooms.get(roomId);
+  if (!room?.watch || room.state !== 'lobby') return;
+  beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+}
+
 // A watch-mode viewer: may chat, analyse and quit, but never act for the seat.
 export function isWatcher(ws) {
+  return !!sessions.get(ws._id)?.watcher;
+}
+
+// ---------- Spectators ----------
+
+// A watcher left (Quit, closed the tab, or went elsewhere). A robots-only game
+// nobody watches any more ends: at once on Quit, after a short grace for a
+// dropped connection (a phone pausing the tab) so the viewer can come back.
+function stopWatching(room, ws, { grace = true } = {}) {
+  room.watchers.delete(ws);
+  if (humanCount(room) > 0 || room.watchers.size) return;
+  if (!grace) { deleteRoom(room); return; }
+  clearTimeout(room._unwatchedTimer);
+  room._unwatchedTimer = setTimeout(() => {
+    if (rooms.has(room.id) && !room.watchers.size && humanCount(room) === 0) deleteRoom(room);
+  }, DISCONNECT_TIMEOUT_MS);
+  room._unwatchedTimer.unref?.();
+}
+
+// Games in progress (or just finished), for the Watch list.
+export function liveGames() {
+  return [...rooms.values()].filter(r => r.game && (r.state === 'playing' || r.state === 'finished')).map(r => ({
+    roomId: r.id, state: r.state, game: r.gamesPlayed + (r.state === 'playing' ? 1 : 0),
+    players: r.slots.map(s => ({ name: s.name, color: s.color, isRobot: !!s.isRobot })),
+    watchers: r.watchers.size, watch: !!r.watch, cube: !!r.cube,
+    match: r.match ? { length: r.match.length, score: r.match.score.slice() } : null,
+  }));
+}
+
+// Start watching a game (or come back after a dropped connection).
+export function handleWatchGame(ws, roomId) {
+  const room = rooms.get(roomId);
+  if (!room || !room.game) return { error: 'GONE' };
   const sess = sessions.get(ws._id);
-  return !!(sess && rooms.get(sess.roomId)?.slots[sess.playerIndex]?.watch);
+  if (sess && !(sess.watcher && sess.roomId === roomId)) leaveRoom(ws);
+  if (room.watchers.size >= 50) return { error: 'Too many watchers' };
+  sessions.set(ws._id, { roomId, playerIndex: null, watcher: true });
+  room.watchers.add(ws);
+  clearTimeout(room._unwatchedTimer);
+  sendTo(ws, { event: 'reconnected', gameState: publicState(room), watching: true });
+  return { ok: true };
 }
 
 function isHost(ws, room) {
@@ -1412,6 +1462,9 @@ function isHost(ws, room) {
 
 function broadcast(room, msg, excludeWs = null) {
   const data = JSON.stringify(msg);
+  for (const w of room.watchers ?? []) {
+    if (w !== excludeWs && w.readyState === 1) { try { w.send(data); } catch { /* closed */ } }
+  }
   for (const slot of room.slots) {
     if (slot.ws && slot.ws !== excludeWs && slot.ws.readyState === 1) {
       try {
@@ -1465,6 +1518,7 @@ function publicState(room) {
   const { game } = room;
   return {
     watch: !!room.watch,
+    turnNo: game._turnNo ?? 1,
     players: game.players.map((p, i) => ({
       index: i,
       name: room.slots[i].name,
@@ -1550,6 +1604,7 @@ export function handleChat(ws, roomId, text) {
     if (s.accountId && from?.accountId && storeEnabled() && isBlocked(s.accountId, from.accountId)) continue;
     try { s.ws.send(msg); } catch { /* closed */ }
   }
+  for (const w of room.watchers) if (w.readyState === 1) { try { w.send(msg); } catch { /* closed */ } }
 }
 
 // For reports: the account sitting in seat `seat` of this connection's room.
