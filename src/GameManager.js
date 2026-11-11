@@ -236,7 +236,10 @@ function rotateCoaches(room) {
   room.slots.forEach((s, i) => { const c = pool[i % pool.length]; s.name = c.name; s.style = c.style; });
 }
 
-export function addRobot(ws, roomId) {
+// coachName: a coach from the league (public/js/league.js) to play this seat in
+// their style, or none for a random coach. The same coach can play several
+// seats ("Okafor", "Okafor 2"…).
+export function addRobot(ws, roomId, coachName = null) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
   if (!isHost(ws, room)) return { error: 'Only host can add robots' };
@@ -244,11 +247,18 @@ export function addRobot(ws, roomId) {
   const slot = room.slots.find(s => !s.playerId && !s.isRobot);
   if (!slot) return { error: 'No empty slots' };
 
-  // A random name nobody in the room is using (robots still show 🤖).
   const taken = new Set(room.slots.map(s => s.name?.toLowerCase()).filter(Boolean));
-  const free = ROBOT_NAMES.filter(n => !taken.has(n.toLowerCase()));
+  let coach = COACHES.find(c => c.name === coachName) ?? null;
+  if (!coach) {
+    // A random coach nobody in the room is using yet.
+    const free = COACHES.filter(c => !taken.has(c.name.toLowerCase()));
+    coach = (free.length ? free : COACHES)[Math.floor(Math.random() * (free.length || COACHES.length))];
+  }
+  let name = coach.name;
+  for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${coach.name} ${k}`;
   slot.isRobot = true;
-  slot.name = free.length ? free[Math.floor(Math.random() * free.length)] : `Robot ${slot.index + 1}`;
+  slot.name = name;
+  slot.style = coach.style;
   slot.playerId = 'robot-' + slot.index;
 
   broadcast(room, {
@@ -257,6 +267,7 @@ export function addRobot(ws, roomId) {
     name: slot.name,
     color: slot.color,
     isRobot: true,
+    style: slot.style,
   });
 
   return { ok: true };
@@ -270,6 +281,7 @@ export function removeRobot(ws, roomId, playerIndex) {
   if (!slot || !slot.isRobot) return { error: 'Not a robot slot' };
   slot.isRobot = false;
   slot.name = null;
+  slot.style = null;
   slot.playerId = null;
   broadcast(room, { event: 'playerLeft', playerIndex });
   return { ok: true };
@@ -280,7 +292,7 @@ export function removeRobot(ws, roomId, playerIndex) {
 // Who sits where matters (the player just behind you is the one best placed to
 // hit you). People are spread out round the table by default — as far apart as
 // the seats allow — unless the host arranged the seats themselves (swapSeats).
-const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot'];
+const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot', 'style'];
 function arrangeSeats(room, contents) {
   room.slots.forEach((s, i) => Object.assign(s, contents[i]));
   room.slots.forEach((s, i) => {
@@ -335,12 +347,7 @@ export function startGame(ws, roomId) {
   if (room.slots.some(s => !s.playerId && !s.isRobot)) return { error: 'Unfilled slots remain' };
   if (!room.seatsArranged) spreadPeople(room);
 
-  const players = room.slots.map(s => ({
-    id: s.playerId,
-    name: s.name,
-    color: s.color,
-    isRobot: s.isRobot,
-  }));
+  const players = seatPlayers(room);
 
   beginGame(room, players);
   return { ok: true };
@@ -1595,6 +1602,7 @@ function lobbySnapshot(room) {
       name: s.name,
       color: s.color,
       isRobot: s.isRobot,
+      style: s.style ?? null,
       filled: !!s.playerId,
     })),
   };

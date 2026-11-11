@@ -296,7 +296,7 @@ function dispatch(ws, msg) {
     case 'addRobot': {
       const roomId = getRoomByWs(ws);
       if (!roomId) return;
-      const result = addRobot(ws, roomId);
+      const result = addRobot(ws, roomId, typeof msg.coach === 'string' ? msg.coach : null);
       if (result.error) send(ws, { event: 'error', code: 'ADD_ROBOT_FAILED', message: result.error });
       break;
     }

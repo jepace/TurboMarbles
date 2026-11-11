@@ -9,7 +9,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
-import { TEAMS, coachByName, LEAGUE_NAME } from './league.js';
+import { TEAMS, coachByName, LEAGUE_NAME, COACHES, STYLE_LABELS } from './league.js';
 import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName } from './music.js';
 
 // ---- State ----
@@ -578,7 +578,18 @@ $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-
 
 // ---- Lobby ----
 $('btn-lobby-leave').addEventListener('click', () => { send({ action: 'quit' }); setReconnectInfo(null); show('screen-home'); });
-$('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }));
+// + Robot: pick the coach (each plays their own style), or a random one; the same coach can fill several seats.
+$('btn-add-robot').addEventListener('click', e => {
+  e.stopPropagation();
+  const pop = $('coach-pick');
+  if (pop.style.display !== 'none') { pop.style.display = 'none'; return; }
+  const pickIt = name => { pop.style.display = 'none'; send({ action: 'addRobot', ...(name ? { coach: name } : {}) }); };
+  const item = (label, sub, title, name) => { const b = el('button', { class: 'coach-item', title }, el('b', {}, label), el('span', { class: 'muted' }, sub)); b.addEventListener('click', () => pickIt(name)); return b; };
+  pop.replaceChildren(item('🎲 Random coach', 'any style', 'A coach picked at random', null),
+    ...COACHES.map(c => item(c.full, STYLE_LABELS[c.style], `${c.bio} "${c.line}"`, c.name)));
+  pop.style.display = 'grid';
+});
+document.addEventListener('click', e => { if (!e.target.closest('#coach-pick')) { const p = $('coach-pick'); if (p) p.style.display = 'none'; } });
 $('btn-start').addEventListener('click', () => send({ action: 'startGame' }));
 // An invite link: opening it joins this game (after a name, for guests).
 $('btn-copy-link').addEventListener('click', () => {
@@ -2234,11 +2245,17 @@ on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState, reconnectToken }) => {
   show('screen-lobby');
 });
 
-on('playerJoined', ({ playerIndex, name, color, isRobot }) => {
+// A robot's coaching style, next to its name in the lobby.
+function setSlotStyle(li, style) {
+  li.querySelector('.slot-style')?.remove();
+  if (style) li.querySelector('.slot-name').after(el('span', { class: 'slot-style' }, STYLE_LABELS[style] ?? style));
+}
+on('playerJoined', ({ playerIndex, name, color, isRobot, style }) => {
   const iAmHost = ($('host-controls').style.display !== 'none');
   const li = $(`slot-${playerIndex}`);
   if (!li) return;
   li.querySelector('.slot-name').textContent = name + (isRobot ? ' 🤖' : '');
+  setSlotStyle(li, isRobot ? style : null);
   if (isRobot && iAmHost && !li.querySelector('.btn-remove-robot')) {
     const del = document.createElement('button');
     del.className = 'btn-remove-robot';
@@ -2254,6 +2271,7 @@ on('playerLeft', ({ playerIndex }) => {
   const li = $(`slot-${playerIndex}`);
   if (!li) return;
   li.querySelector('.slot-name').textContent = '(empty)';
+  setSlotStyle(li, null);
   const del = li.querySelector('.btn-remove-robot');
   if (del) del.remove();
   if ($('host-controls').style.display !== 'none') updateStartButton();
@@ -3224,6 +3242,7 @@ function renderLobbySlots(slots) {
     name.textContent = slot.filled ? slot.name + (slot.isRobot ? ' 🤖' : '') : '(empty)';
     li.appendChild(dot);
     li.appendChild(name);
+    if (slot.filled && slot.isRobot && slot.style) setSlotStyle(li, slot.style);
     if (slot.isRobot && iAmHost) {
       const del = document.createElement('button');
       del.className = 'btn-remove-robot';

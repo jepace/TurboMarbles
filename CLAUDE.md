@@ -168,9 +168,10 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
 - Marble League, "The Grand Marble Circuit" (robot stream rooms only): `public/js/league.js` has six permanent teams,
   one per colour, each with four named marbles (trait, bio, catchphrase), and twelve original robot COACHES (also the
   robot names everywhere). In league rooms the coaches rotate every game (`rotateCoaches`) and each plays a real style
-  (`STYLES` in `src/RobotPlayer.js`: balanced, bonker, racer, cautious, hub, gambler, packer — multipliers on risk,
+  (`STYLES` in `src/RobotPlayer.js`: balanced, bonker, racer, cautious, hub, gambler, packer; coaches go by last name in games — multipliers on risk,
   bump value, home bonus, home tidiness and star/hub/base waiting costs; `game.players[pi].style`). Elsewhere robots
-  play balanced (the tuned default). `src/LeagueTracker.js`
+  play balanced unless the host picks a coach: the lobby's + Robot lists every coach (same one allowed several times:
+  "Okafor", "Okafor 2"), and that robot plays the coach's style. Coaches go by last name in games. `src/LeagueTracker.js`
   watches the room's broadcasts and keeps per-game numbers (bonks by marble — the engine reports a bump before the
   attacker's move, so the attacker is found by position —, homes, hub trips/turns, rolls/sixes/doubles, lead changes,
   wire-to-wire, comeback deficit, finish margin, length, spaces travelled = the die each move used, star-circle hops, times in the hub, hub escapes /

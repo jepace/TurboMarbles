@@ -1160,5 +1160,20 @@ describe('watching a human game', () => {
   assert(!_getRoom(r.roomId), 'nobody watching a robots-only game: it ends');
 });
 
+describe('robot coaches: pick them, repeat them, they play their style', () => {
+  setup();
+  const host = mockWs();
+  const r = createRoom(host, 'Alice', 4);
+  addRobot(host, r.roomId, 'Okafor');
+  addRobot(host, r.roomId, 'Okafor');
+  addRobot(host, r.roomId);
+  const room = _getRoom(r.roomId);
+  assert(room.slots[1].name === 'Okafor' && room.slots[2].name === 'Okafor 2', 'the same coach twice: numbered');
+  assert(room.slots[1].style === 'bonker' && room.slots[2].style === 'bonker', 'each plays the coach\'s style');
+  assert(room.slots[3].isRobot && room.slots[3].style, 'a random coach has a style too');
+  startGame(host, r.roomId);
+  assert(room.game.players[1].style === 'bonker' && !room.game.players[0].style, 'styles reach the game (the human has none)');
+});
+
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed > 0 ? 1 : 0);

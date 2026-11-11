@@ -76,20 +76,20 @@ export const LEAGUE_NAME = 'The Grand Marble Circuit';
 // Coaches: the robots who sit in a team's seat for a game (they rotate between
 // games). Each has a real playing style (src/RobotPlayer.js STYLES), so the
 // league can find out which approach works best.
-//   name (shown, ≤ 16 chars), full (with nickname), style, bio, line (a catchphrase).
+//   name (shown in games: the last name), full (with first name and nickname), style, bio, line (a catchphrase).
 export const COACHES = [
-  { name: 'Mabel Okafor',  full: 'Mabel "The Hammer" Okafor', style: 'bonker',   bio: 'Never met a marble she didn\'t want to bonk.', line: 'Hit first, ask later.' },
-  { name: 'Rusty Delgado', full: 'Rusty Delgado',             style: 'balanced', bio: 'Thirty seasons on the circuit. Seen it all, twice.', line: 'Play the percentages.' },
-  { name: 'Ines Kowalczyk', full: 'Professor Ines Kowalczyk', style: 'racer',    bio: 'Treats the board as a pure race. Bonking is beneath her.', line: 'Pips win games.' },
-  { name: 'Sal Moretti',   full: '"Big" Sal Moretti',         style: 'gambler',  bio: 'Takes every risk on the board and a few that aren\'t.', line: 'Fortune favours the bold.' },
-  { name: 'Dot Pemberton', full: 'Dot Pemberton',             style: 'cautious', bio: 'Keeps her marbles out of harm\'s way, whatever it costs.', line: 'Safety first.' },
-  { name: 'Hank Tanaka',   full: 'Hank "Shortcut" Tanaka',    style: 'hub',      bio: 'Lives on the star circle; thinks the hub is home.', line: 'Why walk when you can fly?' },
-  { name: 'Lou Brightwater', full: 'Lou Brightwater',         style: 'packer',   bio: 'Obsessed with a tidy home row.', line: 'Home first, then we\'ll talk.' },
-  { name: 'Bea Navarro',   full: 'Bea "Blitz" Navarro',       style: 'racer',    bio: 'Floors it from the first roll.', line: 'Go, go, go!' },
-  { name: 'Gus Abernathy', full: 'Gus Abernathy',             style: 'balanced', bio: 'Steady, sensible, slightly boring. Wins a lot.', line: 'One roll at a time.' },
-  { name: 'Tilly Fairweather', full: 'Tilly "Tank" Fairweather', style: 'cautious', bio: 'Builds walls. Waits. Pounces late.', line: 'Patience is a weapon.' },
-  { name: 'Viktor Sand',   full: 'Viktor "The Viper" Sand',   style: 'bonker',   bio: 'Lurks behind the leader and strikes.', line: 'Nobody is safe.' },
-  { name: 'Prue Achebe',   full: 'Prue Achebe',               style: 'hub',      bio: 'Plots every route through the centre.', line: 'All roads lead to the hub.' },
+  { name: 'Okafor',  full: 'Mabel "The Hammer" Okafor', style: 'bonker',   bio: 'Never met a marble she didn\'t want to bonk.', line: 'Hit first, ask later.' },
+  { name: 'Delgado', full: 'Rusty Delgado',             style: 'balanced', bio: 'Thirty seasons on the circuit. Seen it all, twice.', line: 'Play the percentages.' },
+  { name: 'Kowalczyk', full: 'Professor Ines Kowalczyk', style: 'racer',    bio: 'Treats the board as a pure race. Bonking is beneath her.', line: 'Pips win games.' },
+  { name: 'Moretti',   full: '"Big" Sal Moretti',         style: 'gambler',  bio: 'Takes every risk on the board and a few that aren\'t.', line: 'Fortune favours the bold.' },
+  { name: 'Pemberton', full: 'Dot Pemberton',             style: 'cautious', bio: 'Keeps her marbles out of harm\'s way, whatever it costs.', line: 'Safety first.' },
+  { name: 'Tanaka',   full: 'Hank "Shortcut" Tanaka',    style: 'hub',      bio: 'Lives on the star circle; thinks the hub is home.', line: 'Why walk when you can fly?' },
+  { name: 'Brightwater', full: 'Lou Brightwater',         style: 'packer',   bio: 'Obsessed with a tidy home row.', line: 'Home first, then we\'ll talk.' },
+  { name: 'Navarro',   full: 'Bea "Blitz" Navarro',       style: 'racer',    bio: 'Floors it from the first roll.', line: 'Go, go, go!' },
+  { name: 'Abernathy', full: 'Gus Abernathy',             style: 'balanced', bio: 'Steady, sensible, slightly boring. Wins a lot.', line: 'One roll at a time.' },
+  { name: 'Fairweather', full: 'Tilly "Tank" Fairweather', style: 'cautious', bio: 'Builds walls. Waits. Pounces late.', line: 'Patience is a weapon.' },
+  { name: 'Sand',   full: 'Viktor "The Viper" Sand',   style: 'bonker',   bio: 'Lurks behind the leader and strikes.', line: 'Nobody is safe.' },
+  { name: 'Achebe',   full: 'Prue Achebe',               style: 'hub',      bio: 'Plots every route through the centre.', line: 'All roads lead to the hub.' },
 ];
 export const STYLE_LABELS = {
   balanced: 'balanced', bonker: 'the bonker', racer: 'pure racer', cautious: 'safety first', hub: 'shortcut specialist', gambler: 'the gambler', packer: 'home-row perfectionist',
