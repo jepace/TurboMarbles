@@ -51,6 +51,10 @@ node test/integration.mjs # integration tests (requires server running)
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.
+  Looks (per viewer, Board page; saved in browser settings and account prefs): `THEMES` (midnight, daylight, wood, neon,
+  felt, stone — every colour the board uses, procedural textures, neon glow), `setPalette` (one display colour per arm;
+  main.js `COLOR_MAP` follows it), marble finishes (glossy, glass, swirl, matte, metal, pearl), ring and track styles.
+  The app's light/dark mode is `body.light` (CSS variables). Stream page: `theme=`, `finish=`, `palette=` (preset or six hex).
 - `public/js/main.js` — UI controller. Handles WebSocket events, marble animation, game log.
 - `public/js/socket.js` — thin WebSocket client wrapper.
 - `cli.mjs` — standalone terminal client. ASCII board renderer, interactive play via readline.

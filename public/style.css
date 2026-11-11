@@ -825,3 +825,39 @@ body.kiosk .cm-name .log-dot { width: 0.6em; height: 0.6em; }
 .wc-coach { font-size: 0.9rem; margin-top: -0.3rem; }
 .wc-mvp { color: #f0c040; font-weight: 700; }
 .cm-coach { color: var(--muted); }
+
+/* ---- Board page: palettes and seat colours ---- */
+.pal-chip { display: inline-flex; align-items: center; gap: 6px; }
+.pal-strip { display: inline-flex; border-radius: 4px; overflow: hidden; box-shadow: 0 0 0 1px #0004; }
+.pal-strip span { width: 9px; height: 14px; }
+.seat-picks { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 0.4rem 0 0.2rem; }
+.seat-pick { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; font-size: 0.72rem; }
+.seat-pick input[type=color] { width: 38px; height: 30px; border: none; background: none; padding: 0; cursor: pointer; }
+.small-btn { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+
+/* ---- Light mode (Board page → App) ---- */
+body.light {
+  --bg: #eef1f6; --surface: #ffffff; --card: #e6ebf3; --text: #18202e; --muted: #5d6779; --accent: #d63a55;
+  color-scheme: light;
+}
+body.light .card, body.light .panel, body.light #sidebar, body.light #analysis-panel, body.light .gear-pop { box-shadow: 0 2px 10px #0000000f; }
+body.light #side-nav { background: #ffffff; border-right: 1px solid #0000001a; }
+body.light .nav-item:hover { background: #0000000a; }
+body.light .nav-item.on { background: #00000012; }
+body.light .chip { background: #ffffff; color: var(--text); border-color: #00000024; }
+body.light .chip.on { background: #fff4d6; border-color: #d9a520; }
+body.light input, body.light select, body.light textarea { background: #ffffff; color: var(--text); border-color: #00000030; }
+body.light button.secondary { background: #e3e8f0; color: var(--text); }
+body.light .table th, body.light .table td, body.light .league-table td, body.light #ap-summary td, body.light #ap-summary th { border-color: #0000001a; }
+body.light .cm-line { background: #ffffffe6; color: var(--text); box-shadow: 0 1px 4px #0002; }
+body.light #watch-card { background: #ffffffee; color: var(--text); }
+body.light .as-status, body.light pre.admin-err { background: #00000008; }
+body.light .live-game, body.light .game-card { background: #ffffff; border-color: #0000001f; }
+body.light #board-area { background: #dfe4ec; }
+body.light .log-entry { color: var(--text); }
+body.light .muted { color: var(--muted); }
+/* Board page: the preview fits beside the options (and the side menu), and stays in view while you scroll them. */
+.board-settings { flex-wrap: nowrap; }
+.board-preview { width: min(640px, calc(100vw - 260px - 420px - 4rem), calc(100vh - 150px)); height: auto; aspect-ratio: 1; min-width: 280px; position: sticky; top: 1rem; }
+.board-opts { max-width: 420px; }
+@media (max-width: 900px) { .board-settings { flex-wrap: wrap; } .board-preview { width: min(90vw, 520px); position: static; } }

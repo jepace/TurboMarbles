@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels, THEMES, FINISHES, DEFAULT_PALETTE } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
@@ -52,6 +52,7 @@ try {
   for (const k of ['musicVol', 'sfxVol']) if (typeof saved[k] === 'number') settings[k] = saved[k];
   if (typeof saved.boardTrack === 'string') settings.boardTrack = saved.boardTrack;
   if (typeof saved.boardMarbles === 'string') settings.boardMarbles = saved.boardMarbles;
+  for (const k of ['boardTheme', 'boardFinish', 'palette', 'appTheme']) if (typeof saved[k] === 'string') settings[k] = saved[k];
 } catch { /* storage unavailable: use defaults */ }
 function saveSettings() {
   if (KIOSK) return;   // the stream page's options are per URL, not saved
@@ -70,6 +71,13 @@ const COLOR_MAP = {
   yellow: '#f5d000', orange: '#ff7800', pink: '#e8208c',
   white:  '#e0e0e0', green:  '#44bb44', blue: '#2288f0',
 };
+// The viewer's palette (Board page): one colour per arm, in PLAYER_CONFIG order.
+// COLOR_MAP follows it, so dots, labels and names everywhere match the board.
+const paletteOf = str => { const a = String(str ?? '').split(','); return a.length === 6 && a.every(h => /^#[0-9a-f]{6}$/i.test(h)) ? a : null; };
+function applyPaletteMap() {
+  const pal = paletteOf(settings.palette) ?? DEFAULT_PALETTE;
+  PLAYER_CONFIG.forEach((c, i) => { COLOR_MAP[c.color] = pal[i]; });
+}
 
 // ARM_MAP and ARM_COLORS imported from ./constants.js
 
@@ -1006,7 +1014,7 @@ on('identity', ({ player, prefs, needsPassword, admin }) => {
   if (player && profileData) setTimeout(() => renderAccountSection(), 0);   // a rename shows at once
   if (player && needsPassword) { $('pw-pop-name').textContent = player.name; $('pw-pop').style.display = 'flex'; }
   if (!player) { saveKey(null); me = null; myPrefs = {}; } else { me = player; if (prefs) myPrefs = prefs; }
-  for (const k of ['myColor', 'boardTrack', 'boardMarbles']) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); }
+  for (const k of ['myColor', 'boardTrack', 'boardMarbles', 'boardTheme', 'boardFinish', 'palette', 'appTheme']) if (myPrefs[k] && myPrefs[k] !== settings[k]) { settings[k] = myPrefs[k]; saveSettings(); applyBoardLook(); }
   applyBoardLook();
   updateLanding();
 
@@ -1147,7 +1155,19 @@ function renderProfile() {
 
 const TRACK_LOOKS = [['', 'muted track'], ['solid', 'solid track'], ['deep', 'deep track'], ['outline', 'outlined track']];
 const MARBLE_LOOKS = [['', 'socketed marbles'], ['classic', 'plain marbles'], ['dark', 'dark-ringed marbles'], ['white', 'white-ringed marbles']];
-function applyBoardLook() { setBoardLook({ track: settings.boardTrack, marbles: settings.boardMarbles }); if (gameState) drawBoard(gameState); }
+function applyBoardLook() {
+  setBoardLook({ track: settings.boardTrack, marbles: settings.boardMarbles, theme: settings.boardTheme ?? 'midnight', finish: settings.boardFinish ?? 'glossy', palette: paletteOf(settings.palette) ?? DEFAULT_PALETTE });
+  applyPaletteMap();
+  applyAppTheme();
+  if (gameState) drawBoard(gameState);
+}
+// Light / dark mode for the whole app ('auto' follows the system).
+function applyAppTheme() {
+  const mode = settings.appTheme ?? 'dark';
+  const light = mode === 'light' || (mode === 'auto' && window.matchMedia?.('(prefers-color-scheme: light)').matches);
+  document.body.classList.toggle('light', !!light && !KIOSK);
+}
+window.matchMedia?.('(prefers-color-scheme: light)').addEventListener?.('change', () => applyAppTheme());
 function prefSelect(key, opts) {
   const s = el('select', {}, ...opts.map(([v, t]) => el('option', { value: v, textContent: t })));
   s.value = myPrefs[key] ?? '';
@@ -2113,18 +2133,50 @@ function chip(on, label, fn, ball) {
 }
 function previewState() {
   const mk = (zone, id, extra) => ({ id, zone, space: null, slot: null, starEligible: false, ...extra });
-  return { players: [
-    { index: 0, color: 'blue', name: 'You', marbles: [mk('track', 0, { space: 80 }), mk('track', 1, { space: 3 }), mk('home', 2, { slot: 4 }), mk('base', 3)] },
-    { index: 1, color: 'yellow', name: 'Them', marbles: [mk('track', 0, { space: 45 }), mk('track', 1, { space: 82 }), mk('base', 2), mk('base', 3)] },
-  ], turnIndex: 0, phase: 'IN_TURN', dice: null, diceUsed: [false, false] };
+  const cols = ['blue', 'pink', 'orange', 'yellow', 'green', 'white'];
+  const spots = [[80, 3], [12, 30], [26, 47], [45, 82], [55, 64], [70, 36]];
+  return { players: cols.map((color, i) => ({ index: i, color, name: i ? color : 'You',
+    marbles: [mk('track', 0, { space: spots[i][0] }), mk('track', 1, { space: spots[i][1] }), mk('home', 2, { slot: 4 }), mk(i === 2 ? 'center' : 'base', 3)] })),
+    turnIndex: 0, phase: 'IN_TURN', dice: null, diceUsed: [false, false] };
 }
+// Colour palettes (one colour per arm, in PLAYER_CONFIG order: the seats clockwise from the bottom).
+const PALETTES = [
+  ['classic', 'Classic', DEFAULT_PALETTE],
+  ['rainbow', 'Rainbow', ['#e53935', '#fb8c00', '#fdd835', '#43a047', '#1e88e5', '#8e24aa']],
+  ['safe', 'Colour-blind safe', ['#0072b2', '#e69f00', '#009e73', '#f0e442', '#cc79a7', '#56b4e9']],
+  ['pastel', 'Pastel', ['#8ab6f9', '#f7a8d0', '#ffc48a', '#fbe58a', '#a8e6a3', '#f0f0f0']],
+  ['earthy', 'Earthy', ['#3b6ea5', '#a23b72', '#c76b29', '#d4a72c', '#5b8c3a', '#d8d2c4']],
+  ['jewel', 'Jewels', ['#0f52ba', '#9b111e', '#e67e22', '#ffbf00', '#046307', '#c0c0c0']],
+  ['neon', 'Neon', ['#00f0ff', '#ff2bd6', '#ff8a00', '#fff36b', '#39ff14', '#ffffff']],
+];
+const THEME_NAMES = { midnight: 'Midnight', daylight: 'Daylight', wood: 'Wood', neon: 'Neon', felt: 'Felt', stone: 'Stone' };
+const FINISH_NAMES = { glossy: 'Glossy', glass: 'Glass', swirl: "Cat's eye", matte: 'Matte', metal: 'Metallic', pearl: 'Pearl' };
+const SEAT_NAMES = ['Bottom', 'Lower left', 'Upper left', 'Top', 'Upper right', 'Lower right'];
 function renderBoardPage() {
   const cols = ['blue', 'pink', 'orange', 'yellow', 'green', 'white'];
+  const pal = paletteOf(settings.palette) ?? DEFAULT_PALETTE;
+  const ball = i => pal[i];
+  $('pick-app').replaceChildren(...[['dark', '🌙 Dark'], ['light', '☀️ Light'], ['auto', '⚙ System']].map(([v, t]) => chip((settings.appTheme ?? 'dark') === v, t, () => setLook('appTheme', v === 'dark' ? '' : v))));
+  $('pick-theme').replaceChildren(...Object.keys(THEMES).map(k => chip((settings.boardTheme ?? 'midnight') === k, THEME_NAMES[k] ?? k, () => setLook('boardTheme', k === 'midnight' ? '' : k))));
+  $('pick-finish').replaceChildren(...FINISHES.map(k => chip((settings.boardFinish ?? 'glossy') === k, FINISH_NAMES[k] ?? k, () => setLook('boardFinish', k === 'glossy' ? '' : k), ball(0))));
+  $('pick-palette').replaceChildren(...PALETTES.map(([k, t, p]) => {
+    const on = pal.join(',') === p.join(',');
+    const b = el('button', { class: 'chip pal-chip' + (on ? ' on' : '') }, el('span', { class: 'pal-strip' }, ...p.map(c => el('span', { style: `background:${c}` }))), t);
+    b.addEventListener('click', () => setLook('palette', k === 'classic' ? '' : p.join(',')));
+    return b;
+  }));
+  // Each seat's colour (the order round the board), with a picker.
+  $('pick-seats').replaceChildren(...pal.map((c, i) => {
+    const inp = el('input', { type: 'color', value: c, title: `${SEAT_NAMES[i]} seat` });
+    inp.addEventListener('change', () => { const p = pal.slice(); p[i] = inp.value; setLook('palette', p.join(',')); });
+    return el('label', { class: 'seat-pick' }, inp, el('span', { class: 'muted' }, SEAT_NAMES[i]));
+  }), (() => { const b = el('button', { class: 'secondary small-btn', title: 'Turn the colours one seat round' }, '↻ Rotate'); b.addEventListener('click', () => setLook('palette', [pal[5], ...pal.slice(0, 5)].join(','))); return b; })(),
+    (() => { const b = el('button', { class: 'secondary small-btn', title: 'Mix the colours up' }, '🔀 Shuffle'); b.addEventListener('click', () => setLook('palette', [...pal].sort(() => Math.random() - 0.5).join(','))); return b; })());
   $('pick-color').replaceChildren(chip(!settings.myColor, 'As dealt', () => setLook('myColor', '')),
-    ...cols.map(c => chip(settings.myColor === c, c[0].toUpperCase() + c.slice(1), () => setLook('myColor', c), BALL[c])));
+    ...cols.map((c, i) => chip(settings.myColor === c, SEAT_NAMES[i], () => setLook('myColor', c), ball(i))));
   $('pick-track').replaceChildren(...TRACK_LOOKS.map(([v, t]) => chip((settings.boardTrack ?? '') === v, t.replace(' track', ''), () => setLook('boardTrack', v))));
   $('pick-marbles').replaceChildren(...MARBLE_LOOKS.map(([v, t]) => chip((settings.boardMarbles ?? '') === v, t.replace(' marbles', ''), () => setLook('boardMarbles', v))));
-  // Preview: I sit at the bottom as blue, shown in my colour.
+  // Preview: all six seats, a few marbles out, mine at the bottom.
   const gs = previewState();
   const fav = settings.myColor;
   setColorShift(fav ? (armOfColor(fav) - armOfColor('blue') + 6) % 6 : 0);
@@ -3476,13 +3528,19 @@ function streamUrl() {
   if ($('sb-numbers').checked) q.set('numbers', '1');
   if (!$('sb-log').checked) q.set('log', '0');
   if (!$('sb-pips').checked) q.set('players_list', '0');
+  if ($('sb-theme').value !== 'midnight') q.set('theme', $('sb-theme').value);
+  if ($('sb-finish').value !== 'glossy') q.set('finish', $('sb-finish').value);
+  if ($('sb-palette').value !== 'classic') q.set('palette', $('sb-palette').value);
   if ($('sb-sound').checked) q.set('sound', '1');
   if (!$('sb-music').checked) q.set('music', '0');
   if ($('sb-speed').value !== 'normal') q.set('speed', $('sb-speed').value);
   return `${location.origin}/?${q}`;
 }
 function renderStreamUrl() { const u = streamUrl(); $('sb-url').value = u; $('sb-open').href = u; }
-for (const id of ['sb-players', 'sb-speed', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound', 'sb-music']) $(id).addEventListener('change', renderStreamUrl);
+$('sb-theme').replaceChildren(...Object.keys(THEMES).map(k => el('option', { value: k, textContent: 'Board: ' + (THEME_NAMES[k] ?? k) })));
+$('sb-finish').replaceChildren(...FINISHES.map(k => el('option', { value: k, textContent: 'Marbles: ' + (FINISH_NAMES[k] ?? k) })));
+$('sb-palette').replaceChildren(...PALETTES.map(([k, t]) => el('option', { value: k, textContent: 'Colours: ' + t })));
+for (const id of ['sb-players', 'sb-speed', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound', 'sb-music', 'sb-theme', 'sb-finish', 'sb-palette']) $(id).addEventListener('change', renderStreamUrl);
 renderStreamUrl();
 $('sb-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('sb-url').value); toastAnywhere('Stream URL copied.'); }
@@ -3505,6 +3563,12 @@ if (KIOSK) {
   // Board numbers are each player's own count, which means nothing to a
   // viewer: off unless numbers=1 (not saved to this browser's settings).
   settings.numbers = q.get('numbers') === '1';
+  // Board look per URL: theme=wood, finish=swirl, palette=rainbow (a preset name) or six hex colours without '#'.
+  if (THEMES[q.get('theme')]) settings.boardTheme = q.get('theme');
+  if (FINISHES.includes(q.get('finish'))) settings.boardFinish = q.get('finish');
+  const qp = q.get('palette');
+  if (qp) { const preset = PALETTES.find(([k]) => k === qp); const hex = qp.split(',').map(h => '#' + h.replace(/^#/, '')).join(','); settings.palette = preset ? preset[2].join(',') : paletteOf(hex) ? hex : undefined; }
+  applyBoardLook();
   settings.feedback = false;
   applySquareNumbers();
   document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');

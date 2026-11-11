@@ -219,10 +219,14 @@ export function authenticate(key) {
 // ---- Preferences ---------------------------------------------------------------
 // Only known keys with known values are kept.
 const PREFS = { apFilter: ['errors', 'inacc', 'all'], apPlayer: ['me', 'all'], myColor: ['blue', 'pink', 'orange', 'yellow', 'green', 'white'],
-  boardTrack: ['muted', 'solid', 'deep', 'outline'], boardMarbles: ['socket', 'classic', 'dark', 'white'] };
+  boardTrack: ['muted', 'solid', 'deep', 'outline'], boardMarbles: ['socket', 'classic', 'dark', 'white'],
+  boardTheme: ['midnight', 'daylight', 'wood', 'neon', 'felt', 'stone'], boardFinish: ['glossy', 'glass', 'swirl', 'matte', 'metal', 'pearl'],
+  appTheme: ['dark', 'light', 'auto'],
+  // Six colours, one per arm: "#rrggbb,#rrggbb,…".
+  palette: v => typeof v === 'string' && /^#[0-9a-f]{6}(,#[0-9a-f]{6}){5}$/i.test(v) };
 export function cleanPrefs(p) {
   const out = {};
-  if (p && typeof p === 'object') for (const [k, ok] of Object.entries(PREFS)) if (ok.includes(p[k])) out[k] = p[k];
+  if (p && typeof p === 'object') for (const [k, ok] of Object.entries(PREFS)) if (typeof ok === 'function' ? ok(p[k]) : ok.includes(p[k])) out[k] = p[k];
   return out;
 }
 export function getPrefs(id) {

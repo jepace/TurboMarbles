@@ -100,6 +100,7 @@
       <div class="sb-opts">
         <label>Players <select id="sb-players"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option></select></label>
         <label>Speed <select id="sb-speed"><option value="slow">Slow</option><option value="normal" selected>Normal</option><option value="fast">Fast</option></select></label>
+        <select id="sb-theme"></select><select id="sb-finish"></select><select id="sb-palette"></select>
         <label><input type="checkbox" id="sb-numbers"> Numbers on board</label>
         <label><input type="checkbox" id="sb-log" checked> Move log</label>
         <label><input type="checkbox" id="sb-pips" checked> Player list</label>
@@ -191,12 +192,22 @@
     <div class="board-settings">
       <div class="board-preview"><canvas id="preview-canvas"></canvas></div>
       <div class="board-opts">
-        <h3>My colour <span class="help" title="Your arm is shown in this colour; the board's colours turn with it, keeping their order. Only you see it.">?</span></h3>
+        <h3>App</h3>
+        <div id="pick-app" class="chips"></div>
+        <h3>Board</h3>
+        <div id="pick-theme" class="chips"></div>
+        <h3>Colours</h3>
+        <div id="pick-palette" class="chips"></div>
+        <div id="pick-seats" class="seat-picks"></div>
+        <h3>My seat <span class="help" title="Your own arm is shown in this seat's colour; the colours turn with it, keeping their order. Only you see it.">?</span></h3>
         <div id="pick-color" class="chips"></div>
+        <h3>Marble finish</h3>
+        <div id="pick-finish" class="chips"></div>
+        <h3>Marble ring</h3>
+        <div id="pick-marbles" class="chips"></div>
         <h3>Track</h3>
         <div id="pick-track" class="chips"></div>
-        <h3>Marbles</h3>
-        <div id="pick-marbles" class="chips"></div>
+        <p class="muted">Only you see these; other players keep their own.</p>
       </div>
     </div>
   </div>

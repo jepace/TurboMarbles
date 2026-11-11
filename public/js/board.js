@@ -28,19 +28,111 @@ const START_SPACES      = new Map(PLAYER_CONFIG.map((p, i) => [p.start,      i])
 const HOME_ENTRY_SPACES = new Map(PLAYER_CONFIG.map((p, i) => [p.homeEntry,  i]));
 
 // arms 0-5: blue, pink, orange, yellow, green, white (clockwise from bottom)
-const BASE_COLORS = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
+export const DEFAULT_PALETTE = ['#2288f0','#e8208c','#ff7800','#f5d000','#44bb44','#e0e0e0'];
+const BASE_COLORS = DEFAULT_PALETTE.slice();
 const BASE_DARK   = ['#1155cc','#a01060','#c05000','#b09800','#228822','#909090'];
 const COLORS = BASE_COLORS.slice();
 const DARK_C = BASE_DARK.slice();
+let curShift = 0;
+// A viewer's palette: the display colour of each arm (arm order as in
+// PLAYER_CONFIG: blue, pink, orange, yellow, green, white). Display only.
+export function setPalette(hexes) {
+  const ok = Array.isArray(hexes) && hexes.length === 6 && hexes.every(h => /^#[0-9a-f]{6}$/i.test(h));
+  const src = ok ? hexes : DEFAULT_PALETTE;
+  for (let i = 0; i < 6; i++) { BASE_COLORS[i] = src[i].toLowerCase(); BASE_DARK[i] = mix(BASE_COLORS[i], '#000000', 0.42); }
+  setColorShift(curShift);
+}
+
+// ---- Board themes: every colour the board is drawn with ----
+// texture: a procedural surface for the disc (wood grain, felt, stone); glow: neon strokes.
+export const THEMES = {
+  midnight: { page: '#050b1e', disc: ['#1e2f60', '#121e4a', '#07101e'], rim: '#c8920a', rimInner: '#f5c84280', hole: '#06080f', holeEdge: 'rgba(0,0,0,0.6)', holeHi: 'rgba(255,255,255,0.28)',
+    blend: '#16203a', outlineBlend: '#0d1530', rail: 'rgba(255,255,255,0.10)', starRing: 'rgba(245,200,66,0.25)', star: '#f5c842', starDisc: '#c8920a', starDark: '#8a5e00', starGlow: '#c8920a30',
+    hubBg: '#06101e', hubRing: '#c8920a', centerRing: 'rgba(255,255,255,0.90)', labelBg: 'rgba(8,12,24,0.88)', labelFg: '#eef2fa', num: 'rgba(255,255,255,0.36)', numStar: 'rgba(70,40,0,0.6)',
+    socket: 'rgba(8,12,24,0.95)', shadow: 'rgba(0,0,0,0.45)' },
+  daylight: { lightBoard: true, page: '#e9edf3', disc: ['#ffffff', '#f1f3f7', '#d6dbe5'], rim: '#9aa3b2', rimInner: '#ffffffa0', hole: '#cfd5df', holeEdge: 'rgba(40,50,70,0.35)', holeHi: 'rgba(0,0,0,0.10)',
+    blend: '#f4f6fa', outlineBlend: '#ffffff', rail: 'rgba(0,0,0,0.08)', starRing: 'rgba(180,130,20,0.35)', star: '#f6c445', starDisc: '#d99a10', starDark: '#7a5208', starGlow: '#f0b42930',
+    hubBg: '#ffffff', hubRing: '#9aa3b2', centerRing: 'rgba(60,70,90,0.8)', labelBg: 'rgba(255,255,255,0.94)', labelFg: '#1a2233', num: 'rgba(0,0,0,0.38)', numStar: 'rgba(70,40,0,0.6)',
+    socket: 'rgba(255,255,255,0.92)', shadow: 'rgba(0,0,0,0.22)' },
+  wood: { page: '#1a1009', disc: ['#c08a52', '#a8713e', '#764a24'], texture: 'wood', rim: '#e0b870', rimInner: '#f6e2b080', hole: '#3a2412', holeEdge: 'rgba(0,0,0,0.55)', holeHi: 'rgba(255,230,190,0.20)',
+    blend: '#8a5a30', outlineBlend: '#7a4e28', rail: 'rgba(40,20,5,0.22)', starRing: 'rgba(60,30,5,0.35)', star: '#f0cc70', starDisc: '#b8862a', starDark: '#5a3a10', starGlow: '#e0b87040',
+    hubBg: '#5a3a1c', hubRing: '#e0b870', centerRing: 'rgba(255,235,200,0.85)', labelBg: 'rgba(40,24,10,0.9)', labelFg: '#fbefdc', num: 'rgba(255,240,215,0.5)', numStar: 'rgba(70,40,0,0.6)',
+    socket: 'rgba(40,24,10,0.95)', shadow: 'rgba(20,10,0,0.5)' },
+  neon: { page: '#000000', disc: ['#0c0c18', '#06060c', '#000000'], rim: '#ff2bd6', rimInner: '#00f0ffa0', hole: '#000000', holeEdge: 'rgba(0,240,255,0.6)', holeHi: 'rgba(0,240,255,0.10)',
+    blend: '#000000', outlineBlend: '#02020a', rail: 'rgba(0,240,255,0.16)', starRing: 'rgba(255,43,214,0.5)', star: '#fff36b', starDisc: '#1c1800', starDark: '#fff36b', starGlow: '#fff36b30',
+    hubBg: '#000000', hubRing: '#00f0ff', centerRing: '#ff2bd6', labelBg: 'rgba(0,0,0,0.85)', labelFg: '#ffffff', num: 'rgba(0,240,255,0.6)', numStar: 'rgba(255,243,107,0.9)',
+    socket: 'rgba(0,0,0,0.95)', shadow: 'rgba(0,0,0,0)', glow: 1, outlineTracks: true },
+  felt: { page: '#0a1d12', disc: ['#358552', '#2a7344', '#1a4e2e'], texture: 'felt', rim: '#7a5432', rimInner: '#b0885880', hole: '#0e2a19', holeEdge: 'rgba(0,0,0,0.5)', holeHi: 'rgba(255,255,255,0.12)',
+    blend: '#1d4f31', outlineBlend: '#173f27', rail: 'rgba(255,255,255,0.07)', starRing: 'rgba(245,200,66,0.3)', star: '#f5c842', starDisc: '#c8920a', starDark: '#8a5e00', starGlow: '#c8920a30',
+    hubBg: '#123a24', hubRing: '#b08858', centerRing: 'rgba(255,255,255,0.85)', labelBg: 'rgba(10,30,18,0.9)', labelFg: '#eef6ee', num: 'rgba(255,255,255,0.4)', numStar: 'rgba(70,40,0,0.6)',
+    socket: 'rgba(10,30,18,0.95)', shadow: 'rgba(0,0,0,0.45)' },
+  stone: { lightBoard: true, page: '#131518', disc: ['#e4e4e0', '#cfcfca', '#a0a09b'], texture: 'stone', rim: '#596069', rimInner: '#ffffff70', hole: '#5d5f63', holeEdge: 'rgba(0,0,0,0.45)', holeHi: 'rgba(255,255,255,0.28)',
+    blend: '#c9c9c4', outlineBlend: '#d8d8d4', rail: 'rgba(0,0,0,0.10)', starRing: 'rgba(120,90,20,0.35)', star: '#f5c842', starDisc: '#c8920a', starDark: '#8a5e00', starGlow: '#c8920a30',
+    hubBg: '#76787c', hubRing: '#40454d', centerRing: 'rgba(255,255,255,0.9)', labelBg: 'rgba(30,32,36,0.9)', labelFg: '#f2f2f2', num: 'rgba(0,0,0,0.42)', numStar: 'rgba(70,40,0,0.6)',
+    socket: 'rgba(60,62,66,0.95)', shadow: 'rgba(0,0,0,0.3)' },
+};
+let T = THEMES.midnight;
+export function setTheme(name) { T = THEMES[name] ?? THEMES.midnight; textureCache = null; setColorShift(curShift); }
+
+// Procedural textures for the disc (drawn once per theme and board size).
+let textureCache = null;
+function rng(seed) { return () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; }; }
+function discTexture() {
+  if (!T.texture) return null;
+  const size = Math.ceil(W);
+  if (textureCache?.size === size && textureCache.kind === T.texture) return textureCache.canvas;
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'), rnd = rng(7);
+  if (T.texture === 'wood') {
+    g.fillStyle = T.disc[1]; g.fillRect(0, 0, size, size);
+    // Grain: long wavy lines, darker and lighter, plus a couple of knots.
+    for (let i = 0; i < 170; i++) {
+      const y0 = rnd() * size, amp = size * (0.004 + rnd() * 0.012), freq = (1 + rnd() * 2.5) * Math.PI / size, ph = rnd() * 6;
+      g.beginPath();
+      for (let x = 0; x <= size; x += 6) g.lineTo(x, y0 + Math.sin(x * freq + ph) * amp + Math.sin(x * freq * 3.1 + ph) * amp * 0.3);
+      const dark = rnd() < 0.7;
+      g.strokeStyle = dark ? `rgba(60,30,8,${0.06 + rnd() * 0.16})` : `rgba(255,220,170,${0.04 + rnd() * 0.10})`;
+      g.lineWidth = 0.6 + rnd() * size * 0.004; g.stroke();
+    }
+    for (let k = 0; k < 3; k++) {
+      const x = rnd() * size, y = rnd() * size, rad = size * (0.012 + rnd() * 0.02);
+      for (let j = 6; j > 0; j--) { g.beginPath(); g.ellipse(x, y, rad * j / 3, rad * j / 5, 0, 0, Math.PI * 2); g.strokeStyle = `rgba(70,35,10,${0.06 + j * 0.02})`; g.lineWidth = 1.2; g.stroke(); }
+    }
+  } else if (T.texture === 'felt') {
+    g.fillStyle = T.disc[1]; g.fillRect(0, 0, size, size);
+    const img = g.getImageData(0, 0, size, size), d = img.data;
+    for (let i = 0; i < d.length; i += 4) { const n = (rnd() - 0.5) * 26; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+    g.putImageData(img, 0, 0);
+  } else if (T.texture === 'stone') {
+    g.fillStyle = T.disc[1]; g.fillRect(0, 0, size, size);
+    for (let i = 0; i < 260; i++) { const x = rnd() * size, y = rnd() * size, rr = size * (0.01 + rnd() * 0.05); g.beginPath(); g.arc(x, y, rr, 0, Math.PI * 2); g.fillStyle = `rgba(${rnd() < 0.5 ? '255,255,255' : '90,90,85'},${0.03 + rnd() * 0.05})`; g.fill(); }
+    // Veins: random walks.
+    for (let v = 0; v < 9; v++) {
+      let x = rnd() * size, y = rnd() * size, a = rnd() * Math.PI * 2;
+      g.beginPath(); g.moveTo(x, y);
+      for (let st = 0; st < 120; st++) { a += (rnd() - 0.5) * 0.6; x += Math.cos(a) * size * 0.008; y += Math.sin(a) * size * 0.008; g.lineTo(x, y); }
+      g.strokeStyle = `rgba(80,80,90,${0.10 + rnd() * 0.18})`; g.lineWidth = 0.6 + rnd() * 1.8; g.stroke();
+    }
+  }
+  textureCache = { size, kind: T.texture, canvas: c };
+  return c;
+}
+// Neon: strokes glow in their own colour.
+function glowOn(color, k = 1) { if (T.glow) { ctx.shadowColor = color; ctx.shadowBlur = W * 0.014 * T.glow * k; } }
+function glowOff() { if (T.glow) { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; } }
 // Each viewer may see their own arm in a favourite colour: the colours turn
 // round the ring by `shift` arms, keeping their order (display only).
 // Board look (a user preference). Track strips: 'muted' (default: colour
 // blended toward the background), 'solid', 'deep', 'outline'. Marbles:
 // 'socket' (default: in a dark socket), 'classic', 'dark' (black ring), 'white' (white ring).
-let trackStyle = 'muted', marbleStyle = 'socket';
-export function setBoardLook({ track, marbles } = {}) {
+let trackStyle = 'muted', marbleStyle = 'socket', finish = 'glossy';
+export const FINISHES = ['glossy', 'glass', 'swirl', 'matte', 'metal', 'pearl'];
+export function setBoardLook({ track, marbles, theme, finish: fin, palette } = {}) {
   trackStyle = ['muted', 'solid', 'deep', 'outline'].includes(track) ? track : 'muted';
   marbleStyle = ['socket', 'classic', 'dark', 'white'].includes(marbles) ? marbles : 'socket';
+  finish = FINISHES.includes(fin) ? fin : 'glossy';
+  if (theme !== undefined) setTheme(theme);
+  if (palette !== undefined) setPalette(palette);
 }
 function mix(hex, toHex, t) {
   const c = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
@@ -48,16 +140,23 @@ function mix(hex, toHex, t) {
   return '#' + a.map((v, i) => Math.round(v + (b[i] - v) * t).toString(16).padStart(2, '0')).join('');
 }
 function trackPaint(color) {
+  if (T.outlineTracks || trackStyle === 'outline') return [mix(color, T.outlineBlend, 0.85), color, Math.max(2, W * 0.004)];
   if (trackStyle === 'solid')   return [color + 'ff', null];
   if (trackStyle === 'deep')    return [mix(color, '#000000', 0.6), null];
-  if (trackStyle === 'outline') return [mix(color, '#0d1530', 0.85), color, Math.max(2, W * 0.004)];
-  return [mix(color, '#16203a', 0.45), null];
+  return [mix(color, T.blend, 0.45), null];
+}
+// On light boards a very light seat colour (white) would vanish: darken it a little there.
+function onTheme(hex) {
+  if (!T.lightBoard) return hex;
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.8 ? mix(hex, '#5a6272', 0.45) : hex;
 }
 export function setColorShift(shift = 0) {
-  for (let i = 0; i < 6; i++) { COLORS[i] = BASE_COLORS[(i + shift + 6) % 6]; DARK_C[i] = BASE_DARK[(i + shift + 6) % 6]; }
+  curShift = shift;
+  for (let i = 0; i < 6; i++) { COLORS[i] = onTheme(BASE_COLORS[(i + shift + 6) % 6]); DARK_C[i] = onTheme(BASE_DARK[(i + shift + 6) % 6]); }
 }
 
-const STAR_GOLD = '#f5c842';
+// (star colours come from the theme: T.star …)
 let hubInstant = false;
 const STEP = (2 * Math.PI) / ALL_ARMS;
 
@@ -228,13 +327,13 @@ function drawSeatLabels(gameState) {
     const pad = 3;
     const cx = Math.min(W - w / 2 - pad, Math.max(w / 2 + pad, cx0 + px * (w / 2)));
     const cy = Math.min(W - h / 2 - pad, Math.max(h / 2 + pad, cy0 + py * (w / 2)));
-    ctx.fillStyle = 'rgba(8,12,24,0.88)';
+    ctx.fillStyle = T.labelBg;
     ctx.strokeStyle = COLORS[ai];
     ctx.lineWidth = Math.max(1.5, W * 0.0025);
     ctx.beginPath();
     ctx.roundRect(cx - w / 2, cy - h / 2, w, h, h / 2);
     ctx.fill(); ctx.stroke();
-    ctx.fillStyle = '#eef2fa';
+    ctx.fillStyle = T.labelFg;
     ctx.fillText(text, cx, cy + 1);
   }
   ctx.restore();
@@ -254,7 +353,7 @@ function drawSquareLabels(n) {
     if (activeSet.has(START_SPACES.get(s)) || activeSet.has(HOME_ENTRY_SPACES.get(s))) continue;
     const star = STAR_SPACES.has(s);
     ctx.font = `600 ${Math.round(W * (star ? 0.015 : 0.0165))}px system-ui, sans-serif`;
-    ctx.fillStyle = star ? 'rgba(70,40,0,0.6)' : 'rgba(255,255,255,0.36)';
+    ctx.fillStyle = star ? T.numStar : T.num;
     ctx.fillText(String(labelFn(s)), p.x, p.y + (star ? W * 0.001 : 1));
   }
   ctx.restore();
@@ -340,18 +439,18 @@ function drawRimOverlay() {
   ctx.beginPath();
   ctx.rect(0, 0, W, W);
   ctx.arc(CX, CY, rimR, 0, Math.PI * 2, true); // clockwise hole
-  ctx.fillStyle = '#050b1e';
+  ctx.fillStyle = T.page;
   ctx.fill();
   ctx.restore();
   // Repaint the brass ring on top
   ctx.beginPath();
   ctx.arc(CX, CY, rimR, 0, Math.PI * 2);
-  ctx.strokeStyle = '#c8920a';
+  ctx.strokeStyle = T.rim;
   ctx.lineWidth   = W * 0.009;
-  ctx.stroke();
+  glowOn(T.rim); ctx.stroke(); glowOff();
   ctx.beginPath();
   ctx.arc(CX, CY, rimR - W * 0.006, 0, Math.PI * 2);
-  ctx.strokeStyle = '#f5c84280';
+  ctx.strokeStyle = T.rimInner;
   ctx.lineWidth   = W * 0.002;
   ctx.stroke();
 }
@@ -359,33 +458,37 @@ function drawRimOverlay() {
 // ---- Background: dark navy board with brass rim ----
 
 function drawBackground() {
-  ctx.fillStyle = '#050b1e';
+  ctx.fillStyle = T.page;
   ctx.fillRect(0, 0, W, W);
 
-  // Outer brass/gold rim circle
+  // Outer rim circle
   const rimR = W * 0.493;
   ctx.beginPath();
   ctx.arc(CX, CY, rimR, 0, Math.PI * 2);
-  ctx.strokeStyle = '#c8920a';
+  ctx.strokeStyle = T.rim;
   ctx.lineWidth   = W * 0.009;
   ctx.stroke();
 
   // Inner thin accent ring
   ctx.beginPath();
   ctx.arc(CX, CY, rimR - W * 0.006, 0, Math.PI * 2);
-  ctx.strokeStyle = '#f5c84280';
+  ctx.strokeStyle = T.rimInner;
   ctx.lineWidth   = W * 0.002;
   ctx.stroke();
 
-  // Board surface: dark navy radial gradient
-  const grad = ctx.createRadialGradient(CX, CY * 0.85, 0, CX, CY, rimR);
-  grad.addColorStop(0,   '#1e2f60');
-  grad.addColorStop(0.45, '#121e4a');
-  grad.addColorStop(1,   '#07101e');
+  // Board surface: the theme's texture (wood, felt, stone) or colour, shaded toward the edge.
+  ctx.save();
   ctx.beginPath();
   ctx.arc(CX, CY, rimR - W * 0.009, 0, Math.PI * 2);
+  ctx.clip();
+  const tex = discTexture();
+  if (tex) ctx.drawImage(tex, 0, 0, W, W);
+  const grad = ctx.createRadialGradient(CX, CY * 0.85, 0, CX, CY, rimR);
+  if (tex) { grad.addColorStop(0, 'rgba(255,255,255,0.10)'); grad.addColorStop(0.6, 'rgba(0,0,0,0)'); grad.addColorStop(1, 'rgba(0,0,0,0.35)'); }
+  else { grad.addColorStop(0, T.disc[0]); grad.addColorStop(0.45, T.disc[1]); grad.addColorStop(1, T.disc[2]); }
   ctx.fillStyle = grad;
-  ctx.fill();
+  ctx.fillRect(0, 0, W, W);
+  ctx.restore();
 }
 
 // ---- Arm zones: solid opaque colored strips ----
@@ -446,7 +549,7 @@ function fillQuad(pts, fillStyle, strokeStyle, lineWidth = 1.5) {
   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
   ctx.closePath();
   if (fillStyle)   { ctx.fillStyle = fillStyle; ctx.fill(); }
-  if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; ctx.stroke(); }
+  if (strokeStyle) { ctx.strokeStyle = strokeStyle; ctx.lineWidth = lineWidth; glowOn(strokeStyle); ctx.stroke(); glowOff(); }
 }
 
 // ---- Track rail: subtle path line ----
@@ -456,7 +559,7 @@ function drawTrackRail() {
   ctx.save();
   ctx.beginPath();
   ctx.arc(CX, CY, GEO.STAR_RING, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(245,200,66,0.25)';
+  ctx.strokeStyle = T.starRing;
   ctx.lineWidth   = W * 0.006;
   ctx.setLineDash([W * 0.02, W * 0.014]);
   ctx.stroke();
@@ -469,7 +572,7 @@ function drawTrackRail() {
     i === 1 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
   }
   ctx.closePath();
-  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ctx.strokeStyle = T.rail;
   ctx.lineWidth   = W * 0.010;
   ctx.lineJoin    = 'round';
   ctx.stroke();
@@ -490,18 +593,18 @@ function drawTrack(n = ALL_ARMS) {
       // Outer glow ring
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 2.0, 0, Math.PI * 2);
-      ctx.fillStyle = '#c8920a30';
+      ctx.fillStyle = T.starGlow;
       ctx.fill();
       // Gold disc
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#c8920a';
+      ctx.fillStyle = T.starDisc;
       ctx.fill();
-      ctx.strokeStyle = STAR_GOLD;
+      ctx.strokeStyle = T.star;
       ctx.lineWidth   = 2;
-      ctx.stroke();
+      glowOn(T.star); ctx.stroke(); glowOff();
       // 6-pointed star inset
-      drawStar6(p.x, p.y, R * 1.1, STAR_GOLD, '#8a5e00');
+      drawStar6(p.x, p.y, R * 1.1, T.star, T.starDark);
     } else if (START_SPACES.has(i) && activeSet.has(START_SPACES.get(i))) {
       const ai    = START_SPACES.get(i);
       const color = COLORS[ai];
@@ -513,7 +616,7 @@ function drawTrack(n = ALL_ARMS) {
       ctx.fill();
       ctx.strokeStyle = color;
       ctx.lineWidth   = 2;
-      ctx.stroke();
+      glowOn(color); ctx.stroke(); glowOff();
       // Arrow pointing clockwise along the track (in the arm's perpendicular direction)
       const ang = armAngle(ai);
       const tdx = Math.cos(ang),    tdy = Math.sin(ang);    // radial (arm axis)
@@ -554,16 +657,16 @@ function drawTrack(n = ALL_ARMS) {
       // Drilled hole: near-black fill with inner highlight arc for depth
       ctx.beginPath();
       ctx.arc(p.x, p.y, R, 0, Math.PI * 2);
-      ctx.fillStyle = '#06080f';
+      ctx.fillStyle = T.hole;
       ctx.fill();
       // Subtle outer rim
-      ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-      ctx.lineWidth   = 1;
-      ctx.stroke();
+      ctx.strokeStyle = T.holeEdge;
+      ctx.lineWidth   = T.glow ? 1.5 : 1;
+      glowOn(T.holeEdge, 0.5); ctx.stroke(); glowOff();
       // Inner highlight arc (top-left quadrant) simulates concave depression
       ctx.beginPath();
       ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.68, Math.PI * 1.05, Math.PI * 1.75);
-      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+      ctx.strokeStyle = T.holeHi;
       ctx.lineWidth   = R * 0.38;
       ctx.stroke();
     }
@@ -626,15 +729,15 @@ function drawBase(n) {
       // Drilled hole (same style as track spaces but slightly larger)
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.08, 0, Math.PI * 2);
-      ctx.fillStyle = '#06080f';
+      ctx.fillStyle = T.hole;
       ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.strokeStyle = T.holeEdge;
       ctx.lineWidth   = 1.5;
       ctx.stroke();
       if (isActive) {
         ctx.beginPath();
         ctx.arc(p.x - R * 0.15, p.y - R * 0.15, R * 1.0, Math.PI * 1.05, Math.PI * 1.75);
-        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.strokeStyle = T.holeHi;
         ctx.lineWidth   = R * 0.45;
         ctx.stroke();
       }
@@ -658,15 +761,16 @@ function drawHome(n) {
       if (!p) continue;
       ctx.beginPath();
       ctx.arc(p.x, p.y, R * 1.15, 0, Math.PI * 2);
-      ctx.fillStyle = '#06080f';
+      ctx.fillStyle = T.hole;
       ctx.fill();
       ctx.strokeStyle = color + ringAlpha;
       ctx.lineWidth   = 2.5;
-      ctx.stroke();
+      if (isActive) glowOn(color, 0.7);
+      ctx.stroke(); glowOff();
       if (isActive) {
         ctx.beginPath();
         ctx.arc(p.x - R * 0.12, p.y - R * 0.12, R * 0.9, Math.PI * 1.05, Math.PI * 1.75);
-        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.strokeStyle = T.holeHi;
         ctx.lineWidth   = R * 0.40;
         ctx.stroke();
       }
@@ -683,11 +787,11 @@ function drawCenter() {
   // Outer ring (dark navy, brass border)
   ctx.beginPath();
   ctx.arc(CX, CY, outerR, 0, Math.PI * 2);
-  ctx.fillStyle = '#06101e';
+  ctx.fillStyle = T.hubBg;
   ctx.fill();
-  ctx.strokeStyle = '#c8920a';
+  ctx.strokeStyle = T.hubRing;
   ctx.lineWidth   = 3;
-  ctx.stroke();
+  glowOn(T.hubRing); ctx.stroke(); glowOff();
 
   // Six colored wedge sections (one per arm color; all the occupant's color
   // while someone is in the hub)
@@ -711,7 +815,7 @@ function drawCenter() {
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.lineTo(CX + Math.cos(ang) * wedgeR, CY + Math.sin(ang) * wedgeR);
-    ctx.strokeStyle = '#c8920acc';
+    ctx.strokeStyle = T.hubRing + 'cc';
     ctx.lineWidth   = 1.5;
     ctx.stroke();
   }
@@ -720,11 +824,11 @@ function drawCenter() {
   const holeR = W * 0.022;
   ctx.beginPath();
   ctx.arc(CX, CY, holeR, 0, Math.PI * 2);
-  ctx.fillStyle = '#06080f';
+  ctx.fillStyle = T.hole;
   ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.90)';
+  ctx.strokeStyle = T.centerRing;
   ctx.lineWidth   = 3;
-  ctx.stroke();
+  glowOn(T.centerRing); ctx.stroke(); glowOff();
 }
 
 // ---- Marbles: glass sphere with specular highlight ----
@@ -748,7 +852,7 @@ function drawMarbles(gameState) {
       // Drop shadow
       ctx.beginPath();
       ctx.arc(pos.x + r * 0.18, pos.y + r * 0.22, r * 0.88, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillStyle = T.shadow;
       ctx.fill();
 
       // Glow for animating marble
@@ -763,22 +867,13 @@ function drawMarbles(gameState) {
       if (marbleStyle === 'socket') {
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, r * 1.2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(8,12,24,0.95)';
+        ctx.fillStyle = T.socket;
         ctx.fill();
       }
-      // Main marble body with radial gradient (dark at edge, bright at highlight)
-      const grad = ctx.createRadialGradient(
-        pos.x - r * 0.32, pos.y - r * 0.32, r * 0.04,
-        pos.x,            pos.y,             r
-      );
-      grad.addColorStop(0,    isAnimating ? '#ffffff' : lighten(color, 0.75));
-      grad.addColorStop(0.25, lighten(color, 0.45));
-      grad.addColorStop(0.65, color);
-      grad.addColorStop(1,    darken(color, 0.25));
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-      ctx.fillStyle   = grad;
-      ctx.fill();
+      // Main marble body in the chosen finish.
+      glowOn(color, 0.8);
+      paintMarbleBody(pos, r, color, isAnimating, player.index * 4 + marble.id);
+      glowOff();
 
       // Contrast ring: thicker and brighter in home/center where the background
       // is the same player color, making marbles hard to see.
@@ -801,8 +896,9 @@ function drawMarbles(gameState) {
       }
       ctx.stroke();
 
-      // Specular highlight — small bright spot (glass sphere reflection)
-      const specR = r * 0.24;
+      // Specular highlight — small bright spot (glass sphere reflection); none on matte.
+      if (finish === 'matte') continue;
+      const specR = r * (finish === 'glass' ? 0.3 : finish === 'metal' ? 0.18 : 0.24);
       const specX = pos.x - r * 0.30;
       const specY = pos.y - r * 0.30;
       const specG = ctx.createRadialGradient(specX, specY, 0, specX, specY, specR);
@@ -815,6 +911,62 @@ function drawMarbles(gameState) {
     }
   }
 }
+
+// The marble's body: glossy (default), glass (see-through), swirl (a cat's eye
+// ribbon of colour in clear glass), matte, metal (bright bands) or pearl (soft sheen).
+function paintMarbleBody(pos, r, color, isAnimating, seed) {
+  const g = (stops, x0 = -0.32, y0 = -0.32) => {
+    const gr = ctx.createRadialGradient(pos.x + r * x0, pos.y + r * y0, r * 0.04, pos.x, pos.y, r);
+    for (const [t, c] of stops) gr.addColorStop(t, c);
+    return gr;
+  };
+  ctx.beginPath(); ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+  if (finish === 'glass') {
+    ctx.fillStyle = g([[0, 'rgba(255,255,255,0.85)'], [0.3, rgba(color, 0.45)], [0.8, rgba(color, 0.7)], [1, darken(color, 0.35)]]);
+    ctx.fill();
+    // A bright caustic on the far side.
+    ctx.beginPath(); ctx.arc(pos.x + r * 0.32, pos.y + r * 0.36, r * 0.36, 0, Math.PI * 2);
+    ctx.fillStyle = g([[0, 'rgba(255,255,255,0.45)'], [1, 'rgba(255,255,255,0)']], 0.32, 0.36);
+    ctx.fill();
+  } else if (finish === 'swirl') {
+    ctx.fillStyle = g([[0, 'rgba(255,255,255,0.95)'], [0.5, 'rgba(225,235,245,0.75)'], [1, 'rgba(150,160,175,0.95)']]);
+    ctx.fill();
+    // The cat's-eye ribbon: two curved vanes of colour, turned differently per marble.
+    ctx.save(); ctx.beginPath(); ctx.arc(pos.x, pos.y, r * 0.98, 0, Math.PI * 2); ctx.clip();
+    ctx.translate(pos.x, pos.y); ctx.rotate((seed * 1.7) % (Math.PI * 2));
+    for (const sgn of [1, -1]) {
+      ctx.beginPath();
+      ctx.moveTo(-r, 0);
+      ctx.bezierCurveTo(-r * 0.35, -r * 1.25 * sgn, r * 0.35, r * 1.05 * sgn, r, 0);
+      ctx.bezierCurveTo(r * 0.35, r * 0.15 * sgn, -r * 0.35, -r * 0.35 * sgn, -r, 0);
+      ctx.fillStyle = sgn > 0 ? color : darken(color, 0.2);
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (finish === 'matte') {
+    ctx.fillStyle = g([[0, lighten(color, 0.25)], [0.7, color], [1, darken(color, 0.2)]], -0.2, -0.2);
+    ctx.fill();
+  } else if (finish === 'metal') {
+    const lg = ctx.createLinearGradient(pos.x - r, pos.y - r, pos.x + r, pos.y + r);
+    lg.addColorStop(0, lighten(color, 0.7)); lg.addColorStop(0.35, darken(color, 0.15)); lg.addColorStop(0.5, lighten(color, 0.85));
+    lg.addColorStop(0.62, darken(color, 0.35)); lg.addColorStop(1, lighten(color, 0.4));
+    ctx.fillStyle = lg; ctx.fill();
+  } else if (finish === 'pearl') {
+    ctx.fillStyle = g([[0, '#ffffff'], [0.35, lighten(color, 0.6)], [0.8, lighten(color, 0.3)], [1, color]]);
+    ctx.fill();
+    // A faint rainbow sheen.
+    ctx.beginPath(); ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+    const sh = ctx.createLinearGradient(pos.x - r, pos.y + r, pos.x + r, pos.y - r);
+    sh.addColorStop(0, 'rgba(255,120,200,0.18)'); sh.addColorStop(0.5, 'rgba(120,220,255,0.18)'); sh.addColorStop(1, 'rgba(255,240,140,0.18)');
+    ctx.fillStyle = sh; ctx.fill();
+  } else {
+    ctx.fillStyle = g([[0, isAnimating ? '#ffffff' : lighten(color, 0.75)], [0.25, lighten(color, 0.45)], [0.65, color], [1, darken(color, 0.25)]]);
+    ctx.fill();
+  }
+  // The ring stroke below follows the current path: put the outline back.
+  ctx.beginPath(); ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+}
+function rgba(hex, a) { const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)); return `rgba(${r},${g},${b},${a})`; }
 
 function marblePosition(marble, playerIndex) {
   const ai       = playerToArm[playerIndex] ?? playerIndex;
