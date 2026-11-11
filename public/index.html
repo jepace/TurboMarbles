@@ -91,6 +91,18 @@
         <button id="btn-create" class="big-btn">Play friends &amp; robots</button>
       </div>
       <div class="play-watch"><button id="btn-watch" class="link-btn" title="Robots play every seat, game after game; you just watch. Quit when you're done.">👀 Watch robots play (non-stop)</button></div>
+      <details class="stream-builder">
+      <summary>📺 Stream it (YouTube, Twitch…)</summary>
+      <p class="muted">A page of robots playing non-stop, with no menus or buttons: for an OBS Browser Source at 1920×1080.</p>
+      <div class="sb-opts">
+        <label>Players <select id="sb-players"><option>2</option><option>3</option><option>4</option><option>5</option><option selected>6</option></select></label>
+        <label><input type="checkbox" id="sb-numbers"> Numbers on board</label>
+        <label><input type="checkbox" id="sb-log" checked> Move log</label>
+        <label><input type="checkbox" id="sb-pips" checked> Player list</label>
+        <label><input type="checkbox" id="sb-sound"> Sound</label>
+      </div>
+      <div class="form-row"><input id="sb-url" type="text" readonly><button id="sb-copy" class="secondary">Copy</button><a id="sb-open" class="link-btn" target="_blank" rel="noopener">Open</a></div>
+    </details>
       <div class="form-row"><span id="qm-status" class="muted"></span><button id="btn-quick-cancel" class="secondary" style="display:none">Cancel</button></div>
       <select id="qm-players" hidden><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option></select>
       <select id="qm-match" hidden><option value="0">0</option><option value="1">1</option><option value="3" selected>3</option><option value="5">5</option><option value="7">7</option><option value="9">9</option></select>

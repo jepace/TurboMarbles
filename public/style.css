@@ -740,3 +740,12 @@ body.kiosk { cursor: none; }
 body.kiosk #score-line { font-size: 1.05rem; font-weight: 700; color: #f0c040; padding: 0.3rem 0; }
 body.kiosk #sidebar::before { content: 'TurboMarbles'; display: block; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.5px; color: #f0c040; margin-bottom: 0.4rem; }
 body.kiosk #game-log { flex: 1 1 auto; }
+body.kiosk-nolog #game-log { display: none !important; }
+body.kiosk-nolist #player-list { display: none !important; }
+.stream-builder { margin-top: 1.2rem; border-top: 1px solid #ffffff14; padding-top: 0.8rem; }
+.stream-builder h3 { margin: 0 0 0.3rem; }
+.sb-opts { display: flex; flex-wrap: wrap; gap: 0.5rem 1.2rem; margin: 0.6rem 0; }
+.sb-opts label { display: inline-flex; align-items: center; gap: 0.35rem; }
+#sb-url { flex: 1 1 auto; min-width: 0; font-size: 0.85rem; }
+details.stream-builder { margin-top: 0.6rem; padding-top: 0.5rem; }
+details.stream-builder summary { cursor: pointer; color: var(--muted); text-align: center; font-size: 0.9rem; }

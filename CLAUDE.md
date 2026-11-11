@@ -141,8 +141,10 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   (`room.watchers`) get every broadcast and the chat but never act for a seat or post. "Watch robots play" makes a
   room with robots in every seat (`createRoom` watch) whose games run back to back (`watchNextGameMs`). A
   robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
-- Streaming: `/?watch=robots&players=6[&sound=1]` is a kiosk page (no sign-in, no menus or buttons) that starts a
-  robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080.
+- Streaming: `/?watch=robots&players=6` is a kiosk page (no sign-in, no menus or buttons) that starts a
+  robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080. Options:
+  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`. The Play page's
+  "Stream it" fold-out builds the URL. Kiosk options are per URL, never saved to the browser's settings.
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),
   server status and recent errors. Players report others from the game's player list (⚑) and from a friend's chat.

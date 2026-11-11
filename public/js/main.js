@@ -46,6 +46,7 @@ try {
   if (typeof saved.boardMarbles === 'string') settings.boardMarbles = saved.boardMarbles;
 } catch { /* storage unavailable: use defaults */ }
 function saveSettings() {
+  if (KIOSK) return;   // the stream page's options are per URL, not saved
   try { localStorage.setItem('tm.settings', JSON.stringify(settings)); } catch { /* ignore */ }
 }
 // Bumps seen since the last marbleMoved. The server emits marbleBumped right
@@ -3405,6 +3406,23 @@ document.addEventListener('visibilitychange', loadLiveGames);
 // once, no sign-in, no menus or buttons; starts a new one if the room goes
 // (server restart). Sound is off unless sound=1.
 var KIOSK = new URLSearchParams(location.search).get('watch') === 'robots';
+// Settings → Streaming: build the kiosk URL from the options.
+function streamUrl() {
+  const q = new URLSearchParams({ watch: 'robots', players: $('sb-players').value });
+  if ($('sb-numbers').checked) q.set('numbers', '1');
+  if (!$('sb-log').checked) q.set('log', '0');
+  if (!$('sb-pips').checked) q.set('players_list', '0');
+  if ($('sb-sound').checked) q.set('sound', '1');
+  return `${location.origin}/?${q}`;
+}
+function renderStreamUrl() { const u = streamUrl(); $('sb-url').value = u; $('sb-open').href = u; }
+for (const id of ['sb-players', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound']) $(id).addEventListener('change', renderStreamUrl);
+renderStreamUrl();
+$('sb-copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('sb-url').value); toastAnywhere('Stream URL copied.'); }
+  catch { $('sb-url').select(); }
+});
+
 function startKiosk() {
   const q = new URLSearchParams(location.search);
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
@@ -3413,7 +3431,15 @@ function startKiosk() {
   send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true });
 }
 if (KIOSK) {
+  const q = new URLSearchParams(location.search);
   document.body.classList.add('kiosk');
-  setMuted(new URLSearchParams(location.search).get('sound') !== '1');
+  setMuted(q.get('sound') !== '1');
+  // Board numbers are each player's own count, which means nothing to a
+  // viewer: off unless numbers=1 (not saved to this browser's settings).
+  settings.numbers = q.get('numbers') === '1';
+  settings.feedback = false;
+  applySquareNumbers();
+  document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');
+  document.body.classList.toggle('kiosk-nolist', q.get('players_list') === '0');
   startKiosk();
 }
