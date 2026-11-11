@@ -176,10 +176,10 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   attacker's move, so the attacker is found by position —, homes, hub trips/turns, rolls/sixes/doubles, lead changes,
   wire-to-wire, comeback deficit, finish margin, length, spaces travelled = the die each move used, star-circle hops, times in the hub, hub escapes /
   rolls waiting there (in-and-out on one roll is a pass-through), home-line crossings (going round again), hits in the
-  hub and on stars), then writes careers (team / coach / marble), streaks,
+  hub and on stars), then writes careers (team / marble), streaks,
   rivalries, the month's season table, all-time records (announced after 20 league games) and a game log to the Store
   (`league_stats`, `league_records`, `league_games`; in memory without a DB). It sends `leagueNote` (parts with
-  team / marble / coach tokens) and `leagueState`. Page: teams instead of coach names in league rooms, plural verb
+  team / marble tokens) and `leagueState`. Page: team names (emoji + short name) in league rooms, plural verb
   agreement for team names in commentary (`leagueGrammar`), the 🏟 League page (`/league.json`). Test: `node test/league.mjs`.
 - Admin → Stream (settings in the DB: `src/SiteSettings.js`, meta table `set.*`; API keys never sent to clients): the
   stream link (`/site.json`), the AI commentator and the YouTube chat reader. AI commentator: `src/AICommentator.js`, one
