@@ -138,6 +138,12 @@ export function createCommentator(onLine) {
         const was = leader; leader = lead.i; leaderSince = now; lastLeadCall = now;
         return say(3, pick(['Lead change! ', 'New leader! ', 'And there\'s a new leader: ']), P(lead.i), pick([' moves ahead of ', ' passes ', ' overtakes ']), P(was), '.');
       } else if (lead.i !== leader) { leader = lead.i; leaderSince = now; }
+      // Everyone has a marble home: no aggros (or baggros) possible any more (home marbles can't be bumped).
+      if (list.length > 1 && list.every(s => s.home >= 1) && !said.has('noAggro')) {
+        said.add('noAggro');
+        return say(2, pick(['Everyone has a marble home: aggros are off the table.', 'That\'s every player on the board at home. No aggros this game.',
+          'All players have one home now, so nobody can lose an aggro.']));
+      }
       // Full mobility: every marble out of base (and not all home yet).
       let mobilityCall = null;
       list.forEach((s, i) => {
