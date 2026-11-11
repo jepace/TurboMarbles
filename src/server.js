@@ -1,5 +1,6 @@
 import { setting } from './SiteSettings.js';
 import { YouTubeChat } from './YouTubeChat.js';
+import { leagueOverview } from './LeagueTracker.js';
 import { usage as aiUsage, aiReady } from './AICommentator.js';
 import express from 'express';
 import helmet from 'helmet';
@@ -86,6 +87,7 @@ app.use(helmet());
 // (a quick 304 when unchanged).
 // Site settings the page needs: the live stream link (STREAM_URL), if any.
 app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null }));
+app.get('/league.json', (req, res) => res.json(leagueOverview()));
 
 app.use(express.static(join(__dirname, '..', 'public'), {
   setHeaders: (res, path) => { if (/\.(html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache'); },

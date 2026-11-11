@@ -176,6 +176,11 @@ function migrate() {
       rating    REAL NOT NULL
     );
     CREATE INDEX IF NOT EXISTS rating_history_player ON rating_history(player_id, at);
+    -- The robot league: career numbers by scope (team, marble, coach, rivalry, season…),
+    -- all-time records, and a log of league games.
+    CREATE TABLE IF NOT EXISTS league_stats (scope TEXT NOT NULL, id TEXT NOT NULL, k TEXT NOT NULL, v REAL NOT NULL, PRIMARY KEY (scope, id, k));
+    CREATE TABLE IF NOT EXISTS league_records (k TEXT PRIMARY KEY, v REAL NOT NULL, holder TEXT, detail TEXT, at INTEGER);
+    CREATE TABLE IF NOT EXISTS league_games (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, players INTEGER, winner TEXT, coach TEXT, summary TEXT);
   `);
   db.prepare("INSERT OR IGNORE INTO meta VALUES ('schema', '2')").run();
 }
@@ -366,6 +371,57 @@ export function revokeOtherDevices(playerId, keepKey) {
 // games stay (other players' history) but lose the link and the name.
 // ---- Admin ----------------------------------------------------------------------
 export function isAdmin(id) { return !!db?.prepare('SELECT is_admin FROM players WHERE id = ?').get(id)?.is_admin; }
+// ---- League (robot stream): stats, records, game log ----
+// Without a database these live in memory (lost on restart).
+const mem = { stats: new Map(), records: new Map(), games: [] };
+const skey = (scope, id) => scope + '\u0000' + id;
+export function leagueAdd(scope, id, deltas) {
+  for (const [k, d] of Object.entries(deltas)) {
+    if (!d) continue;
+    if (db) db.prepare('INSERT INTO league_stats (scope, id, k, v) VALUES (?, ?, ?, ?) ON CONFLICT(scope, id, k) DO UPDATE SET v = v + excluded.v').run(scope, String(id), k, d);
+    else { const o = mem.stats.get(skey(scope, id)) ?? {}; o[k] = (o[k] ?? 0) + d; mem.stats.set(skey(scope, id), o); }
+  }
+}
+export function leagueSet(scope, id, values) {
+  for (const [k, v] of Object.entries(values)) {
+    if (db) db.prepare('INSERT INTO league_stats (scope, id, k, v) VALUES (?, ?, ?, ?) ON CONFLICT(scope, id, k) DO UPDATE SET v = excluded.v').run(scope, String(id), k, v);
+    else { const o = mem.stats.get(skey(scope, id)) ?? {}; o[k] = v; mem.stats.set(skey(scope, id), o); }
+  }
+}
+export function leagueGet(scope, id) {
+  if (db) return Object.fromEntries(db.prepare('SELECT k, v FROM league_stats WHERE scope = ? AND id = ?').all(scope, String(id)).map(r => [r.k, r.v]));
+  return { ...(mem.stats.get(skey(scope, id)) ?? {}) };
+}
+// Every id in a scope with its numbers: [{ id, ...stats }].
+export function leagueAll(scope) {
+  if (db) {
+    const out = new Map();
+    for (const r of db.prepare('SELECT id, k, v FROM league_stats WHERE scope = ?').all(scope)) (out.get(r.id) ?? out.set(r.id, { id: r.id }).get(r.id))[r.k] = r.v;
+    return [...out.values()];
+  }
+  return [...mem.stats.entries()].filter(([k]) => k.startsWith(scope + '\u0000')).map(([k, o]) => ({ id: k.slice(scope.length + 1), ...o }));
+}
+// Records: higher is better (pass lowerIsBetter for e.g. the closest finish).
+export function leagueRecord(k, v, holder, detail, { lowerIsBetter = false } = {}) {
+  const cur = db ? db.prepare('SELECT v FROM league_records WHERE k = ?').get(k) : mem.records.get(k);
+  if (cur && (lowerIsBetter ? v >= cur.v : v <= cur.v)) return false;
+  const row = { k, v, holder, detail, at: Date.now() };
+  if (db) db.prepare('INSERT INTO league_records (k, v, holder, detail, at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v, holder = excluded.holder, detail = excluded.detail, at = excluded.at').run(k, v, holder, detail, row.at);
+  else mem.records.set(k, row);
+  return cur ? { previous: cur.v } : { first: true };
+}
+export function leagueRecords() {
+  return db ? db.prepare('SELECT * FROM league_records ORDER BY k').all() : [...mem.records.values()];
+}
+export function leagueLogGame(row) {
+  if (db) db.prepare('INSERT INTO league_games (at, players, winner, coach, summary) VALUES (?, ?, ?, ?, ?)').run(Date.now(), row.players, row.winner, row.coach, JSON.stringify(row.summary ?? {}));
+  else { mem.games.push({ at: Date.now(), ...row }); if (mem.games.length > 200) mem.games.shift(); }
+}
+export function leagueRecentGames(limit = 20) {
+  if (db) return db.prepare('SELECT * FROM league_games ORDER BY id DESC LIMIT ?').all(limit).map(r => ({ ...r, summary: JSON.parse(r.summary || '{}') }));
+  return mem.games.slice(-limit).reverse();
+}
+
 // Site settings (key → string), kept in the meta table as 'set.<key>'.
 export function getSettings() {
   if (!db) return {};

@@ -17,6 +17,7 @@ import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
+import { LeagueTracker } from './LeagueTracker.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
@@ -174,6 +175,9 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
     room.watchers.add(hostWs);
     // The AI commentator (it only calls out while it's switched on and someone watches).
     room._ai = new AICommentator(room, { send: msg => broadcast(room, msg) });
+    // The league: teams, coaches, marbles, careers and records (robot stream rooms only).
+    room._league = new LeagueTracker(room, { send: msg => broadcast(room, msg) });
+    room.league = true;
   }
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
@@ -1521,6 +1525,8 @@ export function handleWatchGame(ws, roomId) {
   room.watchers.add(ws);
   clearTimeout(room._unwatchedTimer);
   sendTo(ws, { event: 'reconnected', gameState: publicState(room), watching: true });
+  const ls = room._league?.state();
+  if (ls) sendTo(ws, { event: 'leagueState', ...ls });
   return { ok: true };
 }
 
@@ -1529,6 +1535,7 @@ function isHost(ws, room) {
 }
 
 function broadcast(room, msg, excludeWs = null) {
+  room._league?.observe(msg);
   room._ai?.observe(msg);
   const data = JSON.stringify(msg);
   for (const w of room.watchers ?? []) {
@@ -1587,6 +1594,7 @@ function publicState(room) {
   const { game } = room;
   return {
     watch: !!room.watch,
+    league: !!room.league,
     turnNo: game._turnNo ?? 1,
     players: game.players.map((p, i) => ({
       index: i,
