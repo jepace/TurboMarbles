@@ -48,6 +48,7 @@ assert(marbles.length === 16 && marbles.every(m => m.games === 6), '16 marbles, 
 const bonks = marbles.reduce((s, m) => s + (m.bonks ?? 0), 0), bonked = marbles.reduce((s, m) => s + (m.bonked ?? 0), 0);
 assert(bonks === bonked && bonks > 0, `bonks dealt = bonks taken (${bonks})`);
 assert(marbles.reduce((s, m) => s + (m.mvps ?? 0), 0) === 6, 'one marble of the game per game');
+assert(store.leagueAll('rival').every(r => { const [a, b] = r.id.split('|'); return a !== b; }) && store.leagueAll('rival').reduce((s, r) => s + r.bonks, 0) === bonks, 'every bonk is between two different teams');
 const recs = Object.fromEntries(store.leagueRecords().map(r => [r.k, r]));
 assert(recs.longestGame && recs.mostBonksGame, 'records kept (longest game, most bonks)');
 const notes = sent.filter(m => m.event === 'leagueNote').map(m => m.parts.map(x => typeof x === 'string' ? x : x.team ? TEAMS[x.team].short : x.marble ? TEAMS[x.marble[0]].marbles[x.marble[1]].name : x.coach).join(''));

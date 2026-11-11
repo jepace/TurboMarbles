@@ -8,6 +8,8 @@
 // onLine(parts, level) where parts mixes plain strings and { player } tokens
 // (so the page can show names with their colour), level 1–3 (3 = big moment).
 
+import { TEAMS } from './league.js';
+
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
 export function createCommentator(onLine) {
@@ -23,6 +25,9 @@ export function createCommentator(onLine) {
   const said = new Set();      // one-off calls already made this game ("final:2", "baggro:1", …)
   const hitBy = {};            // victim seat → last seat that hit them (for revenge)
   let sixRun = { pi: null, n: 0 };
+  let league = false;          // robot league: seats are teams, marbles have names and personalities
+  const M = (pi, id) => (league && id != null ? { marble: [pi, id] } : { player: pi });
+  const info = (pi, id) => (league && id != null ? TEAMS[players[pi]?.color]?.marbles[id] : null);
   let started = 0;
   const mobile = {};           // seat → had full mobility (no marbles in base) at the last update
   const mobileOnce = new Set();// seats already celebrated for full mobility this game
@@ -68,7 +73,8 @@ export function createCommentator(onLine) {
 
   return {
     // A new game: who's playing (and, for fun, the soundtrack).
-    start(list, song) {
+    start(list, song, isLeague = false) {
+      league = isLeague;
       players = list; standing = []; leader = null; said.clear(); sixRun = { pi: null, n: 0 };
       bonks = { total: 0, by: {}, of: {} };
       for (const k of Object.keys(hitBy)) delete hitBy[k];
@@ -77,6 +83,12 @@ export function createCommentator(onLine) {
       started = Date.now(); lastLeadCall = Date.now();
       pending = null;
       const n = list.length;
+      if (league) {
+        const parts = ['Today\'s race: '];
+        list.forEach((p, i) => parts.push(i ? (i === n - 1 ? ' and ' : ', ') : '', { player: i }, ` (coach ${p.coach})`));
+        say(2, ...parts, song ? `. Soundtrack: ${song}.` : '.');
+        return;
+      }
       say(2, pick([`A fresh ${n}-player race is under way`, `New game! ${n} marble racers on the grid`, `And they're off: ${n} players, 16 marbles… well, ${n * 4}`, `Here we go again: ${n} players, one winner`])
         + (song ? pick([`. Tonight's soundtrack: ${song}.`, ` to the sound of ${song}.`, `. Cue the music: ${song}.`]) : '.'));
     },
@@ -97,7 +109,7 @@ export function createCommentator(onLine) {
     // The current roll's number (taken when a hit happens; the line comes later, after the animation).
     rollId() { return rollNo; },
 
-    hit(byPi, victimPi, dist, roll = rollNo) {
+    hit(byPi, victimPi, dist, roll = rollNo, byMarble = null, victimMarble = null) {
       // Count it, and maybe add one stat to the call.
       const byName = players[byPi]?.name ?? byPi, ofName = players[victimPi]?.name ?? victimPi;
       bonks.total++; bonks.by[byPi] = (bonks.by[byPi] ?? 0) + 1; bonks.of[victimPi] = (bonks.of[victimPi] ?? 0) + 1;
@@ -110,6 +122,7 @@ export function createCommentator(onLine) {
       else if ([10, 20, 25, 30, 40, 50].includes(bonks.total)) extra.push(` Bonk number ${bonks.total} this game!`);
       else if (session.by[byName] % 25 === 0) extra.push(` ${byName}'s ${ord(session.by[byName])} bonk of the session.`);
       const say = (level, ...parts) => sayOut(level, ...parts, ...extra);
+      const A = M(byPi, byMarble), V = M(victimPi, victimMarble);
       const revenge = hitBy[byPi] === victimPi;
       hitBy[victimPi] = byPi;
       // Two hits on the same roll: a double hit (one call for both).
@@ -120,21 +133,32 @@ export function createCommentator(onLine) {
         mobile[victimPi] = false;
         pending = null;
         return first === victimPi
-          ? say(3, pick(['Double hit! ', 'Two for one! ', 'DOUBLE BONK! ']), P(byPi), ' sends two of ', P(victimPi), pick(['\'s marbles back to base!', '\'s marbles home to base in one roll!']))
-          : say(3, pick(['Double hit! ', 'Two for one! ', 'DOUBLE BONK! ']), P(byPi), ' bonks ', P(first), ' and ', P(victimPi), pick([' on the same roll!', '. What a roll!', ' in one go!']));
+          ? say(3, pick(['Double hit! ', 'Two for one! ', 'DOUBLE BONK! ']), P(byPi), league ? ' send two of ' : ' sends two of ', P(victimPi), (league ? "' marbles" : "'s marbles") + pick([' back to base!', ' back to base in one roll!']))
+          : say(3, pick(['Double hit! ', 'Two for one! ', 'DOUBLE BONK! ']), P(byPi), league ? ' bonk ' : ' bonks ', P(first), ' and ', P(victimPi), pick([' on the same roll!', '. What a roll!', ' in one go!']));
       }
-      if (revenge) return say(3, P(byPi), pick([' gets revenge on ', ' pays back ', ' settles the score with ']), P(victimPi), pick(['!', '! Sweet revenge.', '. That one was personal.']));
-      if (dist != null && dist <= 14) return say(3, pick(['Heartbreak! ', 'Ouch! ', 'Brutal! ', 'Oh no! ', 'BONK! ']), P(byPi), ' sends ', P(victimPi),
+      if (revenge) return say(3, A, pick([' gets revenge on ', ' pays back ', ' settles the score with ']), V, pick(['!', '! Sweet revenge.', '. That one was personal.']));
+      if (dist != null && dist <= 14) return say(3, pick(['Heartbreak! ', 'Ouch! ', 'Brutal! ', 'Oh no! ', 'BONK! ']), A, ' sends ', V,
         pick([` back to base from just ${dist} squares out.`, ` home… to base, ${dist} squares from safety.`, ` all the way back, with home in sight (${dist} away).`]));
+      // A marble's personality, now and then.
+      const ai = info(byPi, byMarble), vi = info(victimPi, victimMarble);
+      if (league && ai && Math.random() < 0.3) {
+        const t = ai.trait;
+        if (t === 'troublemaker' || t === 'hothead' || t === 'prickly') return say(2, A, pick([' strikes again! ', ' can\'t help itself: bonk! ', ' bonks ']), V, pick([`. "${ai.cheer}"`, '. Nobody is surprised.', '. Typical.']));
+        if (t === 'gentle') return say(2, A, ' bonks ', V, pick([' and looks genuinely sorry about it.', `. "${ai.cheer}"`]));
+        return say(2, A, ' bonks ', V, `! "${ai.cheer}"`);
+      }
+      if (league && vi && vi.trait === 'tough' && Math.random() < 0.5) return say(2, A, ' bonks ', V, pick([', who just shrugs it off.', `. "${vi.cheer}"`, '. Back to base, again. Tough as ever.']));
+      if (league && vi && vi.trait === 'optimist' && Math.random() < 0.5) return say(2, A, ' bonks ', V, `. "${vi.cheer}" Undaunted, as always.`);
       // Losing full mobility (every marble was out of base) is worth a word.
-      if (mobile[victimPi] && Math.random() < 0.35 && mobilityOk()) { mobile[victimPi] = false; return say(2, P(byPi), pick([' bonks ', ' bumps ']), P(victimPi), pick(LOST)); }
-      return say(2, P(byPi), pick([' bumps ', ' bonks ', ' bonks ', ' knocks out ', ' clips ', ' takes out ']), P(victimPi),
+      if (mobile[victimPi] && Math.random() < 0.35 && mobilityOk()) { mobile[victimPi] = false; return say(2, A, pick([' bonks ', ' bumps ']), V, pick(LOST)); }
+      return say(2, A, pick([' bumps ', ' bonks ', ' bonks ', ' knocks out ', ' clips ', ' takes out ']), V,
         pick(['!', '. Bonk!', '. Back to base.', '. Back to the start for that one.', '. Rude!', '. See you at the start!']));
     },
 
     // A marble reached home; `count` = how many that player now has home,
     // `slots` = their home slots now (1 = h1 … 4 = h4).
-    home(pi, count, slots = []) {
+    home(pi, count, slots = [], marbleId = null) {
+      const W = M(pi, marbleId), mi = info(pi, marbleId);
       if (count >= 4) return;   // the win line covers it
       const d = debt(slots);
       if (count >= 2 && d >= 2 && Math.random() < 0.9) return say(2, P(pi), pick([
@@ -143,7 +167,10 @@ export function createCommentator(onLine) {
         ` gets one in, low. Untidy homes can cost turns at the end.`]));
       if (count >= 2 && d === 0 && Math.random() < 0.7) return say(1, P(pi), pick([
         ` has ${count} home, nice and tidy.`, `: ${count} home, tidily packed from the top.`, ` keeps a tidy home row: ${count} in, no gaps.`]));
-      if (count === 1 && !said.has('firstHome')) { said.add('firstHome'); return say(2, P(pi), pick([' gets the first marble home!', ' is first to put one home.', ' opens the scoring: one marble home.'])); }
+      if (count === 1 && !said.has('firstHome')) { said.add('firstHome');
+        if (league && mi) return say(2, W, pick([' is the first marble home! ', ' gets home first! ']), mi.trait === 'quiet' ? 'Not a word, as usual.' : `"${mi.cheer}"`);
+        return say(2, P(pi), pick([' gets the first marble home!', ' is first to put one home.', ' opens the scoring: one marble home.'])); }
+      if (league && mi && count < 3 && Math.random() < 0.5) return say(1, W, pick([` makes it home for `, ` is safely home for `]), P(pi), mi.trait === 'slow and steady' || mi.trait === 'patient' ? '. Got there in the end.' : '.');
       if (count === 3 && !said.has('final:' + pi)) { said.add('final:' + pi); return say(3, P(pi), pick([' has three home. One to go!', ' is on the final marble!', ': three down, one to go. Final lap!'])); }
       if (count === 1) return say(1, P(pi), pick([' gets a first marble home.', ' is on the board: one home.', ' finally gets one home.']));
       return say(1, P(pi), pick([` brings another one home: ${count} now.`, ` safely home: that's ${count}.`, ` tucks marble number ${count} away.`]));
@@ -215,7 +242,8 @@ export function createCommentator(onLine) {
       if (!e || e.pi === roller) return;
       const now = Date.now();
       if (e.kind !== 'win' && now - (this._envyAt ?? 0) < 40000) return;
-      this._envyAt = now;
+      if (e.kind === 'win' && now - ((this._winEnvy ??= {})[e.pi] ?? 0) < 20000) return;   // not every roll of a long finish
+      if (e.kind === 'win') this._winEnvy[e.pi] = now; else this._envyAt = now;
       const d = dice ? dice.join('-') : '';
       // Whole sentences: each start only goes with its own ending.
       const R = P(roller), O = P(e.pi);
@@ -242,6 +270,9 @@ export function createCommentator(onLine) {
     },
 
     note(text, level = 1) { say(level, text); },
+
+    // A league fact from the server (streaks, records, rivalries, marble of the game…).
+    league(parts, level = 2) { say(level, ...(parts ?? [])); },
 
     // A line from elsewhere (the AI commentator): shown at once, unpaced.
     direct(parts, kind) { lastSaid = Date.now(); onLine(parts, kind === 'ai' ? 'ai' : 2); },

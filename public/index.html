@@ -66,6 +66,7 @@
   <button class="nav-item acct" data-go="screen-profile">📊 Stats</button>
   <button class="nav-item acct" data-go="screen-friends">👥 Friends <span class="nav-badge" id="badge-friends"></span></button>
   <button class="nav-item" data-go="screen-leaderboard">🏆 Leaderboard</button>
+  <button class="nav-item" data-go="screen-league">🏟 Marble League</button>
   <button class="nav-item" data-go="screen-board">🎨 Board</button>
   <button class="nav-item acct" data-go="screen-settings">⚙ Settings</button>
   <button class="nav-item admin-only" data-go="screen-admin" style="display:none">🛡 Admin <span class="nav-badge" id="badge-admin"></span></button>
@@ -134,6 +135,16 @@
 
     <div id="lb-me" class="muted"></div>
     <table class="table" id="lb-table"></table>
+  </div>
+</div>
+
+<!-- The robot Marble League: teams, marbles, coaches, records -->
+<div id="screen-league" class="screen page">
+  <div class="card league-card">
+    <h2>🏟 TurboMarbles League</h2>
+    <p class="muted">Six teams, four marbles each, coached by whichever robot sits in their seat. Every game on the robot stream counts.</p>
+    <div class="chips" id="league-tabs"><button class="chip on" data-t="standings">Standings</button><button class="chip" data-t="marbles">Marbles</button><button class="chip" data-t="coaches">Coaches</button><button class="chip" data-t="records">Records</button><button class="chip" data-t="recent">Recent games</button></div>
+    <div id="league-content"><span class="muted">Loading…</span></div>
   </div>
 </div>
 

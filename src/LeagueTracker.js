@@ -63,7 +63,9 @@ export class LeagueTracker {
       }
       case 'marbleBumped': {
         if (!g) return;
-        const victimColor = this.colorOf(msg.ownerIndex), by = g.lastMover;
+        // The engine reports the bump before the attacker's move: the attacker is
+        // the mover's marble now standing where the victim was.
+        const victimColor = this.colorOf(msg.ownerIndex), by = attackerOf(game, msg.from);
         const vm = g.marbles[`${victimColor}:${msg.marbleId}`], bm = by && g.marbles[`${by.color}:${by.id}`];
         g.bonks++;
         if (vm) vm.bonked++;
@@ -230,6 +232,13 @@ export class LeagueTracker {
     };
   }
   sendState(extra = {}) { const s = this.state(); if (s) this.send({ event: 'leagueState', ...s, ...extra }); }
+}
+
+function attackerOf(game, from) {
+  const pi = game?.turnIndex, p = game?.players[pi];
+  if (!p || !from) return null;
+  const id = p.marbles.findIndex(m => m.zone === from.zone && (from.zone === 'center' || m.space === from.space));
+  return id >= 0 ? { color: p.config.color, id } : null;
 }
 
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }

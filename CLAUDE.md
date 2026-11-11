@@ -32,6 +32,7 @@ node test/cube.mjs        # doubling cube: rules, scoring, robot cube decisions,
 node test/store.mjs       # players, device keys, link codes, games, stats (in-memory SQLite)
 node test/accounts.mjs    # account actions + finished games recorded with analysis (no server needed)
 node test/ai.mjs          # AI commentator, providers, YouTube chat reader, admin settings (fake clients)
+node test/league.mjs      # league tracker: robot games through it (careers, records, notes)
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -160,6 +161,15 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   runaway, the win, and "the roll someone else needed": the server's rollEnvy tries each roll for the other players
   (win, bonk the leader near home, end a 2+ turn wait in hub/base) and sends `envy` with `rolled`), shown left of the board when there's room (gear option "Commentary"; on by default on the
   stream page, `commentary=0` turns it off). Lines about moves wait for the animation (afterAnimations).
+- Marble League (robot stream rooms only): `public/js/league.js` has six permanent teams, one per colour, each with
+  four named marbles (trait, bio, catchphrase); the robot in the seat is that game's coach. `src/LeagueTracker.js`
+  watches the room's broadcasts and keeps per-game numbers (bonks by marble — the engine reports a bump before the
+  attacker's move, so the attacker is found by position —, homes, hub trips/turns, rolls/sixes/doubles, lead changes,
+  wire-to-wire, comeback deficit, finish margin, length), then writes careers (team / coach / marble), streaks,
+  rivalries, the month's season table, all-time records (announced after 20 league games) and a game log to the Store
+  (`league_stats`, `league_records`, `league_games`; in memory without a DB). It sends `leagueNote` (parts with
+  team / marble / coach tokens) and `leagueState`. Page: teams instead of coach names in league rooms, plural verb
+  agreement for team names in commentary (`leagueGrammar`), the 🏟 League page (`/league.json`). Test: `node test/league.mjs`.
 - Admin → Stream (settings in the DB: `src/SiteSettings.js`, meta table `set.*`; API keys never sent to clients): the
   stream link (`/site.json`), the AI commentator and the YouTube chat reader. AI commentator: `src/AICommentator.js`, one
   per robot watch room, calls only while on + watched + something happened, at most every `aiEverySec`, capped by

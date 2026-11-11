@@ -9,6 +9,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
+import { TEAMS } from './league.js';
 import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName } from './music.js';
 
 // ---- State ----
@@ -203,6 +204,7 @@ function navigate(id) {
   if (id === 'screen-profile' || id === 'screen-settings') { openProfile(id, 'screen-home'); return; }
   if (id === 'screen-board') { show(id); renderBoardPage(); return; }
   if (id === 'screen-leaderboard') send({ action: 'leaderboard' });
+  if (id === 'screen-league') loadLeague();
   if (id === 'screen-friends') send({ action: 'friends' });
   show(id);
   if (id === 'screen-friends') renderMessages();
@@ -2215,7 +2217,7 @@ function updateStartButton() {
 
 on('gameStarted', ({ gameState: gs }) => {
   setTimeout(placeCommentary, 0);
-  setTimeout(() => commentator.start(gs.players.map(p => ({ name: p.name, color: p.color })), settings.music || KIOSK ? songName() : null), 0);
+  setTimeout(() => commentator.start(gs.players.map((p, i) => ({ name: gs.league && TEAMS[p.color] ? TEAMS[p.color].short : p.name, color: p.color, coach: p.name })), settings.music || KIOSK ? songName() : null, gs.league), 0);
   clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
   musicReset();
   applyWatch(gs);
@@ -2316,7 +2318,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
   if (to?.zone === 'home' && from?.zone !== 'home') {
     const others = gameState.players[playerIndex].marbles.filter((m, i) => i !== marbleId && m.zone === 'home').map(m => m.slot);
     const slots = [...others, to.slot];
-    afterAnimations(() => commentator.home(playerIndex, slots.length, slots));
+    afterAnimations(() => commentator.home(playerIndex, slots.length, slots, marbleId));
   } else if (to?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, true));
   else if (from?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, false));
   // Grey out the die this move used — for everyone watching, not just the mover.
@@ -2402,7 +2404,8 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
     const by = gameState?.turnIndex, arm = playerArm(ownerIndex);
     const dist = from?.zone === 'track' ? squareNumber(arm, from.space) : null;
     const rn = commentator.rollId();
-    afterAnimations(() => commentator.hit(by, ownerIndex, dist, rn));
+    // The bump is announced before the attacker's move: look the attacker up once that has arrived.
+    afterAnimations(() => commentator.hit(by, ownerIndex, dist, rn, lastMover[by], marbleId));
   }
   const marble = gameState.players[ownerIndex].marbles[marbleId];
 
@@ -3191,7 +3194,7 @@ function renderSidebar() {
     dot.className = 'player-dot';
     dot.style.background = COLOR_MAP[dc(p.color)] ?? '#888';
     const label = document.createElement('span');
-    label.textContent = p.name + (p.isRobot ? ' 🤖' : '');
+    label.textContent = inLeague() ? teamLabel(p.index) : p.name + (p.isRobot ? ' 🤖' : '');
     const pips = document.createElement('span');
     pips.className = 'pips';
     pips.dataset.player = p.index;
@@ -3210,7 +3213,7 @@ function renderSidebar() {
   }
   updatePips();
   const banner = $('turn-banner');
-  banner.textContent = isMyTurn() ? 'Your turn' : `${playerName(gameState.turnIndex)}'s turn`;
+  banner.textContent = isMyTurn() ? 'Your turn' : inLeague() ? `${teamLabel(gameState.turnIndex)} to play` : `${playerName(gameState.turnIndex)}'s turn`;
   banner.style.color = isMyTurn() ? '#f0c040' : '#aaa';
 }
 
@@ -3297,6 +3300,14 @@ function applySquareNumbers() {
   setSquareLabels(settings.numbers ? s => squareNumber(arm, s) : null);
 }
 
+// League rooms (robot stream): a seat is a team, coached by the robot in it.
+const inLeague = () => !!gameState?.league;
+function teamLabel(pi, { coach = true } = {}) {
+  const p = gameState?.players?.[pi], t = p && TEAMS[p.color];
+  if (!inLeague() || !t) return p?.name ?? `Player ${pi + 1}`;
+  return `${t.emoji} ${t.short}` + (coach ? ` · ${p.name}` : '');
+}
+
 function playerName(index) {
   return gameState?.players?.[index]?.name ?? `Player ${index + 1}`;
 }
@@ -3350,7 +3361,7 @@ window.addEventListener('resize', () => {
 // Connection is deferred until user takes action (create/join)
 
 // Name tags on the board by each player's base.
-setSeatLabels(pi => { const p = gameState?.players?.[pi]; return p ? (pi === myPlayerIndex && !viewingStored ? 'You' : p.name) + (p.isRobot ? ' 🤖' : '') : null; });
+setSeatLabels(pi => { const p = gameState?.players?.[pi]; if (p && inLeague()) return teamLabel(pi); return p ? (pi === myPlayerIndex && !viewingStored ? 'You' : p.name) + (p.isRobot ? ' 🤖' : '') : null; });
 // Development aid: with ?debug in the address, a report can be shown directly.
 if (new URLSearchParams(location.search).has('debug')) {
   window.__tm = { showReport: rep => { analysisReport = rep; openAnalysis(); } };
@@ -3509,7 +3520,7 @@ function standings(score) {
   return el('div', { class: 'standings' }, ...rows.map((x, k) => el('div', { class: 'st-row' },
     el('span', { class: 'st-rank' }, String(k + 1)),
     el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(x.p.color)] ?? '#888'}` }),
-    el('span', { class: 'st-name' }, x.p.name),
+    el('span', { class: 'st-name' }, inLeague() ? teamLabel(x.p.index, { coach: false }) : x.p.name),
     el('span', { class: 'st-pts' + (x.pts > 0 ? ' plus' : x.pts < 0 ? ' minus' : '') }, `${x.pts > 0 ? '+' : x.pts < 0 ? '−' : ''}${Math.abs(x.pts)}`))));
 }
 // "McCoy wins!" over the board for 5 s: this game's points, then the session.
@@ -3526,7 +3537,9 @@ function showWatchCard(winnerIndex, result, score) {
   const how = result?.dropped ? 'double dropped' : big.length ? big.join(' · ') + '!' : null;
   const card = $('watch-card');
   card.replaceChildren(
-    el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), `${w.name} wins!`),
+    el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), inLeague() ? `${TEAMS[w.color]?.name ?? w.name} win!` : `${w.name} wins!`),
+    inLeague() ? el('div', { class: 'muted wc-coach' }, `Coach: ${w.name}`) : '',
+    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${TEAMS[leagueMvp[0]]?.marbles[leagueMvp[1]]?.name} (${TEAMS[leagueMvp[0]]?.short})`) : '',
     how ? el('div', { class: 'wc-how' }, how) : '',
     el('div', { class: 'wc-head' }, 'This game'), standings(pts),
     score ? el('div', { class: 'wc-head' }, 'Session') : '', score ? standings(score) : '');
@@ -3552,13 +3565,40 @@ $('btn-game-profile').addEventListener('click', () => setGear(false));
 // Shown where the board leaves room on the left (the stream page always has it);
 // in a game it is a gear option. Newest line at the bottom, older ones fade.
 const COMMENT_MAX = 7;
+// League lines name teams ("the Rollers"): plural, so the verb right after one
+// agrees ("the Rollers takes" → "take", "the Waves's" → "the Waves'"), and a
+// line that starts with one gets a capital "The".
+const PLURAL = { is: 'are', has: 'have', was: 'were', does: 'do', "isn't": "aren't", "hasn't": "haven't", "doesn't": "don't", "wasn't": "weren't" };
+function pluralVerb(str) {
+  return str.replace(/^('s)(?=\s|$)/, "'").replace(/^(\s*)([A-Za-z']+)/, (m, sp, w) => {
+    if (PLURAL[w]) return sp + PLURAL[w];
+    if (/^(?:the|a|an|and|with|to|of|in|on|at|by|for|from|who|that|out|up|back|home|again|still|just|now)$/i.test(w) || !/s$/.test(w) || /ss$/.test(w)) return m;
+    if (/ies$/.test(w)) return sp + w.slice(0, -3) + 'y';
+    if (/(?:sses|shes|ches|xes|zes|oes)$/.test(w)) return sp + w.slice(0, -2);
+    return sp + w.slice(0, -1);
+  });
+}
+function leagueGrammar(parts) {
+  if (!inLeague()) return parts;
+  const isTeam = x => x && typeof x === 'object' && (x.team || (x.player != null && !x.marble));
+  const out = parts.map((x, i) => (typeof x === 'string' && isTeam(parts[i - 1]) ? pluralVerb(x) : x));
+  const first = out.findIndex(x => x !== '');
+  if (isTeam(out[first])) out[first] = { ...out[first], cap: true };
+  return out;
+}
 const commentator = createCommentator((parts, level) => {
   const box = $('commentary');
   if (!box) return;
+  parts = leagueGrammar(parts);
   const line = el('div', { class: 'cm-line lvl' + level },
     ...parts.map(x => typeof x === 'string' ? x : (() => {
       const p = gameState?.players?.[x.player];
-      return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(p?.color)] ?? '#888'}` }), p?.name ?? '?');
+      if (x.coach) return el('span', { class: 'cm-coach' }, x.coach);
+      const color = x.team ?? (x.marble ? (typeof x.marble[0] === 'number' ? gameState?.players?.[x.marble[0]]?.color : x.marble[0]) : p?.color);
+      const text = x.marble ? (TEAMS[color]?.marbles[x.marble[1]]?.name ?? 'a marble')
+        : x.team ? (TEAMS[color] ? `${x.cap ? 'The' : 'the'} ${TEAMS[color].short}` : color)
+        : inLeague() ? (TEAMS[p?.color] ? `${x.cap ? 'The' : 'the'} ${TEAMS[p.color].short}` : p?.name) : p?.name;
+      return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(color)] ?? '#888'}` }), text ?? '?');
     })()));
   box.append(line);
   while (box.children.length > (KIOSK ? 5 : COMMENT_MAX)) box.firstChild.remove();
@@ -3676,3 +3716,59 @@ on('streamChat', ({ messages }) => {
   if (Date.now() - aiLineAt < 120000) return;
   for (const m of messages) commentator.chatter(m.author);
 });
+
+
+// ---- League (robot stream): notes, state, marble of the game ----
+let leagueMvp = null;
+let lastMover = {};   // seat → marble id of its last move (who did the bonking)
+on('marbleMoved', ({ playerIndex, marbleId }) => { lastMover[playerIndex] = marbleId; });
+on('leagueNote', ({ level, parts }) => commentator.league(parts, level));
+on('leagueState', st => { if (st.mvp !== undefined) leagueMvp = st.mvp; if (st.mvp === undefined && st.teams) leagueMvp = null; });
+
+
+// ---- The League page (public): /league.json ----
+let leagueData = null, leagueTab = 'standings', marbleSort = 'bonks';
+function loadLeague() { fetch('/league.json').then(r => r.json()).then(d => { leagueData = d; renderLeague(); }).catch(() => { $('league-content').textContent = 'Could not load the league.'; }); }
+for (const b of document.querySelectorAll('#league-tabs .chip')) b.addEventListener('click', () => {
+  leagueTab = b.dataset.t; for (const x of document.querySelectorAll('#league-tabs .chip')) x.classList.toggle('on', x === b); renderLeague();
+});
+const lgDot = c => el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(c)] ?? '#888'}` });
+const lgPct = (a, b) => (b ? Math.round(100 * (a ?? 0) / b) + '%' : '–');
+const lgSgn = x => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x ?? 0);
+function lgTable(head, rows) {
+  return el('table', { class: 'table league-table' }, el('thead', {}, el('tr', {}, ...head.map(h => el('th', {}, h)))), el('tbody', {}, ...rows.map(r => el('tr', {}, ...r.map(c => el('td', {}, c))))));
+}
+function renderLeague() {
+  const d = leagueData, box = $('league-content');
+  if (!d) return;
+  const teamCell = t => el('span', { class: 'lg-team' }, lgDot(t.color), `${t.emoji ?? ''} ${t.name}`);
+  if (leagueTab === 'standings') {
+    const season = [...d.teams].sort((a, b) => (b.season.wins ?? 0) - (a.season.wins ?? 0) || (b.season.points ?? 0) - (a.season.points ?? 0));
+    const career = [...d.teams].sort((a, b) => (b.career.wins ?? 0) / Math.max(1, b.career.games ?? 0) - (a.career.wins ?? 0) / Math.max(1, a.career.games ?? 0));
+    box.replaceChildren(
+      el('h3', {}, `Season ${d.season}`),
+      lgTable(['#', 'Team', 'Played', 'Won', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
+      el('h3', {}, 'All time'),
+      lgTable(['Team', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggros taken', 'Sixes / roll'],
+        career.map(t => { const c = t.career; return [teamCell(t), String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? (c.sixes / c.rolls).toFixed(2) : '–']; })),
+      d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',
+      d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');
+  } else if (leagueTab === 'marbles') {
+    const sorts = { bonks: 'Bonks', mvps: 'Marble of the game', homes: 'Homes', firstHomes: 'First home', bonked: 'Bonked', hubTrips: 'Hub trips' };
+    const sel = el('select', {}, ...Object.entries(sorts).map(([k, v]) => el('option', { value: k, textContent: 'Sort: ' + v })));
+    sel.value = marbleSort; sel.addEventListener('change', () => { marbleSort = sel.value; renderLeague(); });
+    const ms = [...d.marbles].sort((a, b) => (b[marbleSort] ?? 0) - (a[marbleSort] ?? 0));
+    box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'Hub trips'],
+      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), m.name ?? m.id), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0)])));
+  } else if (leagueTab === 'coaches') {
+    box.replaceChildren(lgTable(['Coach', 'Games', 'Won', 'Win %', 'Points', 'Streak', 'Best'], d.coaches.map(c => [c.id, String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0)])));
+  } else if (leagueTab === 'records') {
+    const names = { mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
+    box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', fmtTime(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
+  } else {
+    box.replaceChildren(d.recent.length ? lgTable(['When', 'Players', 'Winner', 'Coach', 'Bonks', 'Rolls', 'Margin', '⭐'], d.recent.map(g => {
+      const s = g.summary ?? {}, [mc, mi] = (s.mvp ?? '').split(':');
+      return [fmtTime(g.at), String(g.players), el('span', {}, lgDot(g.winner), TEAMS[g.winner]?.name ?? g.winner), g.coach ?? '', String(s.bonks ?? 0), String(s.turns ?? 0), s.margin ? `${s.margin} pips` : '–', mc ? (TEAMS[mc]?.marbles[+mi]?.name ?? '') : ''];
+    })) : el('p', { class: 'muted' }, 'No games yet.'));
+  }
+}

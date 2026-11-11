@@ -816,3 +816,12 @@ body.kiosk .cm-name .log-dot { width: 0.6em; height: 0.6em; }
 .admin-stream > .as-field { flex: none; }
 .as-row > .as-field { flex: 1 1 12rem; }
 .admin-stream .btn-row { justify-content: flex-start; }
+/* League page */
+.league-card { max-width: 72rem; }
+.league-table td, .league-table th { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.league-table { margin-bottom: 0.6rem; overflow-x: auto; display: block; }
+.lg-team, .lg-marble { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+#league-content select { margin: 0.5rem 0; background: var(--card); color: var(--text); border: 1px solid #ffffff26; border-radius: 6px; padding: 2px 6px; }
+.wc-coach { font-size: 0.9rem; margin-top: -0.3rem; }
+.wc-mvp { color: #f0c040; font-weight: 700; }
+.cm-coach { color: var(--muted); }

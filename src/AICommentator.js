@@ -81,7 +81,8 @@ export class AICommentator {
         this.bonks.total++; this.bonks.by[by] = (this.bonks.by[by] ?? 0) + 1; this.bonks.of[of] = (this.bonks.of[of] ?? 0) + 1;
         this.session.total++; this.session.by[bn] = (this.session.by[bn] ?? 0) + 1; this.session.of[on] = (this.session.of[on] ?? 0) + 1;
       }
-      note = `${this.lastMover ? this.marble(this.lastMover.pi, this.lastMover.id) : N(g?.turnIndex)} bonks ${this.marble(msg.ownerIndex, msg.marbleId)}${msg.from?.zone === 'track' && g ? ` (${countdown(armOf(g.players[msg.ownerIndex]), msg.from.space) + 1} squares from home)` : msg.from?.zone === 'center' ? ' in the hub' : ''} back to base.`; break;
+      const ap = g?.turnIndex, aid = g?.players[ap]?.marbles.findIndex(m => m.zone === msg.from?.zone && (msg.from?.zone === 'center' || m.space === msg.from?.space));
+      note = `${aid >= 0 ? this.marble(ap, aid) : N(ap)} bonks ${this.marble(msg.ownerIndex, msg.marbleId)}${msg.from?.zone === 'track' && g ? ` (${countdown(armOf(g.players[msg.ownerIndex]), msg.from.space) + 1} squares from home)` : msg.from?.zone === 'center' ? ' in the hub' : ''} back to base.`; break;
       case 'marbleMoved':
         this.lastMover = { pi: msg.playerIndex, id: msg.marbleId };
         if (msg.to?.zone === 'home' && msg.from?.zone !== 'home') note = `${this.marble(msg.playerIndex, msg.marbleId)} gets home (slot ${msg.to.slot}).`;
