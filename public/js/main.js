@@ -37,7 +37,7 @@ let pendingFeedback = null; // { text, cls } — robot comparison for my roll, l
 // ---- Player options (remembered in this browser) ----
 // Move feedback: after committing a roll, show how the robot would have played it.
 // Post-game analysis: offer the "Analyze Game" button when a game ends.
-const settings = { feedback: true, analysis: true, numbers: true, sfx: true, music: false, musicVol: 0.7, sfxVol: 0.8, commentary: true };
+const settings = { feedback: true, analysis: true, numbers: true, sfx: true, music: false, musicVol: 0.7, sfxVol: 0.8, commentary: null };   // commentary null = off when playing, on when watching
 try {
   const saved = JSON.parse(localStorage.getItem('tm.settings') ?? '{}');
   if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
@@ -2214,6 +2214,7 @@ function updateStartButton() {
 }
 
 on('gameStarted', ({ gameState: gs }) => {
+  setTimeout(placeCommentary, 0);
   setTimeout(() => commentator.start(gs.players.map(p => ({ name: p.name, color: p.color })), settings.music || KIOSK ? songName() : null), 0);
   clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
   musicReset();
@@ -2722,6 +2723,7 @@ function toast(msg) {
 }
 
 on('reconnected', ({ gameState: gs, watching: spectator }) => {
+  setTimeout(placeCommentary, 0);
   if (spectator) { watching = true; setReconnectInfo({ roomId: gs?.roomId ?? watchRoomId, watch: true }); roomId = watchRoomId ?? roomId; }
   applyWatch(gs, spectator);
   if (spectator && gs?.turnNo) turnNumber = gs.turnNo;
@@ -3563,11 +3565,13 @@ function placeCommentary() {
   const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
   if (!box || !area || !cv) return;
   const room = (area.clientWidth - cv.clientWidth) / 2 - 28;
-  const on = (KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : settings.commentary) && room >= 180;
+  const on = (KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : commentaryOn()) && room >= 180;
   box.style.display = on ? 'flex' : 'none';
   if (on) box.style.width = Math.min(room, 460) + 'px';
 }
 new ResizeObserver(placeCommentary).observe($('board-area'));
 new ResizeObserver(placeCommentary).observe($('board-canvas'));
-$('opt-commentary').checked = settings.commentary;
+// Players: off unless they turn it on; watchers: on unless they turned it off.
+const commentaryOn = () => settings.commentary ?? watching;
+$('btn-gear').addEventListener('click', () => { $('opt-commentary').checked = commentaryOn(); });
 $('opt-commentary').addEventListener('change', e => { settings.commentary = e.target.checked; saveSettings(); placeCommentary(); });
