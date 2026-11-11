@@ -738,7 +738,14 @@ body.kiosk #settings, body.kiosk #game-chat-input, body.kiosk #action-slot, body
 body.kiosk #win-overlay, body.kiosk #nav, body.kiosk .report-btn, body.kiosk #btn-roll { display: none !important; }
 body.kiosk { cursor: none; }
 body.kiosk #score-line { font-size: 1.05rem; font-weight: 700; color: #f0c040; padding: 0.3rem 0; }
-body.kiosk #sidebar::before { content: 'TurboMarbles'; display: block; font-weight: 800; font-size: 1.3rem; letter-spacing: 0.5px; color: #f0c040; margin-bottom: 0.4rem; }
+#kiosk-brand { display: none; }
+body.kiosk #kiosk-brand { display: flex; flex-direction: column; gap: 0.2rem; position: absolute; left: 18px; top: 14px; z-index: 4; pointer-events: none; }
+#kiosk-brand img { width: 380px; height: auto; }
+#kb-url { font-size: 1.35rem; font-weight: 700; color: #e8eef8; letter-spacing: 0.5px; padding-left: 8px; }
+#kb-game { font-size: 1.1rem; font-weight: 700; color: #f0c040; padding-left: 8px; }
+/* Stream: the dice sit in the board's top-right corner, next to the action. */
+body.kiosk #board-area > #dice-area { position: absolute; right: 22px; top: 18px; z-index: 4; gap: 0.8rem; flex-wrap: nowrap; }
+body.kiosk #board-area > #dice-area .die { width: 84px; height: 84px; font-size: 2.8rem; border-radius: 14px; }
 body.kiosk #game-log { flex: 1 1 auto; }
 body.kiosk-nolog #game-log { display: none !important; }
 body.kiosk-nolist #player-list { display: none !important; }

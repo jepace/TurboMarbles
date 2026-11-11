@@ -3238,6 +3238,7 @@ function renderLobbySlots(slots) {
 
 function renderSidebar() {
   if (!gameState) return;
+  if (KIOSK) $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
   const list = $('player-list');
   list.innerHTML = '';
   for (const p of gameState.players) {
@@ -3573,6 +3574,8 @@ if (KIOSK) {
   applySquareNumbers();
   document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');
   document.body.classList.toggle('kiosk-nolist', q.get('players_list') === '0');
+  $('kb-url').textContent = location.host;
+  $('board-area').append($('dice-area'));
   startKiosk();
 }
 

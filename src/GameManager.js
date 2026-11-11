@@ -1595,6 +1595,7 @@ function publicState(room) {
     watch: !!room.watch,
     league: !!room.league,
     turnNo: game._turnNo ?? 1,
+    gameNo: room.gamesPlayed + (room.state === 'finished' ? 0 : 1),   // this room's game number (1st, 2nd…)
     players: game.players.map((p, i) => ({
       index: i,
       name: room.slots[i].name,
