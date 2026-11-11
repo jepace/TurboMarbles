@@ -99,7 +99,9 @@ function ensure() {
   master.gain.value = 0;
   bus = ctx.createGain();
   bus.gain.value = 0.9;
-  bus.connect(comp); comp.connect(master); master.connect(ctx.destination);
+  // A gentle roll-off of the very top: warm, never shrill.
+  const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 5500; tone.Q.value = 0.5;
+  bus.connect(comp); comp.connect(tone); tone.connect(master); master.connect(ctx.destination);
   // A short feedback delay for space.
   const d = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
   d.delayTime.value = song.delay[0]; fb.gain.value = song.delay[1]; wet.gain.value = 0.22;
@@ -121,6 +123,10 @@ function env(g, t, a, peak, dec, sus, rel, len) {
 // One note on an instrument. vol 0–1.
 function note(inst, midi, t, dur, vol) {
   if (vol < 0.01) return;
+  // Nothing piercing: fold anything above C6 back down (pure high tones sound
+  // like a hearing test), and the bright overtone instruments sit lower still.
+  const cap = inst === 'glass' || inst === 'bell' ? 79 : 84;
+  while (midi > cap) midi -= 12;
   const f = midiHz(midi);
   const g = ctx.createGain();
   const out = ctx.createGain(); out.gain.value = vol;
@@ -132,17 +138,17 @@ function note(inst, midi, t, dur, vol) {
     case 'epiano': { const a = osc('sine', f), b = osc('triangle', f * 2, 4); const m = ctx.createGain(); m.gain.value = 0.25; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.005, 0.32, 0.3, 0.35, 0.4, dur); break; }
     case 'pluck': { const a = osc('sawtooth', f), fl = lp(f * 6, 2); fl.frequency.setValueAtTime(f * 8, t); fl.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.18); a.connect(fl); fl.connect(g); env(g, t, 0.003, 0.22, 0.12, 0.2, 0.15, dur * 0.6); break; }
     case 'brass': { const a = osc('sawtooth', f), b = osc('sawtooth', f, 8), fl = lp(f * 2, 1); fl.frequency.setValueAtTime(f * 1.2, t); fl.frequency.linearRampToValueAtTime(f * 4, t + 0.08); a.connect(fl); b.connect(fl); fl.connect(g); env(g, t, 0.04, 0.16, 0.15, 0.7, 0.18, dur); break; }
-    case 'marimba': { const a = osc('sine', f), b = osc('sine', f * 4); const m = ctx.createGain(); m.gain.value = 0.15; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.002, 0.4, 0.25, 0.05, 0.1, 0.05); break; }
+    case 'marimba': { const a = osc('sine', f), b = osc('sine', f * 4); const m = ctx.createGain(); m.gain.value = 0.06; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.002, 0.4, 0.25, 0.05, 0.1, 0.05); break; }
     case 'flute': { const a = osc('triangle', f), v = ctx.createOscillator(), vg = ctx.createGain(); v.frequency.value = 5; vg.gain.value = 6; v.connect(vg); vg.connect(a.detune); v.start(t); v.stop(stop); const fl = lp(f * 3); a.connect(fl); fl.connect(g); env(g, t, 0.08, 0.26, 0.2, 0.75, 0.25, dur); break; }
-    case 'glass': { const a = osc('sine', f), b = osc('sine', f * 2.01), c = osc('sine', f * 3.02); const m = ctx.createGain(); m.gain.value = 0.3; b.connect(m); c.connect(m); a.connect(g); m.connect(g); env(g, t, 0.15, 0.2, 0.4, 0.6, 0.8, dur); break; }
+    case 'glass': { const a = osc('triangle', f), b = osc('sine', f * 2.01); const m = ctx.createGain(); m.gain.value = 0.12; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.15, 0.17, 0.4, 0.6, 0.8, dur); break; }
     case 'pad': { const a = osc('sawtooth', f, -7), b = osc('sawtooth', f, 7), fl = lp(900 + 1600 * S.intensity); a.connect(fl); b.connect(fl); fl.connect(g); env(g, t, 0.6, 0.07, 0.4, 0.85, 0.9, dur); break; }
     case 'bass': { const a = osc('triangle', f), b = osc('square', f / 2), m = ctx.createGain(); m.gain.value = 0.18; b.connect(m); const fl = lp(400); a.connect(fl); m.connect(fl); fl.connect(g); env(g, t, 0.01, 0.42, 0.15, 0.6, 0.1, dur); break; }
-    case 'bell': { const a = osc('sine', f), b = osc('sine', f * 2.76); const m = ctx.createGain(); m.gain.value = 0.35; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.002, 0.35, 0.6, 0.15, 0.8, 0.1); break; }
+    case 'bell': { const a = osc('sine', f), b = osc('sine', f * 2.76); const m = ctx.createGain(); m.gain.value = 0.12; b.connect(m); const fl = lp(3500); a.connect(fl); m.connect(fl); fl.connect(g); env(g, t, 0.004, 0.28, 0.5, 0.12, 0.6, 0.1); break; }
     case 'drone': { const a = osc('sawtooth', f), b = osc('sine', f / 2), fl = lp(220); a.connect(fl); b.connect(fl); fl.connect(g); env(g, t, 0.8, 0.12, 0.5, 0.9, 1.2, dur); break; }
   }
 }
 
-function noise(t, dur, vol, hp = 6000) {
+function noise(t, dur, vol, hp = 5000) {
   const len = Math.ceil(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   const s = ctx.createBufferSource(); s.buffer = buf;
@@ -204,7 +210,7 @@ function playStep(n, t) {
   if (song.pad === 'stabs' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.25);
   if (song.pad === 'skank' && s16 % 8 === 4) for (const m of chord) note('pluck', m + 12, t, sd, 0.35);
   if (song.pad === 'skank' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.2);
-  if (song.pad === 'arp' && s16 % (I > 0.5 ? 1 : 2) === 0) note(song.chip ? 'pluck' : 'glass', chord[(s16 >> (I > 0.5 ? 0 : 1)) % 3] + 12 * (1 + ((s16 >> 2) % 2)), t, sd * 1.2, 0.3);
+  if (song.pad === 'arp' && s16 % (I > 0.5 ? 1 : 2) === 0) note(song.chip ? 'pluck' : 'glass', chord[(s16 >> (I > 0.5 ? 0 : 1)) % 3] + 12 * ((s16 >> 2) % 2), t, sd * 1.2, 0.26);
   if (song.pad === 'arp' && s16 === 0) for (const m of chord) note('pad', m, t, sd * 16, 0.25);
   // Drone when it's dark.
   if (s16 === 0 && bar % 2 === 0 && S.dark > 0.3) note('drone', degree(0, 0, -1), t, sd * 32, 0.5 * S.dark);
@@ -253,11 +259,11 @@ function playCue({ kind, color, extra }, t, chordDeg) {
   switch (kind) {
     case 'six': {
       const n = extra?.double ? 8 : 4;
-      for (let i = 0; i < n; i++) note('pluck', degree(chordDeg, i * 2, 2), t + i * sd, sd * 1.5, 0.55);
-      if (extra?.double) note('bell', degree(chordDeg, 14, 2), t + n * sd, sd * 4, 0.6);
+      for (let i = 0; i < n; i++) note('pluck', degree(chordDeg, i * 2, 1), t + i * sd, sd * 1.5, 0.5);
+      if (extra?.double) note('bell', degree(chordDeg, 7, 1), t + n * sd, sd * 4, 0.5);
       break;
     }
-    case 'one': note('bell', degree(chordDeg, extra?.hub ? 7 : 4, 2), t, sd * 4, 0.55); break;
+    case 'one': note('bell', degree(chordDeg, extra?.hub ? 7 : 4, 1), t, sd * 4, 0.45); break;
     case 'double': note('marimba', degree(chordDeg, 4, 2), t, sd, 0.5); note('marimba', degree(chordDeg, 4, 2), t + sd * 2, sd, 0.3); break;
     case 'hit': {
       // Dissonant sting, then the hitter's motif head.
