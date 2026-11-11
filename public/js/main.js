@@ -3435,10 +3435,11 @@ function streamUrl() {
   if (!$('sb-pips').checked) q.set('players_list', '0');
   if ($('sb-sound').checked) q.set('sound', '1');
   if ($('sb-music').checked) q.set('music', '1');
+  if ($('sb-speed').value !== 'normal') q.set('speed', $('sb-speed').value);
   return `${location.origin}/?${q}`;
 }
 function renderStreamUrl() { const u = streamUrl(); $('sb-url').value = u; $('sb-open').href = u; }
-for (const id of ['sb-players', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound', 'sb-music']) $(id).addEventListener('change', renderStreamUrl);
+for (const id of ['sb-players', 'sb-speed', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound', 'sb-music']) $(id).addEventListener('change', renderStreamUrl);
 renderStreamUrl();
 $('sb-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('sb-url').value); toastAnywhere('Stream URL copied.'); }
@@ -3450,7 +3451,7 @@ function startKiosk() {
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
   myName = 'Viewer' + Math.floor(1000 + Math.random() * 9000);
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true });
+  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal' });
 }
 if (KIOSK) {
   const q = new URLSearchParams(location.search);

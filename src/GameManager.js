@@ -91,7 +91,7 @@ function genId() {
 // the socket's current room. (Previously a socket could create several rooms
 // but was only tracked in the last, so the others leaked forever.)
 
-export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false, matchTo = 0, watch = false } = {}) {
+export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false, matchTo = 0, watch = false, pace = 1.5 } = {}) {
   if (sessions.has(hostWs._id)) leaveRoom(hostWs);
   sweepStaleLobbies();
   if (rooms.size >= MAX_TOTAL_ROOMS) return { error: 'Server is full' };
@@ -153,6 +153,10 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
   if (watch) {
     room.watch = true;
     room.match = null;
+    // Robots-only rooms play slower than robots in a game with people: at the
+    // default 1.5× a robot move comes every ~0.9 s and a turn starts after
+    // ~1.2 s, about two beats of the music at its middle tempo.
+    room.pace = Math.min(3, Math.max(0.5, Number(pace) || 1.5));
     const taken = new Set();
     for (const s of slots) {
       const free = ROBOT_NAMES.filter(n => !taken.has(n.toLowerCase()));
@@ -739,7 +743,7 @@ function robotAnswerDouble(room) {
       const w = room.slots[fw.pi]?.ws;
       if (w) sendCubeFeedback(room, w, fw, { ...est, p: 1 - est.p, aggroWin: est.aggroLoss, aggroLoss: est.aggroWin });
     }
-    const wait = Math.max(0, ROBOT_TURN_DELAY_MS - (Date.now() - started));
+    const wait = Math.max(0, ROBOT_TURN_DELAY_MS * (room.pace ?? 1) - (Date.now() - started));
     room.robotTurnTimer = setTimeout(() => {
       room.robotTurnTimer = null;
       if (!rooms.has(room.id) || game.cubeOffer !== offer || !room.slots[pi]?.isRobot) return;
@@ -1318,7 +1322,7 @@ function scheduleCurrentTurn(room) {
     room.robotTurnTimer = setTimeout(() => {
       room.robotTurnTimer = null;
       doRobotTurn(room);
-    }, ROBOT_TURN_DELAY_MS);
+    }, ROBOT_TURN_DELAY_MS * (room.pace ?? 1));
   }
   // Human turn: nothing to schedule — wait for client to send 'roll'
 }
@@ -1401,7 +1405,7 @@ function applyNextRobotMove(room) {
       broadcast(room, { event: 'dieForfeit', dieIndex: dieIdx });
     }
     applyNextRobotMove(room);
-  }, ROBOT_MOVE_DELAY_MS);
+  }, ROBOT_MOVE_DELAY_MS * (room.pace ?? 1));
 }
 
 // Watch mode: start the robots' first game (the host is already watching).

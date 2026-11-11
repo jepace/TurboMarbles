@@ -255,7 +255,7 @@ function dispatch(ws, msg) {
       const hostColor = typeof msg.hostColor === 'string' ? msg.hostColor : undefined;
       const matchTo = Number.isInteger(msg.matchTo) && msg.matchTo >= 1 && msg.matchTo <= 25 ? msg.matchTo : 0;
       const watch = msg.watch === true;
-      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo: watch ? 0 : matchTo, watch });
+      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo: watch ? 0 : matchTo, watch, pace: { slow: 2.2, normal: 1.5, fast: 1 }[msg.speed] ?? 1.5 });
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
       ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });
