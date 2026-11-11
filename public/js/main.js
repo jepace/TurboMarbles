@@ -3578,3 +3578,11 @@ new ResizeObserver(placeCommentary).observe($('board-canvas'));
 const commentaryOn = () => settings.commentary ?? watching;
 $('btn-gear').addEventListener('click', () => { $('opt-commentary').checked = commentaryOn(); });
 $('opt-commentary').addEventListener('change', e => { settings.commentary = e.target.checked; saveSettings(); placeCommentary(); });
+
+
+// ---- The live stream link (server setting STREAM_URL) ----
+fetch('/site.json').then(r => r.json()).then(({ streamUrl }) => {
+  if (!streamUrl || KIOSK) return;
+  $('nav-live').href = streamUrl; $('nav-live').style.display = '';
+  $('play-live-link').href = streamUrl; $('play-live').style.display = '';
+}).catch(() => {});

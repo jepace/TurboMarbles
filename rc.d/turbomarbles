@@ -50,13 +50,14 @@ load_rc_config "${name}"
 : ${turbomarbles_piddir:="/var/run/turbomarbles"}
 : ${turbomarbles_pidfile:="${turbomarbles_piddir}/turbomarbles.pid"}
 : ${turbomarbles_datadir:="/var/db/turbomarbles"}   # players, games, stats (SQLite)
+: ${turbomarbles_stream_url=""}   # live stream link shown in the game, e.g. https://www.youtube.com/@yourchannel/live
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
 command_args="-f -r -R 5 -H -P ${turbomarbles_pidfile} -o ${turbomarbles_log} \
     /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} \
     ORIGIN=${turbomarbles_origin} TRUST_PROXY=${turbomarbles_trust_proxy} \
-    DATA_DIR=${turbomarbles_datadir} \
+    DATA_DIR=${turbomarbles_datadir} STREAM_URL=${turbomarbles_stream_url} \
     /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
 start_precmd="turbomarbles_prestart"

@@ -17,6 +17,7 @@ PORT=8080               # default (server.js's own fallback when PORT is unset)
 PUBLIC_URL=https://example.com  # links in emails (password reset, email confirmation); else ORIGIN
 MAIL_FROM=noreply@example.com   # sender; mail goes through /usr/sbin/sendmail (SENDMAIL=path to override);
                                 # without sendmail the links are written to the server log
+STREAM_URL=https://www.youtube.com/@channel/live  # optional: "Live on YouTube" link in the side menu and on Play (rc.conf turbomarbles_stream_url)
 ```
 
 ## Running Tests

@@ -81,6 +81,10 @@ app.use(helmet());
 
 // Page code must never be stale after a deploy: browsers revalidate every time
 // (a quick 304 when unchanged).
+// Site settings the page needs: the live stream link (STREAM_URL), if any.
+const STREAM_URL = /^https:\/\/[^\s"'<>]+$/.test(process.env.STREAM_URL ?? '') ? process.env.STREAM_URL : null;
+app.get('/site.json', (req, res) => res.json({ streamUrl: STREAM_URL }));
+
 app.use(express.static(join(__dirname, '..', 'public'), {
   setHeaders: (res, path) => { if (/\.(html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache'); },
 }));
