@@ -21,6 +21,15 @@ export function createCommentator(onLine) {
   let started = 0;
   const mobile = {};           // seat → had full mobility (no marbles in base) at the last update
   const mobileOnce = new Set();// seats already celebrated for full mobility this game
+  let mobilityTalk = 0;        // last time we talked about mobility (at most every 45 s)
+  const mobilityOk = () => Date.now() - mobilityTalk > 45000 && (mobilityTalk = Date.now());
+  // Full mobility (every marble out of base), mostly in other words.
+  const GAINED = [' has full mobility: every marble out of base!', ' gets the last marble out. Everybody\'s in play!',
+    ' has emptied the base. All hands on deck!', ': the whole team is out on the track.', ' has the full squad out now.',
+    ' clears the base: nothing left in the garage.', ' gets the band back together: all marbles rolling.', ': base empty, every marble moving.'];
+  const REGAINED = [' is back to full strength.', ' has everyone out again.', ' empties the base once more.', ' is back in business: base empty.'];
+  const LOST = [', and that base isn\'t empty any more.', '. Back to waiting for a 1 or 6 for that one.', '. One goes back to the garage.',
+    ', and there goes full mobility.', '. Someone\'s sitting in base again.', '. The squad is a marble short now.'];
   let rollNo = 0, lastHit = null;   // for double hits (two hits on one roll)
   const explained = { aggro: 0, baggro: 0 };   // when we last explained the term
   // Now and then (first time, then about one call in three, never twice within 2 minutes) explain the term.
@@ -97,7 +106,7 @@ export function createCommentator(onLine) {
       if (dist != null && dist <= 14) return say(3, pick(['Heartbreak! ', 'Ouch! ', 'Brutal! ', 'Oh no! ', 'BONK! ']), P(byPi), ' sends ', P(victimPi),
         pick([` back to base from just ${dist} squares out.`, ` home… to base, ${dist} squares from safety.`, ` all the way back, with home in sight (${dist} away).`]));
       // Losing full mobility (every marble was out of base) is worth a word.
-      if (mobile[victimPi] && Math.random() < 0.7) { mobile[victimPi] = false; return say(2, P(byPi), pick([' bonks ', ' bumps ']), P(victimPi), pick([', and there goes full mobility.', '. Full mobility lost, back to waiting for a 1 or 6.', '. So much for full mobility.'])); }
+      if (mobile[victimPi] && Math.random() < 0.35 && mobilityOk()) { mobile[victimPi] = false; return say(2, P(byPi), pick([' bonks ', ' bumps ']), P(victimPi), pick(LOST)); }
       return say(2, P(byPi), pick([' bumps ', ' bonks ', ' bonks ', ' knocks out ', ' clips ', ' takes out ']), P(victimPi),
         pick(['!', '. Bonk!', '. Back to base.', '. Back to the start for that one.', '. Rude!', '. See you at the start!']));
     },
@@ -152,8 +161,8 @@ export function createCommentator(onLine) {
         mobile[i] = full;
       });
       // Celebrated the first time per player; regaining it later gets a short note now and then.
-      if (mobilityCall != null && !mobileOnce.has(mobilityCall)) { mobileOnce.add(mobilityCall); return say(2, P(mobilityCall), pick([' has full mobility: every marble out of base!', ' gets the last marble out. Full mobility!', ': all marbles in play. Full mobility.'])); }
-      if (mobilityCall != null && Math.random() < 0.3) return say(1, P(mobilityCall), pick([' is back to full mobility.', ' regains full mobility.']));
+      if (mobilityCall != null && !mobileOnce.has(mobilityCall)) { mobileOnce.add(mobilityCall); if (mobilityOk()) return say(2, P(mobilityCall), pick(GAINED)); }
+      else if (mobilityCall != null && Math.random() < 0.15 && mobilityOk()) return say(1, P(mobilityCall), pick(REGAINED));
       // Danger of an aggro / baggro for a trailing player.
       for (const s of order.slice(1)) {
         if (s.base === 4 && progress > 0.5 && !said.has('baggro:' + s.i)) { said.add('baggro:' + s.i); return say(2, P(s.i), pick([' still has all four in base… baggro alert!', ' hasn\'t left base yet. This could be a baggro!', ': four marbles, zero progress. Baggro watch.']), explain('baggro')); }
