@@ -50,6 +50,7 @@ assert(bonks === bonked && bonks > 0, `bonks dealt = bonks taken (${bonks})`);
 assert(marbles.reduce((s, m) => s + (m.mvps ?? 0), 0) === 6, 'one marble of the game per game');
 const sumM = k => marbles.reduce((s, m) => s + (m[k] ?? 0), 0);
 console.log(`  (totals: star spaces ${sumM('starSpaces')}, in hub ${sumM('hubTrips')}, hub exits ${sumM('hubExits')} / hub turns ${sumM('hubTurns')}, home line ${sumM('goArounds')}, hub hits ${sumM('hubHits')}, star hits ${sumM('circleHits')})`);
+assert(sumM('exits') >= sumM('bonked') && sumM('exits') <= 16 * 6 + sumM('bonked'), `times leaving base counted (${sumM('exits')}: at most one per marble per game plus one per bonk)`);
 assert(sumM('hubExits') <= sumM('hubTurns') && sumM('hubExits') <= sumM('hubTrips') && sumM('hubHits') + sumM('circleHits') <= bonks && sumM('starSpaces') > 0, 'hub, star circle and hit locations tracked and consistent');
 assert(marbles.every(m => m.distance > 0) && marbles.reduce((s, m) => s + m.distance, 0) === colors.reduce((s, c) => s + store.leagueGet('team', c).distance, 0), 'spaces travelled: every marble moved, marbles add up to teams');
 assert(store.leagueAll('rival').every(r => { const [a, b] = r.id.split('|'); return a !== b; }) && store.leagueAll('rival').reduce((s, r) => s + r.bonks, 0) === bonks, 'every bonk is between two different teams');

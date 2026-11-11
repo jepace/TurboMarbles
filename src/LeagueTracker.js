@@ -63,7 +63,10 @@ export class LeagueTracker {
           const career = (store.leagueGet('marble', `${color}:${msg.marbleId}`).distance ?? 0) + m.distance, before = career - steps;
           if (Math.floor(career / 1000) > Math.floor(before / 1000)) this.note(2, { marble: [color, msg.marbleId] }, ` passes ${(Math.floor(career / 1000) * 1000).toLocaleString('en')} career spaces!`);
         }
-        if (m && msg.from?.zone === 'base') m.exits++;
+        if (m && msg.from?.zone === 'base') {
+          m.exits++;
+          if (m.exits === 4 || m.exits === 6) this.note(1, { marble: [color, msg.marbleId] }, pick([` leaves base for the ${ord(m.exits)} time this game. Never gives up!`, ` is back out of base: that's ${m.exits} times now.`]));
+        }
         if (m && msg.to?.zone === 'center') m.hubTrips++;
         // Star circle: the hops from star to star at the start of the path (only from a star).
         if (m && msg.from?.zone === 'track' && ALL_STARS.has(msg.from.space)) {
@@ -183,7 +186,7 @@ export class LeagueTracker {
       const before = store.leagueGet('team', t.color);
       const streak = won ? (before.streak ?? 0) + 1 : 0, lossStreak = won ? 0 : (before.lossStreak ?? 0) + 1;
       const tm = Object.values(g.marbles).filter(m => m.color === t.color), sum = k => tm.reduce((x, m) => x + m[k], 0);
-      store.leagueAdd('team', t.color, { distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
+      store.leagueAdd('team', t.color, { distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), exits: sum('exits'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
       store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks });
