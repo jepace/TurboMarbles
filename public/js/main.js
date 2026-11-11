@@ -3511,3 +3511,15 @@ function showWatchCard(winnerIndex, result, score) {
   clearTimeout(watchCardTimer);
   watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 5000);
 }
+
+
+// ---- In-game options: the gear pop-up ----
+function setGear(open) {
+  $('gear-pop').style.display = open ? 'flex' : 'none';
+  $('btn-gear').setAttribute('aria-expanded', String(open));
+  $('btn-gear').classList.toggle('on', open);
+}
+$('btn-gear').addEventListener('click', e => { e.stopPropagation(); setGear($('gear-pop').style.display === 'none'); });
+document.addEventListener('click', e => { if (!e.target.closest('#gear-pop, #btn-gear')) setGear(false); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') setGear(false); });
+$('btn-game-profile').addEventListener('click', () => setGear(false));
