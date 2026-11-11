@@ -165,7 +165,7 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   four named marbles (trait, bio, catchphrase); the robot in the seat is that game's coach. `src/LeagueTracker.js`
   watches the room's broadcasts and keeps per-game numbers (bonks by marble — the engine reports a bump before the
   attacker's move, so the attacker is found by position —, homes, hub trips/turns, rolls/sixes/doubles, lead changes,
-  wire-to-wire, comeback deficit, finish margin, length), then writes careers (team / coach / marble), streaks,
+  wire-to-wire, comeback deficit, finish margin, length, spaces travelled = the die each move used), then writes careers (team / coach / marble), streaks,
   rivalries, the month's season table, all-time records (announced after 20 league games) and a game log to the Store
   (`league_stats`, `league_records`, `league_games`; in memory without a DB). It sends `leagueNote` (parts with
   team / marble / coach tokens) and `leagueState`. Page: teams instead of coach names in league rooms, plural verb
