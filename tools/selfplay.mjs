@@ -17,7 +17,7 @@
 // Example: a candidate winning 52.3% ± 0.8% of 2-player games is better.
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
-import { createGame, applyMove, earnsExtraRoll, rollDice, skipDie } from '../src/GameEngine.js';
+import { createGame, applyMove, earnsExtraRoll, rollDice, skipDie, lossMultiple } from '../src/GameEngine.js';
 
 const args = process.argv.slice(2);
 const opt = (name, def) => { const i = args.indexOf(name); return i === -1 ? def : args[i + 1]; };
@@ -35,7 +35,7 @@ const N = +opt('--games', 4000);
 const P = +opt('--players', 2);
 if (!(P >= 2 && P <= 6)) { console.error('--players must be 2–6'); process.exit(2); }
 
-let wins = 0, rolls = 0;
+let wins = 0, rolls = 0, pts = 0, pts2 = 0, aggrosTaken = 0;
 for (let g = 0; g < N; g++) {
   const seat  = g % P;
   const first = Math.floor(g / P) % P;
@@ -57,8 +57,15 @@ for (let g = 0; g < N; g++) {
     game.turnIndex = (pi + 1) % P;
   }
   if (game.winner === seat) wins++;
+  // Points like the game's money score: each loser pays the winner 1 (2 aggro, 3 baggro).
+  const x = game.winner === seat ? game.players.reduce((s, p, i) => s + (i === seat ? 0 : lossMultiple(p)), 0)
+    : game.winner != null ? -lossMultiple(game.players[seat]) : 0;
+  if (game.winner != null && game.winner !== seat && lossMultiple(game.players[seat]) >= 2) aggrosTaken++;
+  pts += x; pts2 += x * x;
 }
 const p = wins / N;
 const ci = 196 * Math.sqrt(p * (1 - p) / N);
 console.log(`${N} ${P}-player games: candidate won ${(100 * p).toFixed(1)}% ± ${ci.toFixed(1)}% ` +
   `(even = ${(100 / P).toFixed(1)}%), avg ${(rolls / N).toFixed(0)} rolls per game`);
+const mp = pts / N, sp = Math.sqrt(Math.max(0, pts2 / N - mp * mp) / N);
+console.log(`  points per game: ${mp >= 0 ? '+' : ''}${mp.toFixed(3)} ± ${(1.96 * sp).toFixed(3)} (even = 0); aggros/baggros taken: ${(100 * aggrosTaken / N).toFixed(1)}% of games`);

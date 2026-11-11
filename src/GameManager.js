@@ -1416,7 +1416,8 @@ function doRobotTurn(room) {
   const pi = game.turnIndex;
   if (config.robotThinkMs > 0 && game.phase === 'AWAITING_MOVE' && !isDuel(game) && worthThinking(game, pi)) {
     const rollId = game._afterRoll;
-    think(snapshot(game), pi, config.robotThinkMs).then(result => {
+    // With the cube and the score context, so the play-outs value endings in points.
+    think({ ...snapshot(game), cube: structuredClone(game.cube ?? null), valueCtx: game._valueCtx ?? {} }, pi, config.robotThinkMs).then(result => {
       if (!rooms.has(room.id) || room.game !== game || game._afterRoll !== rollId || game.phase !== 'AWAITING_MOVE'
         || game.turnIndex !== pi || !room.slots[pi]?.isRobot) return;
       room.robotPlan = result?.changed ? result.moves.slice() : null;

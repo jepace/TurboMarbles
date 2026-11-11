@@ -9,10 +9,10 @@
 // always kept, and is only overridden when another play beats it by a clear
 // margin (more than twice the standard error of the paired difference), so
 // rollout noise can't make the robot worse than its heuristics.
-import { allPlays, robotPlay, outcomes, pairedSE } from './Analysis.js';
+import { allPlays, robotPlay, outcomes, pairedSE, pointsValuer } from './Analysis.js';
 
 const mean = a => { let s = 0; for (const x of a) s += x; return a.length ? s / a.length : 0; };
-const concat = (a, b) => { const r = new Uint8Array(a.length + b.length); r.set(a); r.set(b, a.length); return r; };
+const concat = (a, b) => { const r = new Float64Array(a.length + b.length); r.set(a); r.set(b, a.length); return r; };
 
 // Late in the game: worth thinking about. The exact duel tables take precedence
 // (the caller checks them first).
@@ -23,16 +23,18 @@ export function worthThinking(game, pi) {
 
 // Returns { moves: [engine move, …] (to play in order), changed, n } or null
 // (nothing to decide / no time).
-export function chooseByRollouts(game, pi, { budgetMs = 1200, seed = 1, batch = 8, maxCands = 16 } = {}) {
+export function chooseByRollouts(game, pi, { budgetMs = 1200, seed = 1, batch = 8, maxCands = 16, points = false } = {}) {
   const t0 = Date.now();
   const plays = allPlays(game, pi);
   if (plays.length < 2) return null;
   const robot = robotPlay(game, pi);
-  let cands = plays.map(p => ({ p, res: new Uint8Array(0), robot: p.key === robot.key }));
+  let cands = plays.map(p => ({ p, res: new Float64Array(0), robot: p.key === robot.key }));
   if (!cands.some(c => c.robot)) return null;
   const dice = game.dice;
+  // Endings are worth what they score (aggros 2, baggros 3; the cube; the match), not just win or lose.
+  const valuer = points ? pointsValuer(game, pi, game.valueCtx ?? {}) : null;   // points: false = plain win / lose (for comparison)
   let done = 0;                               // playouts per surviving candidate
-  const add = c => { c.res = concat(c.res, outcomes(c.p.game, pi, dice, batch, seed + done * 7919)); };
+  const add = c => { c.res = concat(c.res, outcomes(c.p.game, pi, dice, batch, seed + done * 7919, valuer)); };
   let round = 0;
   while (Date.now() - t0 < budgetMs && cands.length > 1) {
     for (const c of cands) {

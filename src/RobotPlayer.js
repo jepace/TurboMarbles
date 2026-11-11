@@ -110,14 +110,18 @@ function pickWithTable(game, playerIndex, threats) {
     return score;
   };
   const apply = (g, mv) => { const g2 = structuredClone(g); applyMove(g2, playerIndex, mv); return g2; };
+  // Aggro insurance here too: the table knows only the race.
+  const homeNone = game.players[playerIndex].marbles.every(m => m.zone !== 'home');
+  const relief = homeNone && AGGRO_K ? AGGRO_K * danger(game, playerIndex) : 0;
+  const evalIns = g2 => evaluate(g2) + (relief && g2.players[playerIndex].marbles.some(m => m.zone === 'home') ? relief : 0);
 
   let best = null, bestScore = -Infinity;
   for (const first of candidateMoves(game, playerIndex)) {
     const g1 = apply(game, first);
     let score;
     const second = g1.winner != null ? [] : candidateMoves(g1, playerIndex);
-    if (second.length === 0) score = evaluate(g1);
-    else score = Math.max(...second.map(m2 => evaluate(apply(g1, m2))));
+    if (second.length === 0) score = evalIns(g1);
+    else score = Math.max(...second.map(m2 => evalIns(apply(g1, m2))));
     if (score > bestScore) { bestScore = score; best = first; }
   }
   return best;
@@ -255,7 +259,35 @@ function landsOnOpponent(game, playerIndex, move) {
     move.toZone === 'center' ? m.zone === 'center' : m.zone === 'track' && m.space === move.toSpace));
 }
 
+// ---- Aggro / baggro insurance ----
+// Losing with no marbles home costs double (an aggro), with all four still in
+// base triple (a baggro). As an opponent nears the finish, getting the first
+// marble home (or the first one out of base) is worth extra. Danger: how close
+// the leading opponent is to finishing (0 at the start, 1 at the end), squared
+// so it only matters late. (TM_AGGRO_K / TM_BAGGRO_K override, for self-play tuning.)
+const AGGRO_K = Number(globalThis.process?.env?.TM_AGGRO_K ?? 0);    // off until self-play says otherwise
+const BAGGRO_K = Number(globalThis.process?.env?.TM_BAGGRO_K ?? 0);
+const START_RACE = 132;   // racePips of a fresh player
+function danger(game, playerIndex) {
+  let d = 0;
+  game.players.forEach((p, o) => { if (o !== playerIndex) d = Math.max(d, Math.min(1, Math.max(0, 1 - racePips(game, o) / START_RACE))); });
+  return d * d;
+}
+function insurance(game, playerIndex, move) {
+  const player = game.players[playerIndex], marble = player.marbles[move.marbleId];
+  if (!marble) return 0;
+  const homeNone = player.marbles.every(m => m.zone !== 'home');
+  if (homeNone && (move.toZone === 'home') && marble.zone !== 'home') return AGGRO_K * danger(game, playerIndex);
+  if (marble.zone === 'base' && player.marbles.every(m => m.zone === 'base')) return BAGGRO_K * danger(game, playerIndex);
+  return 0;
+}
+
 function scoreMove(game, playerIndex, move) {
+  const ins = AGGRO_K || BAGGRO_K ? insurance(game, playerIndex, move) : 0;
+  return scoreMoveBase(game, playerIndex, move) + ins;
+}
+
+function scoreMoveBase(game, playerIndex, move) {
   const player = game.players[playerIndex];
   const cfg    = player.config; // arm-mapped config, not raw PLAYER_CONFIG index
   const marble = player.marbles[move.marbleId];

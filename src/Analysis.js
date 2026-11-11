@@ -209,6 +209,15 @@ export function outcomeValuer(before, pi, ctx = {}) {
   };
 }
 
+// What an ending is worth to `pi` in points, for the robot's play-outs: two
+// players as outcomeValuer (money ±1/±2/±3 per cube, or match chances); three
+// or more as the room's points score: a win collects 1/2/3 from each loser, a
+// loss pays your own 1/2/3 (aggro / baggro).
+export function pointsValuer(before, pi, ctx = {}) {
+  if (before.players.length === 2) return outcomeValuer(before, pi, ctx);
+  return g => (g.winner === pi ? g.players.reduce((s, p, i) => s + (i === pi ? 0 : lossMultiple(p)), 0) : -lossMultiple(g.players[pi]));
+}
+
 // Play out from just after `pi` played a roll of `dice`; returns the finished game.
 function playout(g, pi, dice) {
   let turn = earnsExtraRoll(dice) ? pi : (pi + 1) % g.players.length;
