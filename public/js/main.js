@@ -3795,7 +3795,7 @@ on('leagueState', st => { if (st.mvp !== undefined) leagueMvp = st.mvp; if (st.m
 
 
 // ---- The League page (public): /league.json ----
-let leagueData = null, leagueTab = 'standings', marbleSort = 'bonks';
+let leagueData = null, leagueTab = 'standings';
 function loadLeague() { fetch('/league.json').then(r => r.json()).then(d => { leagueData = d; renderLeague(); }).catch(() => { $('league-content').textContent = 'Could not load the league.'; }); }
 for (const b of document.querySelectorAll('#league-tabs .chip')) b.addEventListener('click', () => {
   leagueTab = b.dataset.t; for (const x of document.querySelectorAll('#league-tabs .chip')) x.classList.toggle('on', x === b); renderLeague();
@@ -3803,8 +3803,48 @@ for (const b of document.querySelectorAll('#league-tabs .chip')) b.addEventListe
 const lgDot = c => el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(c)] ?? '#888'}` });
 const lgPct = (a, b) => (b ? Math.round(100 * (a ?? 0) / b) + '%' : '–');
 const lgSgn = x => (x > 0 ? '+' : x < 0 ? '−' : '') + Math.abs(x ?? 0);
-function lgTable(head, rows) {
-  return el('table', { class: 'table league-table' }, el('thead', {}, el('tr', {}, ...head.map(h => el('th', {}, h)))), el('tbody', {}, ...rows.map(r => el('tr', {}, ...r.map(c => el('td', {}, c))))));
+// League tables: click any column header to sort by it (again to reverse).
+// Numbers sort as numbers ("+3", "−2", "1,234", "45%", "12 pips"), text as text, "–" last.
+const lgSorts = {};   // table key → { col, dir }
+const lgDate = t => { const x = el('span', {}, fmtTime(t)); x.dataset.v = String(t ?? 0); return x; };
+function cellKey(c) {
+  if (c?.dataset?.v != null) return Number(c.dataset.v);   // e.g. a date: sorts by time
+  const t = (typeof c === 'string' ? c : c?.textContent ?? '').trim();
+  if (t === '' || t === '–') return null;
+  const n = t.replace(/[−–]/g, '-').replace(/[,+%]|\s*pips?$/g, '').trim();
+  return /^-?\d+(\.\d+)?$/.test(n) ? Number(n) : t.toLowerCase();
+}
+function lgTable(head, rows, key = head.join('|')) {
+  const table = el('table', { class: 'table league-table sortable' });
+  const tbody = el('tbody');
+  const keyed = rows.map((r, i) => ({ r, i, keys: r.map(cellKey) }));
+  const render = () => {
+    const st = lgSorts[key];
+    const order = st ? [...keyed].sort((a, b) => {
+      const x = a.keys[st.col], y = b.keys[st.col];
+      if (x === null && y === null) return a.i - b.i;
+      if (x === null) return 1;
+      if (y === null) return -1;
+      const c = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y));
+      return (c || a.i - b.i) * st.dir;
+    }) : keyed;
+    tbody.replaceChildren(...order.map(({ r }) => el('tr', {}, ...r.map(c => el('td', {}, c)))));
+    ths.forEach((th, i) => th.dataset.sort = st?.col === i ? (st.dir > 0 ? 'asc' : 'desc') : '');
+  };
+  const ths = head.map((h, i) => {
+    const th = el('th', { title: 'Sort by ' + h }, h);
+    th.addEventListener('click', () => {
+      const st = lgSorts[key];
+      // Numbers start high-to-low, text A–Z; a second click reverses.
+      const firstDir = typeof keyed.find(k => k.keys[i] !== null)?.keys[i] === 'number' ? -1 : 1;
+      lgSorts[key] = st?.col === i ? { col: i, dir: -st.dir } : { col: i, dir: firstDir };
+      render();
+    });
+    return th;
+  });
+  table.append(el('thead', {}, el('tr', {}, ...ths)), tbody);
+  render();
+  return table;
 }
 function renderLeague() {
   const d = leagueData, box = $('league-content');
@@ -3823,22 +3863,17 @@ function renderLeague() {
       d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',
       d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');
   } else if (leagueTab === 'marbles') {
-    const sorts = { bonks: 'Bonks', distance: 'Spaces travelled', exits: 'Times leaving base', starSpaces: 'Star circle spaces', hubTrips: 'Times in the hub', hubRate: 'Hub escape rate', goArounds: 'Home line crossings', hubHits: 'Hits in the hub', circleHits: 'Hits on the stars', mvps: 'Marble of the game', homes: 'Homes', firstHomes: 'First home', bonked: 'Bonked', hubTrips: 'Hub trips' };
-    const sel = el('select', {}, ...Object.entries(sorts).map(([k, v]) => el('option', { value: k, textContent: 'Sort: ' + v })));
-    sel.value = marbleSort; sel.addEventListener('change', () => { marbleSort = sel.value; renderLeague(); });
-    const rate = m => (m.hubTurns ? (m.hubExits ?? 0) / m.hubTurns : -1);
-    const val = (m, k) => (k === 'hubRate' ? rate(m) : m[k] ?? 0);
-    const ms = [...d.marbles].sort((a, b) => val(b, marbleSort) - val(a, marbleSort));
-    box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Left base', 'Star circle', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'In hub', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+    const ms = [...d.marbles].sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0));
+    box.replaceChildren(el('p', { class: 'muted' }, 'Click any column to sort.'), lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Left base', 'Star circle', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'In hub', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
       ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), (m.name ?? m.id) + (m.captain ? ' Ⓒ' : '')), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.exits ?? 0), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
         m.hubTurns ? `${Math.round(100 * (m.hubExits ?? 0) / m.hubTurns)}%` : '–', String(m.goArounds ?? 0), String(m.hubHits ?? 0), String(m.circleHits ?? 0)])));
   } else if (leagueTab === 'records') {
     const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
-    box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', fmtTime(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
+    box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', lgDate(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
   } else {
     box.replaceChildren(d.recent.length ? lgTable(['When', 'Players', 'Winner', 'Bonks', 'Rolls', 'Margin', '⭐'], d.recent.map(g => {
       const s = g.summary ?? {}, [mc, mi] = (s.mvp ?? '').split(':');
-      return [fmtTime(g.at), String(g.players), el('span', {}, lgDot(g.winner), TEAMS[g.winner]?.name ?? g.winner), String(s.bonks ?? 0), String(s.turns ?? 0), s.margin ? `${s.margin} pips` : '–', mc ? (TEAMS[mc]?.marbles[+mi]?.name ?? '') : ''];
+      return [lgDate(g.at), String(g.players), el('span', {}, lgDot(g.winner), TEAMS[g.winner]?.name ?? g.winner), String(s.bonks ?? 0), String(s.turns ?? 0), s.margin ? `${s.margin} pips` : '–', mc ? (TEAMS[mc]?.marbles[+mi]?.name ?? '') : ''];
     })) : el('p', { class: 'muted' }, 'No games yet.'));
   }
 }

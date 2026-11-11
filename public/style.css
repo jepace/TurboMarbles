@@ -869,3 +869,8 @@ body.light .muted { color: var(--muted); }
 .robot-item:hover { border-color: #f0c04088; }
 .robot-item span { font-size: 0.78rem; }
 .slot-style { font-size: 0.75rem; color: var(--muted); margin-left: 6px; }
+/* League tables: sortable headers */
+.league-table.sortable th { cursor: pointer; user-select: none; }
+.league-table.sortable th:hover { color: var(--text); }
+.league-table.sortable th[data-sort="asc"]::after { content: ' ▲'; font-size: 0.7em; }
+.league-table.sortable th[data-sort="desc"]::after { content: ' ▼'; font-size: 0.7em; }
