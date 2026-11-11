@@ -3558,13 +3558,13 @@ const commentator = createCommentator((parts, level) => {
       return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(p?.color)] ?? '#888'}` }), p?.name ?? '?');
     })()));
   box.append(line);
-  while (box.children.length > COMMENT_MAX) box.firstChild.remove();
+  while (box.children.length > (KIOSK ? 5 : COMMENT_MAX)) box.firstChild.remove();
   [...box.children].forEach((c, i, all) => { c.style.opacity = String(Math.max(0.25, 1 - (all.length - 1 - i) * 0.14)); });
 });
 function placeCommentary() {
   const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
   if (!box || !area || !cv) return;
-  const room = (area.clientWidth - cv.clientWidth) / 2 - 28;
+  const room = (area.clientWidth - cv.clientWidth) / 2 - (KIOSK ? 20 : 28);
   const on = (KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : commentaryOn()) && room >= 180;
   box.style.display = on ? 'flex' : 'none';
   if (on) box.style.width = Math.min(room, 460) + 'px';

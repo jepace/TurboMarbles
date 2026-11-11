@@ -788,4 +788,9 @@ body.kiosk #score-line .standings { font-size: 1.05rem; }
 .cm-name { font-weight: 700; white-space: nowrap; }
 .cm-name .log-dot { display: inline-block; margin-right: 4px; vertical-align: 0.05em; }
 @keyframes cm-in { from { opacity: 0; transform: translateY(8px); } }
-body.kiosk .cm-line { font-size: 1.2rem; } body.kiosk .cm-line.lvl3 { font-size: 1.35rem; } body.kiosk .cm-line.lvl1 { font-size: 1.05rem; }
+/* Stream page: readable on a phone watching a 1080p stream */
+body.kiosk #commentary { left: 12px; bottom: 20px; gap: 14px; }
+body.kiosk .cm-line { font-size: 1.6rem; line-height: 1.3; padding: 12px 16px; border-left-width: 5px; }
+body.kiosk .cm-line.lvl3 { font-size: 1.8rem; }
+body.kiosk .cm-line.lvl1 { font-size: 1.45rem; }
+body.kiosk .cm-name .log-dot { width: 0.6em; height: 0.6em; }
