@@ -1,6 +1,6 @@
 // league.js — the Grand Marble Circuit: six permanent teams, one per colour,
 // each with four named marbles (one the captain) and their personalities. In the
-// league the teams are the players; each team plays its own style.
+// league the teams are the players (all play the same, tuned robot).
 // Shared by the server (stats, records, AI context) and the page (names on
 // screen, commentary). Marble ids 0–3 are the engine's marble ids.
 //
@@ -9,7 +9,7 @@
 
 export const TEAMS = {
   blue: {
-    name: 'Tidal Wave', short: 'Waves', emoji: '🌊', style: 'balanced',
+    name: 'Tidal Wave', short: 'Waves', emoji: '🌊',
     marbles: [
       { name: 'Splash',  trait: 'fearless', bio: 'Charges into every star track, consequences be damned.', cheer: 'Surf\'s up!' },
       { name: 'Ripple',  trait: 'patient',  bio: 'Waits in base for the perfect roll. Usually.', cheer: 'Steady as she goes.' },
@@ -18,7 +18,7 @@ export const TEAMS = {
     ],
   },
   pink: {
-    name: 'Bubblegum Bandits', short: 'Bandits', emoji: '🍬', style: 'bonker',
+    name: 'Bubblegum Bandits', short: 'Bandits', emoji: '🍬',
     marbles: [
       { name: 'Fizz',    trait: 'hyper',    bio: 'Bounces off the walls. Literally.', cheer: 'Wheee!' },
       { name: 'Taffy',   trait: 'sticky',   bio: 'Once it gets a lead, it won\'t let go.', cheer: 'Mine now.' },
@@ -27,7 +27,7 @@ export const TEAMS = {
     ],
   },
   orange: {
-    name: 'Ember Rush', short: 'Embers', emoji: '🔥', style: 'gambler',
+    name: 'Ember Rush', short: 'Embers', emoji: '🔥',
     marbles: [
       { captain: true, name: 'Blaze',   trait: 'hothead',  bio: 'Picks fights it shouldn\'t. Wins some of them.', cheer: 'Bring the heat!' },
       { name: 'Cinder',  trait: 'comeback kid', bio: 'Always seems to rise from the ashes of base.', cheer: 'Not done yet.' },
@@ -36,7 +36,7 @@ export const TEAMS = {
     ],
   },
   yellow: {
-    name: 'Solar Flares', short: 'Flares', emoji: '☀️', style: 'racer',
+    name: 'Solar Flares', short: 'Flares', emoji: '☀️',
     marbles: [
       { name: 'Sunny',   trait: 'optimist', bio: 'Every bonk is just a fresh start.', cheer: 'What a day!' },
       { captain: true, name: 'Dash',    trait: 'speedster', bio: 'Hates waiting. Hates the hub most of all.', cheer: 'Gotta go!' },
@@ -45,7 +45,7 @@ export const TEAMS = {
     ],
   },
   green: {
-    name: 'Mossy Rollers', short: 'Rollers', emoji: '🌿', style: 'packer',
+    name: 'Mossy Rollers', short: 'Rollers', emoji: '🌿',
     marbles: [
       { captain: true, name: 'Clover',  trait: 'lucky',    bio: 'Four-leaf by name, four-leaf by nature.', cheer: 'Fortune favours me.' },
       { name: 'Fern',    trait: 'gentle',   bio: 'Apologises after every bonk.', cheer: 'Sorry, sorry!' },
@@ -54,7 +54,7 @@ export const TEAMS = {
     ],
   },
   white: {
-    name: 'Polar Express', short: 'Polars', emoji: '❄️', style: 'cautious',
+    name: 'Polar Express', short: 'Polars', emoji: '❄️',
     marbles: [
       { captain: true, name: 'Frost',   trait: 'cool-headed', bio: 'Never panics. Never smiles either.', cheer: 'Chill.' },
       { name: 'Blizzard', trait: 'chaotic', bio: 'Nobody, including Blizzard, knows where it\'s going.', cheer: 'Whoosh!' },
@@ -73,22 +73,5 @@ export const marbleName = (color, id) => TEAMS[color]?.marbles[id]?.name ?? `${c
 // The league's name.
 export const LEAGUE_NAME = 'The Grand Marble Circuit';
 
-// Playing styles (src/RobotPlayer.js STYLES). In the league each team plays its
-// own style; in other games a robot is named after its style ("Bonker",
-// "Bonker 2"…), picked in the lobby.
-export const ROBOT_STYLES = [
-  { style: 'balanced', name: 'Robot',     label: 'balanced',               bio: 'The tuned all-rounder.' },
-  { style: 'bonker',   name: 'Bonker',    label: 'the bonker',             bio: 'Bonks anything in reach.' },
-  { style: 'racer',    name: 'Racer',     label: 'pure racer',             bio: 'All about the race; hardly ever bonks.' },
-  { style: 'gambler',  name: 'Gambler',   label: 'the gambler',            bio: 'Ignores danger, rushes out of base.' },
-  { style: 'cautious', name: 'Turtle',    label: 'safety first',           bio: 'Keeps marbles out of harm\'s way.' },
-  { style: 'hub',      name: 'Shortcut',  label: 'shortcut specialist',    bio: 'Loves the star circle and the hub.' },
-  { style: 'packer',   name: 'Neatnik',   label: 'home-row perfectionist', bio: 'Obsessed with a tidy home row.' },
-];
-export const STYLE_LABELS = Object.fromEntries(ROBOT_STYLES.map(x => [x.style, x.label]));
-// How a team with this style plays, for commentary ("The Embers … roll the dice on everything").
-export const STYLE_PHRASES = { balanced: 'play it balanced', bonker: 'bonk everything in sight', racer: 'race flat out and rarely bonk', gambler: 'take every risk going',
-  cautious: 'play it safe', hub: 'live on the shortcuts', packer: 'keep a tidy home row' };
-export const styleInfo = style => ROBOT_STYLES.find(x => x.style === style) ?? null;
 // A team's captain (one of its four marbles).
 export const captainOf = color => TEAMS[color]?.marbles.findIndex(m => m.captain) ?? -1;

@@ -167,11 +167,8 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   stream page, `commentary=0` turns it off). Lines about moves wait for the animation (afterAnimations).
 - Marble League, "The Grand Marble Circuit" (robot stream rooms only): `public/js/league.js` has six permanent teams,
   one per colour — the teams are the players — each with four named marbles (trait, bio, catchphrase; one is the
-  captain) and its own playing style (`STYLES` in `src/RobotPlayer.js`: balanced, bonker, racer, gambler, cautious, hub,
-  packer — multipliers on risk, bump value, home bonus, home tidiness and star/hub/base waiting costs;
-  `game.players[pi].style`; league rooms set seats to their team and style in `assignTeams`). In other games robots
-  are named after their style ("Robot" = balanced, "Bonker", "Racer"…, ROBOT_STYLES); the lobby's + Robot picks the
-  style, the same one may fill several seats ("Bonker 2"); plain + Robot is the balanced robot. `src/LeagueTracker.js`
+  captain). Every robot, league or not, plays the same tuned robot (no styles); robots in other games are "Robot",
+  "Robot 2"…; league rooms name seats after their team (`assignTeams`). `src/LeagueTracker.js`
   watches the room's broadcasts and keeps per-game numbers (bonks by marble — the engine reports a bump before the
   attacker's move, so the attacker is found by position —, homes, hub trips/turns, rolls/sixes/doubles, lead changes,
   wire-to-wire, comeback deficit, finish margin, length, spaces travelled = the die each move used, star-circle hops, times in the hub, hub escapes /

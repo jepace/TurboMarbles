@@ -17,7 +17,7 @@
 import { setting, settingOn, settingNum, aiPrices } from './SiteSettings.js';
 import { complete as providerComplete, PROVIDERS } from './ai/providers.js';
 import { pipCount, countdown, PLAYER_CONFIG } from '../public/js/constants.js';
-import { TEAMS, teamName, teamShort, marbleName, STYLE_LABELS, LEAGUE_NAME } from '../public/js/league.js';
+import { TEAMS, teamName, teamShort, marbleName, LEAGUE_NAME } from '../public/js/league.js';
 
 const SYSTEM = `You are the live commentator on a 24/7 stream of TurboMarbles, a marble racing board game played by robot teams. Viewers watch the board; you add colour, like a friendly, witty sports commentator.
 
@@ -32,8 +32,8 @@ How to commentate:
 - If nothing interesting happened, reply with exactly: PASS`;
 
 // The league roster (fixed): teams by colour, their marbles and personalities.
-const ROSTER = `\n\n${LEAGUE_NAME} (stats tracked include each marble's bonks and spaces travelled): six permanent teams, one per colour; the teams are the players. Each team has four named marbles (one is the captain) and its own playing style, which really changes how it plays. Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
-  + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "the ${t.short}", plays ${STYLE_LABELS[t.style]}): ` + t.marbles.map(m => `${m.name}${m.captain ? ' (captain)' : ''}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
+const ROSTER = `\n\n${LEAGUE_NAME} (stats tracked include each marble's bonks and spaces travelled): six permanent teams, one per colour; the teams are the players. Each team has four named marbles (one is the captain); all teams play the same way, so results come down to the dice and position. Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
+  + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "the ${t.short}"): ` + t.marbles.map(m => `${m.name}${m.captain ? ' (captain)' : ''}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
 
 const MAX_EVENTS = 30;
 

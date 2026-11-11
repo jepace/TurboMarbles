@@ -9,7 +9,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
-import { TEAMS, LEAGUE_NAME, ROBOT_STYLES, STYLE_LABELS } from './league.js';
+import { TEAMS, LEAGUE_NAME } from './league.js';
 import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName } from './music.js';
 
 // ---- State ----
@@ -578,17 +578,7 @@ $('join-code').addEventListener('keydown', e => { if (e.key === 'Enter') $('btn-
 
 // ---- Lobby ----
 $('btn-lobby-leave').addEventListener('click', () => { send({ action: 'quit' }); setReconnectInfo(null); show('screen-home'); });
-// + Robot: pick the robot's playing style (named after it: "Bonker"…); the same style can fill several seats.
-$('btn-add-robot').addEventListener('click', e => {
-  e.stopPropagation();
-  const pop = $('robot-pick');
-  if (pop.style.display !== 'none') { pop.style.display = 'none'; return; }
-  const pickIt = style => { pop.style.display = 'none'; send({ action: 'addRobot', ...(style ? { style } : {}) }); };
-  const item = (label, sub, style) => { const b = el('button', { class: 'robot-item' }, el('b', {}, label), el('span', { class: 'muted' }, sub)); b.addEventListener('click', () => pickIt(style)); return b; };
-  pop.replaceChildren(...ROBOT_STYLES.map(x => item(x.name + (x.style === 'balanced' ? ' (balanced)' : ''), x.bio, x.style === 'balanced' ? null : x.style)));
-  pop.style.display = 'grid';
-});
-document.addEventListener('click', e => { if (!e.target.closest('#robot-pick')) { const p = $('robot-pick'); if (p) p.style.display = 'none'; } });
+$('btn-add-robot').addEventListener('click', () => send({ action: 'addRobot' }));
 $('btn-start').addEventListener('click', () => send({ action: 'startGame' }));
 // An invite link: opening it joins this game (after a name, for guests).
 $('btn-copy-link').addEventListener('click', () => {
@@ -2244,17 +2234,11 @@ on('joinedRoom', ({ roomId: rid, playerIndex, lobbyState, reconnectToken }) => {
   show('screen-lobby');
 });
 
-// A robot's playing style, next to its name in the lobby.
-function setSlotStyle(li, style) {
-  li.querySelector('.slot-style')?.remove();
-  if (style) li.querySelector('.slot-name').after(el('span', { class: 'slot-style' }, STYLE_LABELS[style] ?? style));
-}
-on('playerJoined', ({ playerIndex, name, color, isRobot, style }) => {
+on('playerJoined', ({ playerIndex, name, color, isRobot }) => {
   const iAmHost = ($('host-controls').style.display !== 'none');
   const li = $(`slot-${playerIndex}`);
   if (!li) return;
   li.querySelector('.slot-name').textContent = name + (isRobot ? ' 🤖' : '');
-  setSlotStyle(li, isRobot ? style : null);
   if (isRobot && iAmHost && !li.querySelector('.btn-remove-robot')) {
     const del = document.createElement('button');
     del.className = 'btn-remove-robot';
@@ -2270,7 +2254,6 @@ on('playerLeft', ({ playerIndex }) => {
   const li = $(`slot-${playerIndex}`);
   if (!li) return;
   li.querySelector('.slot-name').textContent = '(empty)';
-  setSlotStyle(li, null);
   const del = li.querySelector('.btn-remove-robot');
   if (del) del.remove();
   if ($('host-controls').style.display !== 'none') updateStartButton();
@@ -3241,7 +3224,6 @@ function renderLobbySlots(slots) {
     name.textContent = slot.filled ? slot.name + (slot.isRobot ? ' 🤖' : '') : '(empty)';
     li.appendChild(dot);
     li.appendChild(name);
-    if (slot.filled && slot.isRobot && slot.style) setSlotStyle(li, slot.style);
     if (slot.isRobot && iAmHost) {
       const del = document.createElement('button');
       del.className = 'btn-remove-robot';
@@ -3621,7 +3603,6 @@ function showWatchCard(winnerIndex, result, score) {
   const card = $('watch-card');
   card.replaceChildren(
     el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), inLeague() ? `${TEAMS[w.color]?.name ?? w.name} win!` : `${w.name} wins!`),
-    inLeague() && TEAMS[w.color] ? el('div', { class: 'muted wc-coach' }, `${TEAMS[w.color].emoji} plays ${STYLE_LABELS[TEAMS[w.color].style]}`) : '',
     inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${TEAMS[leagueMvp[0]]?.marbles[leagueMvp[1]]?.name} (${TEAMS[leagueMvp[0]]?.short})`) : '',
     how ? el('div', { class: 'wc-how' }, how) : '',
     el('div', { class: 'wc-head' }, 'This game'), standings(pts),
@@ -3836,8 +3817,8 @@ function renderLeague() {
       el('h3', {}, `Season ${d.season}`),
       lgTable(['#', 'Team', 'Played', 'Won', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
       el('h3', {}, 'All time'),
-      lgTable(['Team', 'Style', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggros taken', 'Sixes / roll', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
-        career.map(t => { const c = t.career; return [teamCell(t), el('span', { class: 'muted' }, t.styleLabel ?? ''), t.captain ?? '', String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–',
+      lgTable(['Team', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggros taken', 'Sixes / roll', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+        career.map(t => { const c = t.career; return [teamCell(t), t.captain ?? '', String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–',
           (c.distance ?? 0).toLocaleString(), String(c.exits ?? 0), String(c.starSpaces ?? 0), c.hubWaits ? `${Math.round(100 * (c.hubExits ?? 0) / c.hubWaits)}%` : '–', String(c.goArounds ?? 0), String(c.hubHits ?? 0), String(c.circleHits ?? 0)]; })),
       d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',
       d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');
@@ -3851,12 +3832,6 @@ function renderLeague() {
     box.replaceChildren(sel, lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Left base', 'Star circle', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'In hub', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
       ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), (m.name ?? m.id) + (m.captain ? ' Ⓒ' : '')), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.exits ?? 0), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
         m.hubTurns ? `${Math.round(100 * (m.hubExits ?? 0) / m.hubTurns)}%` : '–', String(m.goArounds ?? 0), String(m.hubHits ?? 0), String(m.circleHits ?? 0)])));
-  } else if (leagueTab === 'styles') {
-    // Each team plays one style: which approach wins?
-    box.replaceChildren(
-      el('p', { class: 'muted' }, 'Every team plays its own style. Over enough games this shows which approach works best.'),
-      lgTable(['Style', 'Team', 'Games', 'Won', 'Win %', 'Points per game'], [...(d.styles ?? [])].sort((a, b) => (b.wins / Math.max(1, b.games)) - (a.wins / Math.max(1, a.games)))
-        .map(x => [x.label, x.team, String(x.games), String(x.wins), lgPct(x.wins, x.games), x.games ? (x.points / x.games).toFixed(2) : '–'])));
   } else if (leagueTab === 'records') {
     const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
     box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', fmtTime(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));

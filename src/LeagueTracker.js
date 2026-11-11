@@ -11,7 +11,7 @@
 // sends notable facts to the room as { event: 'leagueNote', level, parts }
 // (parts: strings and { team }, { marble: [color, id] } tokens),
 // plus { event: 'leagueState' } snapshots for the page.
-import { TEAMS, marbleName, teamName, teamShort, STYLE_LABELS, STYLE_PHRASES, LEAGUE_NAME, captainOf } from '../public/js/league.js';
+import { TEAMS, marbleName, teamName, teamShort, LEAGUE_NAME, captainOf } from '../public/js/league.js';
 import { pipCount, PLAYER_CONFIG, ALL_STARS } from '../public/js/constants.js';
 import * as store from './Store.js';
 
@@ -138,11 +138,11 @@ export class LeagueTracker {
       if ((s.streak ?? 0) >= 3) notes.push([2, { team: t.color }, ` come in on a ${s.streak}-game winning streak.`]);
       if ((s.lossStreak ?? 0) >= 6) notes.push([1, { team: t.color }, ` haven't won in ${s.lossStreak} games. Can captain `, { marble: [t.color, captainOf(t.color)] }, ' turn it around?']);
     }
-    // One team in the spotlight: its style and its captain.
+    // One team in the spotlight: its captain and record.
     const spot = Object.values(teams)[Math.floor(Math.random() * Object.keys(teams).length)], tm = spot && TEAMS[spot.color];
     if (tm) {
       const rec = store.leagueGet('team', spot.color), cap = captainOf(spot.color);
-      notes.push([1, { team: spot.color }, ` ${STYLE_PHRASES[tm.style] ?? 'play it balanced'}, led by captain `, { marble: [spot.color, cap] }, '.',
+      notes.push([1, { team: spot.color }, ' are led by captain ', { marble: [spot.color, cap] }, '.',
         rec.games ? ` ${rec.wins ?? 0} wins from ${rec.games} so far.` : '', ` "${tm.marbles[cap]?.cheer ?? ''}"`]);
     }
     notes.slice(0, 3).forEach((n, i) => setTimeout(() => this.note(...n), 4000 + i * 5000));
@@ -263,7 +263,7 @@ export class LeagueTracker {
       season: mon,
       teams: game.players.map((p, pi) => {
         const c = p.config.color, career = store.leagueGet('team', c), sea = store.leagueGet('season:' + mon, c);
-        return { color: c, name: teamName(c), short: teamShort(c), emoji: TEAMS[c]?.emoji, style: TEAMS[c]?.style, captain: captainOf(c),
+        return { color: c, name: teamName(c), short: teamShort(c), emoji: TEAMS[c]?.emoji, captain: captainOf(c),
           marbles: (TEAMS[c]?.marbles ?? []).map(m => m.name),
           session: this.session.teams[c] ?? { wins: 0, points: 0, games: 0, bonks: 0 },
           season: { wins: sea.wins ?? 0, points: sea.points ?? 0, games: sea.games ?? 0 },
@@ -297,7 +297,7 @@ export function leagueOverview() {
   const teams = Object.keys(TEAMS).map(c => {
     const t = store.leagueGet('team', c), s = store.leagueGet('season:' + mon, c);
     const cap = captainOf(c);
-    return { color: c, name: teamName(c), emoji: TEAMS[c].emoji, style: TEAMS[c].style, styleLabel: STYLE_LABELS[TEAMS[c].style], captain: TEAMS[c].marbles[cap]?.name, career: t, season: s };
+    return { color: c, name: teamName(c), emoji: TEAMS[c].emoji, captain: TEAMS[c].marbles[cap]?.name, career: t, season: s };
   });
   const marbles = store.leagueAll('marble').map(m => {
     const [color, id] = m.id.split(':');
@@ -305,7 +305,5 @@ export function leagueOverview() {
     return { ...m, color, mid: +id, name: info?.name, trait: info?.trait, bio: info?.bio, captain: !!info?.captain, team: teamName(color) };
   });
   const rivals = store.leagueAll('rival').sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0)).slice(0, 8);
-  // Styles: each team plays one; how is each approach doing?
-  const styles = teams.map(t => ({ style: TEAMS[t.color].style, label: STYLE_LABELS[TEAMS[t.color].style], team: t.name, games: t.career.games ?? 0, wins: t.career.wins ?? 0, points: t.career.points ?? 0 }));
-  return { league: LEAGUE_NAME, season: mon, teams, marbles, styles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
+  return { league: LEAGUE_NAME, season: mon, teams, marbles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
 }

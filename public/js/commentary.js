@@ -8,7 +8,7 @@
 // onLine(parts, level) where parts mixes plain strings and { player } tokens
 // (so the page can show names with their colour), level 1–3 (3 = big moment).
 
-import { TEAMS, STYLE_LABELS } from './league.js';
+import { TEAMS } from './league.js';
 
 const pick = a => a[Math.floor(Math.random() * a.length)];
 
@@ -85,7 +85,7 @@ export function createCommentator(onLine) {
       const n = list.length;
       if (league) {
         const parts = ['Today\'s race: '];
-        list.forEach((p, i) => { const st = TEAMS[p.color]?.style; parts.push(i ? (i === n - 1 ? ' and ' : ', ') : '', { player: i }, st && st !== 'balanced' ? ` (${STYLE_LABELS[st]})` : ''); });
+        list.forEach((p, i) => parts.push(i ? (i === n - 1 ? ' and ' : ', ') : '', { player: i }));
         say(2, ...parts, song ? `. Soundtrack: ${song}.` : '.');
         return;
       }

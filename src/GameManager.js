@@ -18,7 +18,7 @@ import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
 import { LeagueTracker } from './LeagueTracker.js';
-import { TEAMS, ROBOT_STYLES, styleInfo } from '../public/js/league.js';
+import { TEAMS } from '../public/js/league.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
@@ -219,22 +219,18 @@ export function joinRoom(ws, code, playerName) {
   return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room), reconnectToken: playerId };
 }
 
-// Robot names: a robot is named after its playing style (public/js/league.js
-// ROBOT_STYLES): "Robot" for the balanced default, "Bonker", "Racer"…; more of
-// the same are numbered ("Bonker 2").
-export const ROBOT_NAMES = ROBOT_STYLES.map(x => x.name);
+// Robots are "Robot", "Robot 2"… (every robot plays the same, tuned way).
+export const ROBOT_NAMES = ['Robot'];
 
-// What beginGame needs from the seats (a robot's style rides along).
-const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot, ...(s.style ? { style: s.style } : {}) }));
+// What beginGame needs from the seats.
+const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot }));
 
-// League rooms: each seat is its colour's team, playing the team's style.
+// League rooms: each seat is its colour's team.
 function assignTeams(room) {
-  for (const s of room.slots) { const t = TEAMS[s.color]; if (t) { s.name = t.short; s.style = t.style; } }
+  for (const s of room.slots) { const t = TEAMS[s.color]; if (t) s.name = t.short; }
 }
 
-// style: a playing style for this robot (league.js ROBOT_STYLES), or none for
-// the balanced default. The same style can fill several seats ("Bonker 2"…).
-export function addRobot(ws, roomId, style = null) {
+export function addRobot(ws, roomId) {
   const room = rooms.get(roomId);
   if (!room || room.state !== 'lobby') return { error: 'Invalid room' };
   if (!isHost(ws, room)) return { error: 'Only host can add robots' };
@@ -243,12 +239,10 @@ export function addRobot(ws, roomId, style = null) {
   if (!slot) return { error: 'No empty slots' };
 
   const taken = new Set(room.slots.map(s => s.name?.toLowerCase()).filter(Boolean));
-  const info = styleInfo(style) ?? styleInfo('balanced');
-  let name = info.name;
-  for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${info.name} ${k}`;
+  let name = 'Robot';
+  for (let k = 2; taken.has(name.toLowerCase()); k++) name = `Robot ${k}`;
   slot.isRobot = true;
   slot.name = name;
-  slot.style = info.style === 'balanced' ? null : info.style;
   slot.playerId = 'robot-' + slot.index;
 
   broadcast(room, {
@@ -257,7 +251,6 @@ export function addRobot(ws, roomId, style = null) {
     name: slot.name,
     color: slot.color,
     isRobot: true,
-    style: slot.style,
   });
 
   return { ok: true };
@@ -271,7 +264,6 @@ export function removeRobot(ws, roomId, playerIndex) {
   if (!slot || !slot.isRobot) return { error: 'Not a robot slot' };
   slot.isRobot = false;
   slot.name = null;
-  slot.style = null;
   slot.playerId = null;
   broadcast(room, { event: 'playerLeft', playerIndex });
   return { ok: true };
@@ -282,7 +274,7 @@ export function removeRobot(ws, roomId, playerIndex) {
 // Who sits where matters (the player just behind you is the one best placed to
 // hit you). People are spread out round the table by default — as far apart as
 // the seats allow — unless the host arranged the seats themselves (swapSeats).
-const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot', 'style'];
+const SEAT_FIELDS = ['playerId', 'name', 'ws', 'accountId', 'isRobot'];
 function arrangeSeats(room, contents) {
   room.slots.forEach((s, i) => Object.assign(s, contents[i]));
   room.slots.forEach((s, i) => {
@@ -1592,7 +1584,6 @@ function lobbySnapshot(room) {
       name: s.name,
       color: s.color,
       isRobot: s.isRobot,
-      style: s.style ?? null,
       filled: !!s.playerId,
     })),
   };
