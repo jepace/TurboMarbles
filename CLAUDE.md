@@ -143,11 +143,11 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
 - Streaming: `/?watch=robots&players=6` is a kiosk page (no sign-in, no menus or buttons) that starts a
   robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080. Options:
-  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=1`, `speed=slow|normal|fast` (robots-only rooms play at `room.pace`: 2.2× / 1.5× / 1× the
+  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `speed=slow|normal|fast` (robots-only rooms play at `room.pace`: 2.2× / 1.5× / 1× the
   normal robot delays). The Play page's
   "Stream it" fold-out builds the URL. Kiosk options are per URL, never saved to the browser's settings.
-- Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; `music=1`
-  on the stream page). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
+- Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; on by default
+  on the stream page, `music=0` turns it off). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
   win): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
   motif + instrument per colour with the leader's in front. Ten song bases (`SONGS`: key, scales, chord loops, tempo,
   beat, bass, chord style, swing, echo, motif twist); each game picks one at random. Console: `__music()`,

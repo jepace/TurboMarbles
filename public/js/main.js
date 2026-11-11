@@ -3442,7 +3442,7 @@ function streamUrl() {
   if (!$('sb-log').checked) q.set('log', '0');
   if (!$('sb-pips').checked) q.set('players_list', '0');
   if ($('sb-sound').checked) q.set('sound', '1');
-  if ($('sb-music').checked) q.set('music', '1');
+  if (!$('sb-music').checked) q.set('music', '0');
   if ($('sb-speed').value !== 'normal') q.set('speed', $('sb-speed').value);
   return `${location.origin}/?${q}`;
 }
@@ -3466,7 +3466,7 @@ if (KIOSK) {
   document.body.classList.add('kiosk');
   setMuted(q.get('sound') !== '1');
   setMusicMuted(false);
-  setMusic(q.get('music') === '1');
+  setMusic(q.get('music') !== '0');   // music on unless music=0
   // Board numbers are each player's own count, which means nothing to a
   // viewer: off unless numbers=1 (not saved to this browser's settings).
   settings.numbers = q.get('numbers') === '1';
