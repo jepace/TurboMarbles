@@ -18,6 +18,7 @@ import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
 import { LeagueTracker } from './LeagueTracker.js';
+import { COACHES } from '../public/js/league.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
@@ -221,12 +222,19 @@ export function joinRoom(ws, code, playerName) {
   return { roomId: room.id, playerIndex: slot.index, lobbyState: lobbySnapshot(room), reconnectToken: playerId };
 }
 
-// Robot names: Star Trek (TNG, TOS, DS9) surnames, 12 women and 12 men,
-// picked at random when a robot is added.
-export const ROBOT_NAMES = [
-  'Crusher', 'Troi', 'Yar', 'Guinan', 'Ro', 'Pulaski', 'Uhura', 'Chapel', 'Rand', 'Kira', 'Dax', 'Leeta',
-  'Picard', 'Riker', 'Data', 'La Forge', 'Worf', 'Kirk', 'Spock', 'McCoy', 'Sulu', 'Sisko', 'Odo', 'Bashir',
-];
+// Robot names: the league's coaches (public/js/league.js), picked at random
+// when a robot is added. In ordinary games robots play the balanced style; in
+// the league (robot stream rooms) each coach plays their own style.
+export const ROBOT_NAMES = COACHES.map(c => c.name);
+
+// What beginGame needs from the seats (the coach's style rides along in league rooms).
+const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot, ...(s.style ? { style: s.style } : {}) }));
+
+// League rooms: a fresh set of coaches for every game (they rotate between teams).
+function rotateCoaches(room) {
+  const pool = [...COACHES].sort(() => Math.random() - 0.5);
+  room.slots.forEach((s, i) => { const c = pool[i % pool.length]; s.name = c.name; s.style = c.style; });
+}
 
 export function addRobot(ws, roomId) {
   const room = rooms.get(roomId);
@@ -339,6 +347,7 @@ export function startGame(ws, roomId) {
 }
 
 function beginGame(room, players) {
+  if (room.league) { rotateCoaches(room); players = seatPlayers(room); }
   // Match play: a fresh match after one has ended; the Crawford game is the
   // first game after someone reaches match point (no doubling in it).
   const m = room.match;
@@ -377,7 +386,7 @@ export function handleRematch(ws, roomId) {
   }
   room.rematchVotes = null;
   if (room.robotTurnTimer) { clearTimeout(room.robotTurnTimer); room.robotTurnTimer = null; }
-  beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+  beginGame(room, seatPlayers(room));
   return { ok: true };
 }
 
@@ -416,7 +425,7 @@ function finishGame(room) {
   if (m && !m.over) {
     const t = setTimeout(() => {
       if (rooms.has(room.id) && room.state === 'finished' && room.game === game && !room.slots.every(s => s.isRobot)) {
-        beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+        beginGame(room, seatPlayers(room));
       }
     }, config.dropNextGameMs);
     t.unref?.();
@@ -424,7 +433,7 @@ function finishGame(room) {
   if (room.watch) {
     const t = setTimeout(() => {
       if (rooms.has(room.id) && room.state === 'finished' && room.game === game) {
-        beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+        beginGame(room, seatPlayers(room));
       }
     }, config.watchNextGameMs);
     t.unref?.();
@@ -1468,7 +1477,7 @@ function applyNextRobotMove(room) {
 export function startWatchRoom(roomId) {
   const room = rooms.get(roomId);
   if (!room?.watch || room.state !== 'lobby') return;
-  beginGame(room, room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot })));
+  beginGame(room, seatPlayers(room));
 }
 
 // A watch-mode viewer: may chat, analyse and quit, but never act for the seat.

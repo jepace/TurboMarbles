@@ -22,6 +22,26 @@ import { earnsExtraRoll } from './GameEngine.js';
 // helps nor hurts (positional moves score 200 + 5 × gain).
 const NO_MOVE_SCORE = 200;
 
+// ---- Coaching styles ----
+// A robot plays in the style set on its player (game.players[pi].style; league
+// coaches, see public/js/league.js). 'balanced' is the tuned default every
+// other robot uses. The others turn the same knobs hard one way:
+//   risk  — weight of the danger of being bonked (×)      bump — value of bonking (×)
+//   enter — bonus for getting a marble home (×)            homeStep — value of a tidy home row
+//   pLand / pHub / pBase — how much waiting on a star / the hub / base costs (lower = loves shortcuts)
+export const STYLES = {
+  balanced: {},
+  bonker:   { bump: 2.0, risk: 0.35 },
+  racer:    { bump: 0.15, risk: 0.35, enter: 1.6 },
+  cautious: { risk: 3.0, bump: 0.6 },
+  hub:      { pHub: 1, pLand: 1 },
+  gambler:  { risk: 0, bump: 1.4, pBase: 2 },
+  packer:   { homeStep: 2.5, enter: 2.5, risk: 0.6 },
+};
+const BASE_STYLE = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10 };
+let S = BASE_STYLE;                // the style of the robot choosing right now (set in pickNextRobotMove)
+const styleFor = name => ({ ...BASE_STYLE, ...(STYLES[name] ?? {}) });
+
 // Pick the next move, or null to forfeit the next unused die.
 //
 // With both dice unused, the robot plans the whole roll: every first move
@@ -35,8 +55,15 @@ const NO_MOVE_SCORE = 200;
 // before the robot's next turn subtracted (see threatMap / risk).
 export function pickNextRobotMove(game, playerIndex) {
   if (game.diceUsed[0] && game.diceUsed[1]) return null;
+  const style = game.players[playerIndex]?.style;
+  if (!style || style === 'balanced') return pickMove(game, playerIndex);
+  S = styleFor(style);
+  try { return pickMove(game, playerIndex); } finally { S = BASE_STYLE; }
+}
+
+function pickMove(game, playerIndex) {
   if (isDuel(game)) return pickWithDuel(game, playerIndex);
-  const threats = RISK_WEIGHT > 0 ? threatMap(game, playerIndex) : null;
+  const threats = RISK_WEIGHT * S.risk > 0 ? threatMap(game, playerIndex) : null;
   if (lookup(game.players[playerIndex])) return pickWithTable(game, playerIndex, threats);
   const locs = marbleLocs(game, playerIndex);
   if (game.diceUsed[0] || game.diceUsed[1]) {
@@ -233,7 +260,7 @@ function risk(game, playerIndex, locs, removed, threats) {
     if (pHit === 0) continue;
     const loc = key === 'c' ? { zone: 'center' } : { zone: 'track', space: Number(key.slice(1)) };
     const lost = Math.max(0, baseDist - distToHome(cfg, loc));
-    total += pHit * lost * 5 * RISK_WEIGHT;
+    total += pHit * lost * 5 * RISK_WEIGHT * S.risk;
   }
   return total;
 }
@@ -300,7 +327,7 @@ function scoreMoveBase(game, playerIndex, move) {
     // is an exact roll not needed later.
     const debtBefore = homeDebt(homeSlots(player));
     const debtAfter  = homeDebt(homeSlots(player, move.marbleId, move.toSlot));
-    return 200 + HOME_STEP * (debtBefore - debtAfter);
+    return 200 + HOME_STEP * S.homeStep * (debtBefore - debtAfter);
   }
 
   if (move.toZone === 'home') {
@@ -310,7 +337,7 @@ function scoreMoveBase(game, playerIndex, move) {
     const debtBefore = homeDebt(homeSlots(player));
     const debtAfter  = homeDebt([...homeSlots(player), move.toSlot]);
     const gain = distToHome(cfg, marbleLoc(marble)); // pips to the entry, all covered
-    return 200 + 5 * gain + homeEnterBonus(game.players.length) - HOME_STEP * (debtAfter - debtBefore);
+    return 200 + 5 * gain + homeEnterBonus(game.players.length) * S.enter - HOME_STEP * S.homeStep * (debtAfter - debtBefore);
   }
 
   // Everything else is positional: reward how much the move shortens the
@@ -346,7 +373,7 @@ const BUMP_K = 0.75;
 function bumpValue(game, o, m) {
   const cfg = game.players[o].config;
   const lost = distToHome(cfg, { zone: 'base' }) - distToHome(cfg, m.zone === 'center' ? { zone: 'center' } : m);
-  return BUMP_K * 5 * Math.max(0, lost) / (game.players.length - 1);
+  return BUMP_K * S.bump * 5 * Math.max(0, lost) / (game.players.length - 1);
 }
 
 // ---- Home layout ------------------------------------------------------------
@@ -397,8 +424,8 @@ function starHops(cfg, star) {
 
 function distToHome(cfg, loc) {
   if (loc.zone === 'home')   return 0;
-  if (loc.zone === 'center') return 1 + 6 + P_HUB;   // 1 onto pre-home star, walk 6
-  if (loc.zone === 'base')   return distToHome(cfg, { zone: 'track', space: cfg.start }) + P_BASE;
+  if (loc.zone === 'center') return 1 + 6 + S.pHub;   // 1 onto pre-home star, walk 6
+  if (loc.zone === 'base')   return distToHome(cfg, { zone: 'track', space: cfg.start }) + S.pBase;
 
   const s    = loc.space;
   const walk = (cfg.homeEntry - s + TRACK_SIZE) % TRACK_SIZE;
@@ -408,7 +435,7 @@ function distToHome(cfg, loc) {
     const d = (st - s + TRACK_SIZE) % TRACK_SIZE;
     if (d < k) { k = d; star = st; }
   }
-  const viaStars = k + (k > 0 ? P_LAND : 0) + starHops(cfg, star) + 6;
+  const viaStars = k + (k > 0 ? S.pLand : 0) + starHops(cfg, star) + 6;
   return Math.min(walk, viaStars);
 }
 

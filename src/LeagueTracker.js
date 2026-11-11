@@ -11,7 +11,7 @@
 // sends notable facts to the room as { event: 'leagueNote', level, parts }
 // (parts: strings and { team }, { marble: [color, id] }, { coach } tokens),
 // plus { event: 'leagueState' } snapshots for the page.
-import { TEAMS, marbleName, teamName, teamShort } from '../public/js/league.js';
+import { TEAMS, marbleName, teamName, teamShort, COACHES, coachByName, STYLE_LABELS, LEAGUE_NAME } from '../public/js/league.js';
 import { pipCount, PLAYER_CONFIG, ALL_STARS } from '../public/js/constants.js';
 import * as store from './Store.js';
 
@@ -139,7 +139,13 @@ export class LeagueTracker {
       if ((s.streak ?? 0) >= 3) notes.push([2, { team: t.color }, ` come in on a ${s.streak}-game winning streak.`]);
       if ((s.lossStreak ?? 0) >= 6) notes.push([1, { team: t.color }, ` haven't won in ${s.lossStreak} games. Can `, { coach: t.coach }, ' turn it around?']);
     }
-    notes.slice(0, 2).forEach((n, i) => setTimeout(() => this.note(...n), 4000 + i * 5000));
+    // One coach in the spotlight.
+    const spot = Object.values(teams)[Math.floor(Math.random() * Object.keys(teams).length)], c = coachByName(spot?.coach);
+    if (c) {
+      const rec = store.leagueGet('coach', c.name);
+      notes.push([1, { coach: c.full }, ' coaches ', { team: spot.color }, ` today. ${c.bio}`, rec.games ? ` Career: ${rec.wins ?? 0} wins from ${rec.games}.` : '', ` "${c.line}"`]);
+    }
+    notes.slice(0, 3).forEach((n, i) => setTimeout(() => this.note(...n), 4000 + i * 5000));
   }
 
   standings() {
@@ -302,7 +308,14 @@ export function leagueOverview() {
     const info = TEAMS[color]?.marbles[+id];
     return { ...m, color, mid: +id, name: info?.name, trait: info?.trait, bio: info?.bio, team: teamName(color) };
   });
-  const coaches = store.leagueAll('coach').sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0));
+  const byName = Object.fromEntries(store.leagueAll('coach').map(c => [c.id, c]));
+  const coaches = COACHES.map(c => ({ ...(byName[c.name] ?? {}), id: c.name, full: c.full, style: c.style, styleLabel: STYLE_LABELS[c.style], bio: c.bio }))
+    .sort((a, b) => ((b.wins ?? 0) / Math.max(1, b.games ?? 0)) - ((a.wins ?? 0) / Math.max(1, a.games ?? 0)));
   const rivals = store.leagueAll('rival').sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0)).slice(0, 8);
-  return { season: mon, teams, marbles, coaches, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
+  // Styles: how each approach is doing, all coaches of a style together.
+  const styles = Object.entries(STYLE_LABELS).map(([k, label]) => {
+    const cs = coaches.filter(c => c.style === k);
+    return { style: k, label, coaches: cs.map(c => c.id), games: cs.reduce((t, c) => t + (c.games ?? 0), 0), wins: cs.reduce((t, c) => t + (c.wins ?? 0), 0), points: cs.reduce((t, c) => t + (c.points ?? 0), 0) };
+  }).filter(x => x.coaches.length);
+  return { league: LEAGUE_NAME, season: mon, teams, marbles, coaches, styles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
 }

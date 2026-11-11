@@ -9,7 +9,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
-import { TEAMS } from './league.js';
+import { TEAMS, coachByName, LEAGUE_NAME } from './league.js';
 import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName } from './music.js';
 
 // ---- State ----
@@ -3539,7 +3539,7 @@ function showWatchCard(winnerIndex, result, score) {
   const card = $('watch-card');
   card.replaceChildren(
     el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), inLeague() ? `${TEAMS[w.color]?.name ?? w.name} win!` : `${w.name} wins!`),
-    inLeague() ? el('div', { class: 'muted wc-coach' }, `Coach: ${w.name}`) : '',
+    inLeague() ? el('div', { class: 'muted wc-coach' }, `Coach: ${coachByName(w.name)?.full ?? w.name}`) : '',
     inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${TEAMS[leagueMvp[0]]?.marbles[leagueMvp[1]]?.name} (${TEAMS[leagueMvp[0]]?.short})`) : '',
     how ? el('div', { class: 'wc-how' }, how) : '',
     el('div', { class: 'wc-head' }, 'This game'), standings(pts),
@@ -3766,7 +3766,12 @@ function renderLeague() {
       ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), m.name ?? m.id), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.exits ?? 0), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
         m.hubTurns ? `${Math.round(100 * (m.hubExits ?? 0) / m.hubTurns)}%` : '–', String(m.goArounds ?? 0), String(m.hubHits ?? 0), String(m.circleHits ?? 0)])));
   } else if (leagueTab === 'coaches') {
-    box.replaceChildren(lgTable(['Coach', 'Games', 'Won', 'Win %', 'Points', 'Streak', 'Best'], d.coaches.map(c => [c.id, String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0)])));
+    // Win % against the fair share: coaches play 2–6 player games, so compare wins with games ÷ players.
+    box.replaceChildren(
+      el('p', { class: 'muted' }, 'Coaches rotate between teams every game, and each plays a real style. Over enough games the table shows which approach works best.'),
+      lgTable(['Coach', 'Style', 'Games', 'Won', 'Win %', 'Points', 'Streak', 'Best'], d.coaches.map(c => [el('span', { title: c.bio ?? '' }, el('b', {}, c.full ?? c.id)), el('span', { class: 'muted' }, c.styleLabel ?? ''), String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0)])),
+      el('h3', {}, 'By style'),
+      lgTable(['Style', 'Coaches', 'Games', 'Won', 'Win %', 'Points per game'], (d.styles ?? []).map(x => [x.label, x.coaches.join(', '), String(x.games), String(x.wins), lgPct(x.wins, x.games), x.games ? (x.points / x.games).toFixed(2) : '–'])));
   } else if (leagueTab === 'records') {
     const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
     box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', fmtTime(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
