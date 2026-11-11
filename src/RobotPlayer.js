@@ -34,7 +34,7 @@ export const STYLES = {
   bonker:   { bump: 2.0, risk: 0.35 },
   racer:    { bump: 0.15, risk: 0.35, enter: 1.6 },
   cautious: { risk: 3.0, bump: 0.6 },
-  hub:      { pHub: 1, pLand: 1 },
+  hub:      { pHub: 5, pLand: 3 },
   gambler:  { risk: 0, bump: 1.4, pBase: 2 },
   packer:   { homeStep: 2.5, enter: 2.5, risk: 0.6 },
 };
