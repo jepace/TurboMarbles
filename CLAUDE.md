@@ -143,8 +143,12 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
 - Streaming: `/?watch=robots&players=6` is a kiosk page (no sign-in, no menus or buttons) that starts a
   robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080. Options:
-  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`. The Play page's
+  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=1`. The Play page's
   "Stream it" fold-out builds the URL. Kiosk options are per URL, never saved to the browser's settings.
+- Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; `music=1`
+  on the stream page). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
+  win): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
+  motif + instrument per colour with the leader's in front. `window.__music()` shows its state.
 - Admin: `node tools/admin.mjs grant <name>` (server only) makes an account an admin; the Admin page (side menu)
   unlocks with the password for 30 minutes: reports inbox, players (ban/unban, rename, reset rating, delete),
   server status and recent errors. Players report others from the game's player list (⚑) and from a friend's chat.

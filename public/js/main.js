@@ -8,6 +8,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted } from './sounds.js';
+import { setMusic, setMusicMuted, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2081,6 +2082,9 @@ $('opt-feedback').checked = settings.feedback;
 $('opt-numbers').checked = settings.numbers;
 $('opt-mute').checked = !!settings.muted;
 setMuted(settings.muted);
+$('opt-music').checked = !!settings.music;
+setMusicMuted(settings.muted);
+setMusic(!!settings.music);
 applyBoardLook();
 
 // ---- Board page: my colour, track and marble looks, with a live preview ----
@@ -2119,7 +2123,11 @@ function renderBoardPage() {
 
 $('btn-board-back').addEventListener('click', () => show('screen-home'));
 $('opt-mute').addEventListener('change', e => {
-  settings.muted = e.target.checked; saveSettings(); setMuted(settings.muted);
+  settings.muted = e.target.checked; saveSettings(); setMuted(settings.muted); setMusicMuted(settings.muted);
+});
+$('opt-music').addEventListener('change', e => {
+  settings.music = e.target.checked; saveSettings(); setMusic(settings.music);
+  updatePips();
 });
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
@@ -2196,6 +2204,7 @@ function updateStartButton() {
 }
 
 on('gameStarted', ({ gameState: gs }) => {
+  musicReset();
   applyWatch(gs);
   gameState = gs;
   if (gs.diceCommit) setTimeout(() => log(`🎲 Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`, null, 'log-dice'), 0);
@@ -2227,6 +2236,7 @@ on('gameStarted', ({ gameState: gs }) => {
 });
 
 on('rolled', ({ playerIndex, dice, moves, combos }) => {
+  musicRoll(dice, gameState?.players?.[playerIndex]?.color);
   gameState.dice = dice;
   gameState.diceUsed = [false, false];
   gameState.phase = 'AWAITING_MOVE';
@@ -2347,8 +2357,8 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
     enqueueTween({ playerIndex, marbleId, fromPos, waypoints, sound });
   } else {
     // No animatable path (e.g. exiting base): just play the sound and render.
-    if (sound === 'bonk') playBonk();
-    else if (sound === 'chime') playHomeChime();
+    if (sound === 'bonk') { playBonk(); musicHit(gameState?.players?.[playerIndex]?.color); }
+    else if (sound === 'chime') { playHomeChime(); musicHome(gameState?.players?.[playerIndex]?.color); }
     drawBoard(gameState);
   }
 
@@ -2366,6 +2376,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
 });
 
 on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
+  musicDuck(gameState?.players?.[ownerIndex]?.color);
   const marble = gameState.players[ownerIndex].marbles[marbleId];
 
   // Capture the pre-bump position so the marble lingers there (via override)
@@ -2485,6 +2496,7 @@ function showGameOver(winnerIndex) {
   $('btn-rematch').textContent = 'Rematch';
   $('rematch-msg').style.display = 'none';
   // The game-over window waits for the winning move's animation.
+  afterAnimations(() => musicWin(gameState?.players?.[winnerIndex]?.color));
   if (!watching) afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
   $('cube-offer').style.display = 'none';
   renderCube();
@@ -2971,8 +2983,8 @@ function runNextAnimation() {
     clearAnimatingMarble();
     runningMarble = null;
     lastAnimEnd = { playerIndex, marbleId };
-    if (sound === 'bonk') playBonk();
-    else if (sound === 'chime') playHomeChime();
+    if (sound === 'bonk') { playBonk(); musicHit(gameState?.players?.[playerIndex]?.color); }
+    else if (sound === 'chime') { playHomeChime(); musicHome(gameState?.players?.[playerIndex]?.color); }
     // Re-pin anything still waiting — including this marble, if it has another
     // move queued — before drawing, so nothing shows at its final position early.
     pinQueuedMarbles();
@@ -3172,6 +3184,11 @@ function renderSidebar() {
 // Refresh the pip counts in the player list (after every move or bump).
 function updatePips() {
   if (!gameState) return;
+  musicUpdate(gameState.players.map(p => {
+    const arm = PLAYER_CONFIG.findIndex(c => c.color === p.color);
+    return { color: p.color, pips: arm >= 0 ? pipCount(arm, p.marbles) : 346,
+      home: p.marbles.filter(m => m.zone === 'home').length, base: p.marbles.filter(m => m.zone === 'base').length };
+  }));
   for (const el of document.querySelectorAll('#player-list .pips')) {
     const p = gameState.players[Number(el.dataset.player)];
     const arm = PLAYER_CONFIG.findIndex(c => c.color === p?.color);
@@ -3413,10 +3430,11 @@ function streamUrl() {
   if (!$('sb-log').checked) q.set('log', '0');
   if (!$('sb-pips').checked) q.set('players_list', '0');
   if ($('sb-sound').checked) q.set('sound', '1');
+  if ($('sb-music').checked) q.set('music', '1');
   return `${location.origin}/?${q}`;
 }
 function renderStreamUrl() { const u = streamUrl(); $('sb-url').value = u; $('sb-open').href = u; }
-for (const id of ['sb-players', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound']) $(id).addEventListener('change', renderStreamUrl);
+for (const id of ['sb-players', 'sb-numbers', 'sb-log', 'sb-pips', 'sb-sound', 'sb-music']) $(id).addEventListener('change', renderStreamUrl);
 renderStreamUrl();
 $('sb-copy').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('sb-url').value); toastAnywhere('Stream URL copied.'); }
@@ -3434,6 +3452,8 @@ if (KIOSK) {
   const q = new URLSearchParams(location.search);
   document.body.classList.add('kiosk');
   setMuted(q.get('sound') !== '1');
+  setMusicMuted(false);
+  setMusic(q.get('music') === '1');
   // Board numbers are each player's own count, which means nothing to a
   // viewer: off unless numbers=1 (not saved to this browser's settings).
   settings.numbers = q.get('numbers') === '1';

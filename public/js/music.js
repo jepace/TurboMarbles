@@ -1,0 +1,310 @@
+// music.js — adaptive background music, generated live with Web Audio (no files).
+//
+// The game feeds it the position (update) and moments (roll, hit, home, win):
+//   - Intensity (tempo, drums, layers) rises as the leader nears home and the
+//     race tightens; a "final lap" lifts the key when someone is about to finish.
+//   - Darkness (minor harmony, a low drone) rises when a player risks an aggro
+//     (nothing home while the leader is well on the way) or a baggro (all in base).
+//   - Every colour has its own motif and instrument. The leader's motif carries
+//     the melody; close chasers answer in the gaps, louder as they close in; a
+//     change of lead cross-fades over a couple of bars.
+//   - Cues on the beat: 6 (rising run; 6-6 bigger), 1 (bell), doubles (echo),
+//     hits (sting; the victim's voice ducks), marbles home, and the winner's fanfare.
+//
+// A look-ahead scheduler (the usual Web Audio pattern) queues 16th-note steps
+// slightly ahead of time, so timing stays tight even when the page is busy.
+
+let ctx = null, master = null, bus = null, comp = null;
+let running = false, timer = null;
+let enabled = false, muted = false;
+
+// ---- Musical material ----------------------------------------------------------
+
+const ROOT = 48;                        // C3 (MIDI) — the key moves from here
+const MAJOR = [0, 2, 4, 5, 7, 9, 11];
+const MINOR = [0, 2, 3, 5, 7, 8, 10];
+// Four-bar progressions (scale degrees of the chord roots).
+const PROG_MAJOR = [0, 5, 3, 4];        // I vi IV V
+const PROG_MINOR = [0, 5, 2, 6];        // i VI III VII
+
+// Each colour: an instrument and a two-bar motif. Motif notes are
+// [step (0–31, 16ths over two bars), scale degree (relative to the chord), length in steps].
+const VOICES = {
+  blue:   { inst: 'epiano', oct: 1, motif: [[0, 0, 3], [4, 2, 2], [6, 4, 2], [8, 2, 6], [16, 1, 3], [20, 2, 2], [22, 4, 2], [24, 5, 6]] },
+  pink:   { inst: 'pluck',  oct: 2, motif: [[0, 4, 1], [2, 2, 1], [4, 4, 1], [6, 5, 2], [10, 4, 1], [12, 2, 2], [16, 0, 1], [18, 2, 1], [20, 4, 1], [22, 7, 2], [26, 5, 2]] },
+  orange: { inst: 'brass',  oct: 1, motif: [[0, 0, 2], [3, 0, 1], [4, 4, 4], [10, 3, 2], [12, 2, 4], [16, 0, 2], [19, 0, 1], [20, 5, 4], [26, 4, 4]] },
+  yellow: { inst: 'marimba',oct: 2, motif: [[0, 2, 1], [2, 4, 1], [4, 7, 1], [6, 4, 1], [8, 2, 2], [12, 0, 2], [16, 3, 1], [18, 5, 1], [20, 7, 1], [22, 5, 1], [24, 4, 2], [28, 2, 2]] },
+  green:  { inst: 'flute',  oct: 2, motif: [[0, 4, 4], [4, 5, 2], [6, 4, 2], [8, 2, 8], [16, 3, 4], [20, 4, 2], [22, 5, 2], [24, 7, 8]] },
+  white:  { inst: 'glass',  oct: 2, motif: [[0, 7, 6], [8, 4, 6], [16, 5, 6], [24, 2, 8]] },
+};
+
+// ---- State fed by the game -----------------------------------------------------
+
+const S = {
+  intensity: 0.15,    // 0 calm … 1 frantic (smoothed)
+  target: 0.15,
+  dark: 0,            // 0 major … 1 minor + drone
+  finalLap: false,
+  leader: null,       // colour
+  weights: {},        // colour → current motif loudness (smoothed toward targets)
+  targets: {},
+  duck: {},           // colour → steps left ducked (after being hit)
+  colors: [],
+};
+const queue = [];     // cues waiting for their beat: { kind, color, extra }
+
+// ---- Audio graph ---------------------------------------------------------------
+
+function ensure() {
+  if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.ratio.value = 4;
+  master = ctx.createGain();
+  master.gain.value = 0;
+  bus = ctx.createGain();
+  bus.gain.value = 0.9;
+  bus.connect(comp); comp.connect(master); master.connect(ctx.destination);
+  // A short feedback delay for space.
+  const d = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
+  d.delayTime.value = 0.27; fb.gain.value = 0.28; wet.gain.value = 0.22;
+  bus.connect(d); d.connect(fb); fb.connect(d); d.connect(wet); wet.connect(comp);
+}
+
+const midiHz = m => 440 * 2 ** ((m - 69) / 12);
+
+function env(g, t, a, peak, dec, sus, rel, len) {
+  g.gain.cancelScheduledValues(t);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + a);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak * sus), t + a + dec);
+  g.gain.setValueAtTime(Math.max(0.0001, peak * sus), t + Math.max(a + dec, len));
+  g.gain.exponentialRampToValueAtTime(0.0001, t + Math.max(a + dec, len) + rel);
+}
+
+// One note on an instrument. vol 0–1.
+function note(inst, midi, t, dur, vol) {
+  if (vol < 0.01) return;
+  const f = midiHz(midi);
+  const g = ctx.createGain();
+  const out = ctx.createGain(); out.gain.value = vol;
+  g.connect(out); out.connect(bus);
+  const stop = t + dur + 0.6;
+  const osc = (type, freq, detune = 0) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq; o.detune.value = detune; o.start(t); o.stop(stop); return o; };
+  const lp = (fq, q = 0.7) => { const b = ctx.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = fq; b.Q.value = q; return b; };
+  switch (inst) {
+    case 'epiano': { const a = osc('sine', f), b = osc('triangle', f * 2, 4); const m = ctx.createGain(); m.gain.value = 0.25; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.005, 0.32, 0.3, 0.35, 0.4, dur); break; }
+    case 'pluck': { const a = osc('sawtooth', f), fl = lp(f * 6, 2); fl.frequency.setValueAtTime(f * 8, t); fl.frequency.exponentialRampToValueAtTime(f * 1.5, t + 0.18); a.connect(fl); fl.connect(g); env(g, t, 0.003, 0.22, 0.12, 0.2, 0.15, dur * 0.6); break; }
+    case 'brass': { const a = osc('sawtooth', f), b = osc('sawtooth', f, 8), fl = lp(f * 2, 1); fl.frequency.setValueAtTime(f * 1.2, t); fl.frequency.linearRampToValueAtTime(f * 4, t + 0.08); a.connect(fl); b.connect(fl); fl.connect(g); env(g, t, 0.04, 0.16, 0.15, 0.7, 0.18, dur); break; }
+    case 'marimba': { const a = osc('sine', f), b = osc('sine', f * 4); const m = ctx.createGain(); m.gain.value = 0.15; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.002, 0.4, 0.25, 0.05, 0.1, 0.05); break; }
+    case 'flute': { const a = osc('triangle', f), v = ctx.createOscillator(), vg = ctx.createGain(); v.frequency.value = 5; vg.gain.value = 6; v.connect(vg); vg.connect(a.detune); v.start(t); v.stop(stop); const fl = lp(f * 3); a.connect(fl); fl.connect(g); env(g, t, 0.08, 0.26, 0.2, 0.75, 0.25, dur); break; }
+    case 'glass': { const a = osc('sine', f), b = osc('sine', f * 2.01), c = osc('sine', f * 3.02); const m = ctx.createGain(); m.gain.value = 0.3; b.connect(m); c.connect(m); a.connect(g); m.connect(g); env(g, t, 0.15, 0.2, 0.4, 0.6, 0.8, dur); break; }
+    case 'pad': { const a = osc('sawtooth', f, -7), b = osc('sawtooth', f, 7), fl = lp(900 + 1600 * S.intensity); a.connect(fl); b.connect(fl); fl.connect(g); env(g, t, 0.6, 0.07, 0.4, 0.85, 0.9, dur); break; }
+    case 'bass': { const a = osc('triangle', f), b = osc('square', f / 2), m = ctx.createGain(); m.gain.value = 0.18; b.connect(m); const fl = lp(400); a.connect(fl); m.connect(fl); fl.connect(g); env(g, t, 0.01, 0.42, 0.15, 0.6, 0.1, dur); break; }
+    case 'bell': { const a = osc('sine', f), b = osc('sine', f * 2.76); const m = ctx.createGain(); m.gain.value = 0.35; b.connect(m); a.connect(g); m.connect(g); env(g, t, 0.002, 0.35, 0.6, 0.15, 0.8, 0.1); break; }
+    case 'drone': { const a = osc('sawtooth', f), b = osc('sine', f / 2), fl = lp(220); a.connect(fl); b.connect(fl); fl.connect(g); env(g, t, 0.8, 0.12, 0.5, 0.9, 1.2, dur); break; }
+  }
+}
+
+function noise(t, dur, vol, hp = 6000) {
+  const len = Math.ceil(ctx.sampleRate * dur), buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const s = ctx.createBufferSource(); s.buffer = buf;
+  const f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = hp;
+  const g = ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(bus); s.start(t); s.stop(t + dur);
+}
+function kick(t, vol) {
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+  o.connect(g); g.connect(bus); o.start(t); o.stop(t + 0.32);
+}
+const snare = (t, vol) => { noise(t, 0.16, vol, 1500); note('bell', 62, t, 0.05, vol * 0.15); };
+
+// ---- Harmony helpers -----------------------------------------------------------
+
+let keyShift = 0;            // semitones (final lap lifts it)
+const scale = () => (S.dark > 0.5 ? MINOR : MAJOR);
+const prog = () => (S.dark > 0.5 ? PROG_MINOR : PROG_MAJOR);
+// MIDI note for a scale degree above a chord root (degrees wrap into octaves).
+function degree(rootDeg, deg, oct = 0) {
+  const sc = scale(), i = rootDeg + deg;
+  return ROOT + keyShift + 12 * (oct + Math.floor(i / 7)) + sc[((i % 7) + 7) % 7];
+}
+
+// ---- Scheduler ---------------------------------------------------------------
+
+let step = 0, nextTime = 0;
+const bpm = () => 78 + 54 * S.intensity;
+const stepDur = () => 60 / bpm() / 4;
+
+function tick() {
+  if (!ctx) return;
+  while (nextTime < ctx.currentTime + 0.12) { playStep(step, nextTime); nextTime += stepDur(); step++; }
+}
+
+function playStep(n, t) {
+  const s16 = n % 16, bar = Math.floor(n / 16), chordDeg = prog()[bar % 4];
+  const I = S.intensity;
+  // Smooth the mix once per 16th.
+  S.intensity += (S.target - S.intensity) * 0.02;
+  for (const c of S.colors) {
+    const tgt = (S.targets[c] ?? 0) * (S.duck[c] > 0 ? 0.15 : 1);
+    S.weights[c] = (S.weights[c] ?? 0) + (tgt - (S.weights[c] ?? 0)) * 0.03;
+    if (S.duck[c] > 0) S.duck[c]--;
+  }
+  // Key change for the final lap, on a bar line.
+  if (s16 === 0) keyShift = S.finalLap ? 2 : 0;
+
+  // Pad: the chord, each bar.
+  if (s16 === 0) for (const d of [0, 2, 4]) note('pad', degree(chordDeg, d, 1), t, stepDur() * 16, 0.5);
+  // Drone when it's dark.
+  if (s16 === 0 && bar % 2 === 0 && S.dark > 0.3) note('drone', degree(0, 0, -1), t, stepDur() * 32, 0.5 * S.dark);
+  // Bass: roots, busier as intensity rises.
+  const bassHits = I < 0.3 ? [0, 8] : I < 0.6 ? [0, 6, 8, 14] : [0, 3, 6, 8, 11, 14];
+  if (bassHits.includes(s16)) note('bass', degree(chordDeg, s16 === 14 && I > 0.6 ? 4 : 0, -1), t, stepDur() * 2, 0.8);
+  // Drums.
+  if (I > 0.12 && (s16 === 0 || (I > 0.45 && s16 === 8) || (I > 0.75 && s16 === 10))) kick(t, 0.5);
+  if (I > 0.35 && (s16 === 4 || s16 === 12)) snare(t, 0.12 + 0.12 * I);
+  if (I > 0.2 && s16 % (I > 0.65 ? 1 : 2) === 0) noise(t, 0.03, 0.02 + 0.04 * I * (s16 % 4 === 2 ? 1.6 : 1));
+
+  // Motifs: the leader carries the tune; chasers answer, louder as they close in.
+  const pos = n % 32;
+  const ranked = [...S.colors].sort((a, b) => (S.weights[b] ?? 0) - (S.weights[a] ?? 0));
+  ranked.forEach((c, rank) => {
+    const w = S.weights[c] ?? 0, v = VOICES[c];
+    if (!v || w < 0.03) return;
+    // The leader plays its motif in full; others only in the second half
+    // of every other two-bar phrase (call and response), lower in the mix.
+    const answering = rank > 0;
+    if (answering && !(bar % 4 >= 2 && pos >= 16)) return;
+    for (const [st, deg, len] of v.motif) {
+      if (st === pos) note(v.inst, degree(chordDeg, deg, v.oct), t, len * stepDur(), (answering ? 0.55 : 1) * w * 0.9);
+    }
+  });
+
+  // Cues wait for the next 8th.
+  if (s16 % 2 === 0) while (queue.length) playCue(queue.shift(), t, chordDeg);
+}
+
+function playCue({ kind, color, extra }, t, chordDeg) {
+  const sd = stepDur();
+  switch (kind) {
+    case 'six': {
+      const n = extra?.double ? 8 : 4;
+      for (let i = 0; i < n; i++) note('pluck', degree(chordDeg, i * 2, 2), t + i * sd, sd * 1.5, 0.55);
+      if (extra?.double) note('bell', degree(chordDeg, 14, 2), t + n * sd, sd * 4, 0.6);
+      break;
+    }
+    case 'one': note('bell', degree(chordDeg, extra?.hub ? 7 : 4, 2), t, sd * 4, 0.55); break;
+    case 'double': note('marimba', degree(chordDeg, 4, 2), t, sd, 0.5); note('marimba', degree(chordDeg, 4, 2), t + sd * 2, sd, 0.3); break;
+    case 'hit': {
+      // Dissonant sting, then the hitter's motif head.
+      for (const d of [0, 1, 3]) note('brass', degree(chordDeg, d, 1) + (d === 1 ? 1 : 0), t, sd * 2, 0.35);
+      kick(t, 0.6); noise(t, 0.25, 0.08, 800);
+      const v = VOICES[color];
+      if (v) v.motif.slice(0, 3).forEach(([st, deg, len], i) => note(v.inst, degree(chordDeg, deg, v.oct), t + (2 + i * 2) * sd, len * sd, 0.7));
+      break;
+    }
+    case 'home': {
+      const v = VOICES[color];
+      [0, 2, 4, 7].forEach((d, i) => note(v?.inst ?? 'bell', degree(chordDeg, d, (v?.oct ?? 2)), t + i * sd, sd * 2, 0.5));
+      break;
+    }
+    case 'win': {
+      const v = VOICES[color];
+      const inst = v?.inst ?? 'brass';
+      [0, 2, 4, 7, 4, 7, 9, 11].forEach((d, i) => note(inst, degree(0, d, (v?.oct ?? 1)), t + i * sd * 2, sd * 3, 0.85));
+      for (const d of [0, 2, 4]) note('pad', degree(0, d, 1), t + 16 * sd, sd * 24, 0.8);
+      kick(t, 0.7);
+      break;
+    }
+  }
+}
+
+function startClock() {
+  if (running) return;
+  ensure();
+  running = true;
+  step = 0; nextTime = ctx.currentTime + 0.1;
+  timer = setInterval(tick, 25);
+}
+function stopClock() {
+  running = false;
+  clearInterval(timer); timer = null;
+}
+function applyVolume() {
+  if (!ctx) return;
+  const on = enabled && !muted;
+  master.gain.cancelScheduledValues(ctx.currentTime);
+  master.gain.setTargetAtTime(on ? 0.5 : 0, ctx.currentTime, 0.4);
+  if (on) startClock();
+  else setTimeout(() => { if (!(enabled && !muted)) stopClock(); }, 1500);
+}
+
+// ---- Public API ---------------------------------------------------------------
+
+export function setMusic(on) { enabled = !!on; if (enabled) ensure(); applyVolume(); }
+export function setMusicMuted(m) { muted = !!m; applyVolume(); }
+export function musicOn() { return enabled && !muted; }
+
+// The position: players [{ color, pips, home, base }] (pips = the race still to go).
+export function musicUpdate(players) {
+  if (!players?.length) return;
+  const START = 346;   // pips at the start of a game
+  const sorted = [...players].sort((a, b) => a.pips - b.pips);
+  const lead = sorted[0], second = sorted[1];
+  const progress = Math.min(1, Math.max(0, (START - lead.pips) / (START - 20)));
+  const close = second ? Math.max(0, 1 - (second.pips - lead.pips) / 60) : 0;
+  S.target = Math.min(1, 0.12 + 0.6 * progress + 0.25 * close * progress);
+  S.finalLap = lead.home >= 3 || lead.pips <= 40;
+  // Aggro / baggro risk: someone with nothing home (or all in base) while the leader is well on the way.
+  const risk = players.reduce((r, p) => Math.max(r, p === lead ? 0 : (p.base === 4 ? 1 : p.home === 0 ? 0.7 : 0) * progress), 0);
+  S.dark = risk;
+  S.colors = players.map(p => p.color);
+  S.leader = lead.color;
+  for (const p of players) {
+    const gap = p.pips - lead.pips;
+    S.targets[p.color] = p === lead ? 1 : Math.max(0, 0.75 * Math.exp(-gap / 25));
+  }
+  for (const c of Object.keys(S.targets)) if (!S.colors.includes(c)) S.targets[c] = 0;
+}
+
+// Moments, played on the next beat.
+export function musicRoll(dice, color) {
+  if (!musicOn() || !dice) return;
+  if (dice.includes(6)) queue.push({ kind: 'six', color, extra: { double: dice[0] === 6 && dice[1] === 6 } });
+  else if (dice.includes(1)) queue.push({ kind: 'one', color });
+  else if (dice[0] === dice[1]) queue.push({ kind: 'double', color });
+}
+export function musicHit(byColor, victimColor) {
+  if (victimColor) S.duck[victimColor] = 32;
+  if (musicOn()) queue.push({ kind: 'hit', color: byColor });
+}
+export function musicDuck(color) { if (color) S.duck[color] = 32; }
+export function musicHome(color) { if (musicOn()) queue.push({ kind: 'home', color }); }
+export function musicHubExit(color) { if (musicOn()) queue.push({ kind: 'one', color, extra: { hub: true } }); }
+export function musicWin(color) {
+  if (!musicOn()) return;
+  queue.length = 0;
+  queue.push({ kind: 'win', color });
+  S.target = 0.15;  // calm again for the next game
+}
+export function musicReset() { S.intensity = S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {}; }
+
+// Browsers start audio only after a click or key press; resume then.
+for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => { if (ctx?.state === 'suspended') ctx.resume(); });
+// For checking from the console: what the music is doing.
+window.__music = () => ({ state: ctx?.state, time: ctx?.currentTime, step, bpm: Math.round(bpm()), intensity: +S.intensity.toFixed(2), dark: S.dark, finalLap: S.finalLap, leader: S.leader,
+  weights: Object.fromEntries(Object.entries(S.weights).map(([k, v]) => [k, +v.toFixed(2)])) });
+// Record what the music plays for ms milliseconds (a sample to listen to): resolves to a data URL.
+window.__musicRecord = ms => new Promise(res => {
+  if (!ctx) return res(null);
+  const dest = ctx.createMediaStreamDestination();
+  master.connect(dest);
+  const rec = new MediaRecorder(dest.stream), parts = [];
+  rec.ondataavailable = e => parts.push(e.data);
+  rec.onstop = () => { master.disconnect(dest); const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(new Blob(parts, { type: rec.mimeType })); };
+  rec.start(); setTimeout(() => rec.stop(), ms);
+});
