@@ -16,7 +16,7 @@
 
 let ctx = null, master = null, bus = null, comp = null;
 let running = false, timer = null;
-let enabled = false, muted = false;
+let enabled = false, muted = false, volume = 0.7;
 
 // ---- Musical material ----------------------------------------------------------
 
@@ -304,7 +304,7 @@ function applyVolume() {
   if (!ctx) return;
   const on = enabled && !muted;
   master.gain.cancelScheduledValues(ctx.currentTime);
-  master.gain.setTargetAtTime(on ? 0.5 : 0, ctx.currentTime, 0.4);
+  master.gain.setTargetAtTime(on ? 0.75 * volume : 0, ctx.currentTime, 0.4);
   if (on) startClock();
   else setTimeout(() => { if (!(enabled && !muted)) stopClock(); }, 1500);
 }
@@ -313,6 +313,8 @@ function applyVolume() {
 
 export function setMusic(on) { enabled = !!on; if (enabled) ensure(); applyVolume(); }
 export function setMusicMuted(m) { muted = !!m; applyVolume(); }
+// Music volume, 0–1.
+export function setMusicVolume(v) { volume = Math.max(0, Math.min(1, +v || 0)); applyVolume(); }
 export function musicOn() { return enabled && !muted; }
 
 // The position: players [{ color, pips, home, base }] (pips = the race still to go).

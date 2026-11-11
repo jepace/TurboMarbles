@@ -764,3 +764,8 @@ details.stream-builder summary { cursor: pointer; color: var(--muted); text-alig
 .wc-head { margin-top: 0.4rem; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
 body.kiosk #score-line { color: inherit; font-weight: 600; }
 body.kiosk #score-line .standings { font-size: 1.05rem; }
+/* In-game audio: on/off + volume per channel */
+.audio-row { display: flex; align-items: center; gap: 8px; }
+.audio-row label { flex: 0 0 6.5em; }
+.audio-row input[type=range] { flex: 1 1 auto; min-width: 0; accent-color: #f0c040; height: 4px; }
+.audio-row input[type=range]:disabled { opacity: 0.35; }

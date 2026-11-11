@@ -7,8 +7,8 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          setAnimatingMarble, clearAnimatingMarble,
          getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf } from './constants.js';
-import { playBonk, playClick, playHomeChime, setMuted } from './sounds.js';
-import { setMusic, setMusicMuted, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset } from './music.js';
+import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -36,13 +36,17 @@ let pendingFeedback = null; // { text, cls } — robot comparison for my roll, l
 // ---- Player options (remembered in this browser) ----
 // Move feedback: after committing a roll, show how the robot would have played it.
 // Post-game analysis: offer the "Analyze Game" button when a game ends.
-const settings = { feedback: true, analysis: true, numbers: true };
+const settings = { feedback: true, analysis: true, numbers: true, sfx: true, music: false, musicVol: 0.7, sfxVol: 0.8 };
 try {
   const saved = JSON.parse(localStorage.getItem('tm.settings') ?? '{}');
   if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
   if (typeof saved.analysis === 'boolean') settings.analysis = saved.analysis;
   if (typeof saved.numbers === 'boolean') settings.numbers = saved.numbers;
   if (typeof saved.myColor === 'string') settings.myColor = saved.myColor;
+  if (typeof saved.music === 'boolean') settings.music = saved.music;
+  if (typeof saved.sfx === 'boolean') settings.sfx = saved.sfx;
+  else if (typeof saved.muted === 'boolean') settings.sfx = !saved.muted;   // the old Mute option
+  for (const k of ['musicVol', 'sfxVol']) if (typeof saved[k] === 'number') settings[k] = saved[k];
   if (typeof saved.boardTrack === 'string') settings.boardTrack = saved.boardTrack;
   if (typeof saved.boardMarbles === 'string') settings.boardMarbles = saved.boardMarbles;
 } catch { /* storage unavailable: use defaults */ }
@@ -2080,11 +2084,15 @@ document.addEventListener('keydown', e => {
 // ---- Options checkboxes ----
 $('opt-feedback').checked = settings.feedback;
 $('opt-numbers').checked = settings.numbers;
-$('opt-mute').checked = !!settings.muted;
-setMuted(settings.muted);
-$('opt-music').checked = !!settings.music;
-setMusicMuted(settings.muted);
-setMusic(!!settings.music);
+// Audio: music and effects, each on/off with its own volume.
+function applyAudio() {
+  $('opt-music').checked = !!settings.music; $('vol-music').value = Math.round(settings.musicVol * 100);
+  $('opt-sfx').checked = !!settings.sfx;     $('vol-sfx').value = Math.round(settings.sfxVol * 100);
+  $('vol-music').disabled = !settings.music; $('vol-sfx').disabled = !settings.sfx;
+  setMusicVolume(settings.musicVol); setMusicMuted(false); setMusic(!!settings.music);
+  setSfxVolume(settings.sfxVol); setMuted(!settings.sfx);
+}
+applyAudio();
 applyBoardLook();
 
 // ---- Board page: my colour, track and marble looks, with a live preview ----
@@ -2122,13 +2130,13 @@ function renderBoardPage() {
 }
 
 $('btn-board-back').addEventListener('click', () => show('screen-home'));
-$('opt-mute').addEventListener('change', e => {
-  settings.muted = e.target.checked; saveSettings(); setMuted(settings.muted); setMusicMuted(settings.muted);
-});
-$('opt-music').addEventListener('change', e => {
-  settings.music = e.target.checked; saveSettings(); setMusic(settings.music);
-  updatePips();
-});
+$('opt-music').addEventListener('change', e => { settings.music = e.target.checked; saveSettings(); applyAudio(); updatePips(); });
+$('opt-sfx').addEventListener('change', e => { settings.sfx = e.target.checked; saveSettings(); applyAudio(); });
+$('vol-music').addEventListener('input', e => { settings.musicVol = e.target.value / 100; setMusicVolume(settings.musicVol); });
+$('vol-sfx').addEventListener('input', e => { settings.sfxVol = e.target.value / 100; setSfxVolume(settings.sfxVol); });
+for (const id of ['vol-music', 'vol-sfx']) $(id).addEventListener('change', saveSettings);
+// A click on the effects slider plays a sample, so you hear the level.
+$('vol-sfx').addEventListener('change', () => { if (settings.sfx) playClick(); });
 $('opt-numbers').addEventListener('change', e => {
   settings.numbers = e.target.checked; saveSettings();
   applySquareNumbers();

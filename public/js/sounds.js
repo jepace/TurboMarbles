@@ -2,10 +2,16 @@
 
 let ctx = null;
 let muted = false;
+let out = null, volume = 0.8;
 export function setMuted(m) { muted = !!m; }
+// Effects volume, 0–1.
+export function setSfxVolume(v) { volume = Math.max(0, Math.min(1, +v || 0)); if (out) out.gain.value = volume * 1.25; }
 
 function getCtx() {
-  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    out = ctx.createGain(); out.gain.value = volume * 1.25; out.connect(ctx.destination);
+  }
   if (ctx.state === 'suspended') ctx.resume();
   return ctx;
 }
@@ -27,7 +33,7 @@ export function playBonk() {
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
 
   osc.connect(gain);
-  gain.connect(ac.destination);
+  gain.connect(out);
   osc.start(t);
   osc.stop(t + 0.15);
 }
@@ -49,7 +55,7 @@ export function playClick() {
   gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
 
   osc.connect(gain);
-  gain.connect(ac.destination);
+  gain.connect(out);
   osc.start(t);
   osc.stop(t + 0.07);
 }
@@ -74,7 +80,7 @@ export function playHomeChime() {
     gain.gain.exponentialRampToValueAtTime(0.001, t + 0.28);
 
     osc.connect(gain);
-    gain.connect(ac.destination);
+    gain.connect(out);
     osc.start(t);
     osc.stop(t + 0.3);
   });

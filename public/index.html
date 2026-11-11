@@ -353,8 +353,12 @@
       <div id="settings">
         <label title="After each roll, show how the coach would have played it"><input type="checkbox" id="opt-feedback"> Move feedback</label>
         <label title="Small numbers on the squares: how far each one is from your home (the move log uses the mover's numbers)"><input type="checkbox" id="opt-numbers"> Numbers on board</label>
-        <label title="Background music that follows the race: the leader's colour carries the tune"><input type="checkbox" id="opt-music"> Music</label>
-        <label title="Turn game sounds off"><input type="checkbox" id="opt-mute"> Mute</label>
+        <div class="audio-row" title="Background music that follows the race: the leader's colour carries the tune">
+          <label><input type="checkbox" id="opt-music"> 🎵 Music</label><input type="range" id="vol-music" min="0" max="100" step="1" aria-label="Music volume">
+        </div>
+        <div class="audio-row" title="Dice, bumps and home chimes">
+          <label><input type="checkbox" id="opt-sfx"> 🔊 Effects</label><input type="range" id="vol-sfx" min="0" max="100" step="1" aria-label="Effects volume">
+        </div>
         <div class="btn-row small-links">
           <button id="btn-game-profile" class="link-btn" style="display:none">⚙ Profile &amp; settings</button>
           <button id="btn-quit" class="link-btn" title="Leave this game (against people: resign)">Quit</button>
