@@ -2204,6 +2204,7 @@ function updateStartButton() {
 }
 
 on('gameStarted', ({ gameState: gs }) => {
+  clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
   musicReset();
   applyWatch(gs);
   gameState = gs;
@@ -2539,8 +2540,10 @@ function renderCube() {
     } else if (!o) $('cube-offer').style.display = 'none';
   }
   const line = sessionLine(true);
-  $('score-line').style.display = line ? 'block' : 'none';
-  $('score-line').textContent = line;
+  $('score-line').style.display = line || (watching && gameState?.score) ? 'block' : 'none';
+  // Watching a session: a leader list, best first. Else the one-line score.
+  if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
+  else $('score-line').textContent = line;
 }
 
 // "Session: You +2 · Sloane −2" (money score, cube rooms) or
@@ -2630,6 +2633,7 @@ on('doubleDropped', ({ playerIndex }) => {
   log(`${playerName(playerIndex)} drops`, gameState.players[playerIndex]?.color);
 });
 on('gameResult', ({ winnerIndex, result, score, wins, match, game, ratings }) => {
+  if (watching) afterAnimations(() => showWatchCard(winnerIndex, result, score));
   const myR = ratings?.[myPlayerIndex];
   if (myR) { myRating = { ...(myRating ?? {}), rating: myR.rating }; renderNavMe(); log(`Your rating: ${myR.rating} (${myR.change >= 0 ? '+' : ''}${myR.change})`); }
   if (game != null) {
@@ -3325,7 +3329,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 // Text is scanned as it appears; each name of a player in the current game or
 // the open analysis gets its colour dot. Places that already draw one (player
 // list, lobby, a log line's leading dot) are left alone.
-const NAME_SKIP = '#player-list, #lobby-slots, .aph, .gc-name, select, option, input, textarea, .pname, canvas';
+const NAME_SKIP = '#player-list, #lobby-slots, .aph, .gc-name, .standings, #watch-card, .live-games, select, option, input, textarea, .pname, canvas';
 function nameColors() {
   const m = new Map();
   for (const p of [...(analysisReport?.players ?? []), ...(gameState?.players ?? [])])
@@ -3462,4 +3466,39 @@ if (KIOSK) {
   document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');
   document.body.classList.toggle('kiosk-nolist', q.get('players_list') === '0');
   startKiosk();
+}
+
+
+// ---- Watching: the result card and the standings ----
+// Session points, best first: "1 ● McCoy +6".
+function standings(score) {
+  const g = gameState;
+  const rows = g.players.map((p, i) => ({ p, pts: score[i] ?? 0 })).sort((a, b) => b.pts - a.pts);
+  return el('div', { class: 'standings' }, ...rows.map((x, k) => el('div', { class: 'st-row' },
+    el('span', { class: 'st-rank' }, String(k + 1)),
+    el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(x.p.color)] ?? '#888'}` }),
+    el('span', { class: 'st-name' }, x.p.name),
+    el('span', { class: 'st-pts' + (x.pts > 0 ? ' plus' : x.pts < 0 ? ' minus' : '') }, `${x.pts > 0 ? '+' : x.pts < 0 ? '−' : ''}${Math.abs(x.pts)}`))));
+}
+// "McCoy wins!" over the board for 5 s: this game's points, then the session.
+let watchCardTimer = null;
+function showWatchCard(winnerIndex, result, score) {
+  const g = gameState;
+  if (!g || winnerIndex == null) return;
+  const w = g.players[winnerIndex];
+  const losers = result?.losers ?? (result ? g.players.map((_, i) => ({ pi: i, points: result.points })).filter(l => l.pi !== winnerIndex) : []);
+  const pts = g.players.map((_, i) => i === winnerIndex ? losers.reduce((t, l) => t + l.points, 0) : -(losers.find(l => l.pi === i)?.points ?? 0));
+  // Aggros and baggros, by loser (3+ players: some losers may have one, some not).
+  const big = losers.filter(l => (l.mult ?? (result?.baggro ? 3 : result?.aggro ? 2 : 1)) >= 2)
+    .map(l => `${g.players[l.pi].name}: ${(l.mult ?? (result?.baggro ? 3 : 2)) === 3 ? 'baggro' : 'aggro'}`);
+  const how = result?.dropped ? 'double dropped' : big.length ? big.join(' · ') + '!' : null;
+  const card = $('watch-card');
+  card.replaceChildren(
+    el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), `${w.name} wins!`),
+    how ? el('div', { class: 'wc-how' }, how) : '',
+    el('div', { class: 'wc-head' }, 'This game'), standings(pts),
+    score ? el('div', { class: 'wc-head' }, 'Session') : '', score ? standings(score) : '');
+  card.style.display = 'flex';
+  clearTimeout(watchCardTimer);
+  watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 5000);
 }

@@ -749,3 +749,18 @@ body.kiosk-nolist #player-list { display: none !important; }
 #sb-url { flex: 1 1 auto; min-width: 0; font-size: 0.85rem; }
 details.stream-builder { margin-top: 0.6rem; padding-top: 0.5rem; }
 details.stream-builder summary { cursor: pointer; color: var(--muted); text-align: center; font-size: 0.9rem; }
+/* Watching: standings and the end-of-game card */
+.standings { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.st-row { display: grid; grid-template-columns: 1.4em 12px 1fr auto; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.st-rank { color: var(--muted); text-align: right; }
+.st-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-pts.plus { color: #7ee08a; } .st-pts.minus { color: #ff9a8a; }
+#watch-card { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 5;
+  flex-direction: column; gap: 0.5rem; min-width: 22rem; padding: 1.4rem 1.8rem; border-radius: 16px;
+  background: #0b1626ee; border: 2px solid #f0c040; box-shadow: 0 10px 40px #000a; font-size: 1.15rem; }
+.wc-title { display: flex; align-items: center; gap: 0.6rem; font-size: 2rem; font-weight: 800; color: #f0c040; }
+.wc-dot { width: 0.8em; height: 0.8em; border-radius: 50%; box-shadow: 0 0 0 2px #0006; }
+.wc-how { color: #ff9a8a; font-weight: 700; }
+.wc-head { margin-top: 0.4rem; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
+body.kiosk #score-line { color: inherit; font-weight: 600; }
+body.kiosk #score-line .standings { font-size: 1.05rem; }
