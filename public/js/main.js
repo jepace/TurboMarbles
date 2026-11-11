@@ -3647,9 +3647,14 @@ function leagueGrammar(parts) {
   if (!inLeague()) return parts;
   const isTeam = x => x && typeof x === 'object' && (x.team || (x.player != null && !x.marble));
   const out = parts.map((x, i) => (typeof x === 'string' && isTeam(parts[i - 1]) ? pluralVerb(x) : x));
-  const first = out.findIndex(x => x !== '');
-  if (isTeam(out[first])) out[first] = { ...out[first], cap: true };
-  return out;
+  // "The" at the start of the line, or of a sentence ("…5-2. The Embers…").
+  let atStart = true;
+  return out.map(x => {
+    if (typeof x === 'string') { if (x.trim() !== '') atStart = /[.!?…]\s*$/.test(x); return x; }
+    const capped = atStart && isTeam(x) ? { ...x, cap: true } : x;
+    atStart = false;
+    return capped;
+  });
 }
 const commentator = createCommentator((parts, level) => {
   const box = $('commentary');

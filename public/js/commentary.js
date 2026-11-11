@@ -98,7 +98,7 @@ export function createCommentator(onLine) {
       rollNo++;
       const six = dice.includes(6);
       sixRun = six ? { pi, n: sixRun.pi === pi ? sixRun.n + 1 : 1 } : { pi: null, n: 0 };
-      if (dice[0] === 6 && dice[1] === 6) return say(1, P(pi), pick([' rolls double sixes! And goes again.', ' with boxcars: double six!', ': 6-6, the dream roll.', ' finds double sixes. Lovely.']));
+      if (dice[0] === 6 && dice[1] === 6) return say(1, P(pi), pick([' rolls double sixes! Another roll coming.', ' with boxcars: double six!', ': 6-6, the dream roll.', ' finds double sixes. Lovely.']));
       if (dice[0] === 1 && dice[1] === 1) return say(1, P(pi), pick([' rolls snake eyes.', ': double ones. Not a lot to work with.', ' gets 1-1… tiny steps.']));
       if (sixRun.n === 3) return say(2, P(pi), pick([' is on fire: three sixes in a row!', ' keeps rolling sixes. Three straight!', ' — another six! That\'s three.']));
     },
@@ -181,7 +181,7 @@ export function createCommentator(onLine) {
 
     hub(pi, into) {
       if (into) return say(1, P(pi), pick([' dives into the hub.', ' takes the shortcut through the centre.', ' parks in the hub, waiting for a 1.']));
-      return say(1, P(pi), pick([' escapes the hub!', ' pops out of the hub.', ' finds the 1 and leaves the hub.']));
+      return say(1, P(pi), pick([' escapes the hub!', ' pops out of the hub.', ' finds the 1 to leave the hub.']));
     },
 
     // Standings after a move: [{ pips, home, base }] by seat.
@@ -230,14 +230,14 @@ export function createCommentator(onLine) {
       const losers = result?.losers ?? [];
       const big = losers.filter(l => (l.mult ?? 1) >= 2);
       const tail = result?.dropped ? ' The double was dropped.'
-        : big.length ? ' ' + big.map(l => [players[l.pi]?.name, l.mult === 3 ? 'a baggro' : 'an aggro']).map(([n, w]) => `${n} takes ${w}.`).join(' ')
-          + explain(big.some(l => l.mult === 3) ? 'baggro' : 'aggro')
-        : '';
+        : null;
+      // Who took an aggro / baggro: as name tokens, so team names get plural verbs.
+      const bigParts = big.length ? [...big.flatMap(l => [' ', P(l.pi), ` take${league ? '' : 's'} ${l.mult === 3 ? 'a baggro' : 'an aggro'}.`]), explain(big.some(l => l.mult === 3) ? 'baggro' : 'aggro')] : [];
       // Bonk stats for the game.
       const top = Object.entries(bonks.by).sort((a, b) => b[1] - a[1])[0];
       const bonkNote = bonks.total >= 8 ? ` A bruising one: ${bonks.total} bonks${top ? `, ${players[top[0]]?.name} with ${top[1]}` : ''}.`
         : bonks.total === 0 ? ' Not a single bonk all game!' : '';
-      say(3, P(pi), pick([' wins it!', ' takes the game!', ' crosses the line first!', ' — winner!']), tail, bonkNote);
+      say(3, P(pi), pick([' wins it!', ' takes the game!', ' crosses the line first!', ' — winner!']), ...(tail ? [tail] : bigParts), bonkNote);
     },
 
     // The roll someone else needed (from the server: { pi, kind, turns?, victim? }).
