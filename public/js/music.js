@@ -167,8 +167,12 @@ const snare = (t, vol) => { noise(t, 0.16, vol, 1500); note('bell', 62, t, 0.05,
 // ---- Harmony helpers -----------------------------------------------------------
 
 let keyShift = 0;            // semitones (final lap lifts it)
-const scale = () => (S.dark > 0.5 ? song.dark : song.bright);
-const prog = () => (S.dark > 0.5 ? song.darkProg : song.prog);
+// Minor once the risk is clearly up, major again only once it's clearly down
+// (so a value hovering in between doesn't flip the mood every bar).
+let minor = false;
+const mood = () => (minor = minor ? S.dark > 0.4 : S.dark > 0.55);
+const scale = () => (minor ? song.dark : song.bright);
+const prog = () => (minor ? song.darkProg : song.prog);
 // MIDI note for a scale degree above a chord root (degrees wrap into octaves).
 function degree(rootDeg, deg, oct = 0) {
   const sc = scale(), i = rootDeg + deg;
@@ -196,8 +200,8 @@ function playStep(n, t) {
     S.weights[c] = (S.weights[c] ?? 0) + (tgt - (S.weights[c] ?? 0)) * 0.03;
     if (S.duck[c] > 0) S.duck[c]--;
   }
-  // Key change for the final lap, on a bar line.
-  if (s16 === 0) keyShift = S.finalLap ? 2 : 0;
+  // Key change for the final lap and the mood, on a bar line.
+  if (s16 === 0) { keyShift = S.finalLap ? 2 : 0; mood(); }
 
   // Swing: the off-beat 8ths come a little late.
   if (s16 % 4 === 2) t += song.swing * stepDur() * 0.66;
@@ -243,8 +247,9 @@ function playStep(n, t) {
     if (!v || w < 0.03) return;
     // The leader plays its motif in full; others only in the second half
     // of every other two-bar phrase (call and response), lower in the mix.
+    // Only the two closest chasers answer (with 5–6 players it would crowd).
     const answering = rank > 0;
-    if (answering && !(bar % 4 >= 2 && pos >= 16)) return;
+    if (rank > 2 || (answering && !(bar % 4 >= 2 && pos >= 16))) return;
     for (const [st, deg, len] of v.motif) {
       if (st === pos) note(song.chip && v.inst !== 'glass' ? 'pluck' : v.inst, degree(chordDeg, deg + song.shift, v.oct), t, len * stepDur(), (answering ? 0.55 : 1) * w * 0.9);
     }
@@ -360,7 +365,7 @@ export function musicWin(color) {
   S.target = 0.15;  // calm again for the next game
 }
 export function musicReset() {
-  S.intensity = S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {};
+  S.intensity = S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {}; minor = false;
   pickSong();
 }
 // A new song for the new game (any but the last one). The next bar starts it.
