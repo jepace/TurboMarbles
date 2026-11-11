@@ -1561,9 +1561,15 @@ on('cubeUpdate', ({ i, analysis, failed, game }) => {
   renderMoveList();
   if (apCube === i) selectCube(i); else drawChart();
 });
-on('cubeFeedback', ({ playerIndex, text, agrees }) => {
+on('cubeFeedback', ({ playerIndex, text, agrees, turn }) => {
   if (playerIndex !== myPlayerIndex || !settings.feedback) return;
-  log(`↳ cube: ${text}`, null, `log-feedback ${agrees ? 'agree' : 'differ'}`);
+  const line = log(`↳ cube: ${text}`, null, `log-feedback ${agrees ? 'agree' : 'differ'}`);
+  // Worked out in the background, so it can arrive after the game moved on:
+  // put it where the decision was made (before that turn's first roll).
+  if (turn != null) {
+    const later = [...$('game-log').querySelectorAll('[data-turn]')].find(e => +e.dataset.turn >= turn);
+    if (later) later.before(line);
+  }
 });
 
 on('analysisUpdate', ({ idx, analysis, failed, game }) => {
@@ -3019,7 +3025,8 @@ function flushTurnLog() {
   const movesStr = turnLogMoves.length
     ? turnLogMoves.map(m => m.path.join('/')).join(' ')
     : '--';
-  log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
+  const line = log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
+  line.dataset.turn = turnNumber;
   // Feedback lines start with "↳", so tools/replay.mjs ignores them in a copied log.
   // A roll with no legal move ("--") is never committed, so the server sends
   // no feedback for it; it was played the only way it could be.
@@ -3231,6 +3238,7 @@ function log(msg, color, cls) {
   // Prevent unbounded growth on long games
   while (el.children.length > LOG_MAX) el.removeChild(el.firstChild);
   el.scrollTop = el.scrollHeight;
+  return entry;
 }
 
 // ---- Canvas resize ----

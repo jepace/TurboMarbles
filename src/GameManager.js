@@ -559,7 +559,7 @@ function sendCubeFeedback(room, ws, entry, est) {
       text = agrees ? `✓ Coach agrees: ${entry.action ? 'take' : 'drop'}`
         : `Coach would ${shouldTakeIt ? 'take' : 'drop'} (take ${room.match ? (-emg(sd.dt, sd)).toFixed(3) : f(takeEq)} · drop ${room.match ? (-emg(sd.dp, sd)).toFixed(3) : f(dropEq)})`;
     }
-    sendTo(ws, { event: 'cubeFeedback', playerIndex: entry.pi, kind: entry.kind, agrees, text, exact: !!est.exact });
+    sendTo(ws, { event: 'cubeFeedback', playerIndex: entry.pi, kind: entry.kind, turn: entry.turn, agrees, text, exact: !!est.exact });
   }
 }
 
