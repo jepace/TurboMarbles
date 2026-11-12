@@ -19,7 +19,7 @@
 
 let ctx = null, master = null, bus = null, comp = null, tone = null;
 let running = false, timer = null;
-let enabled = false, muted = false, volume = 0.7;
+let enabled = false, muted = false, volume = 0.7, active = false;   // active: a game is on screen
 
 // ---- Musical material ----------------------------------------------------------
 
@@ -414,11 +414,11 @@ function stopClock() {
 }
 function applyVolume() {
   if (!ctx) return;
-  const on = enabled && !muted;
+  const on = enabled && !muted && active;
   master.gain.cancelScheduledValues(ctx.currentTime);
   master.gain.setTargetAtTime(on ? 0.75 * volume : 0, ctx.currentTime, 0.4);
   if (on) startClock();
-  else setTimeout(() => { if (!(enabled && !muted)) stopClock(); }, 1500);
+  else setTimeout(() => { if (!(enabled && !muted && active)) stopClock(); }, 1500);
 }
 
 // ---- Public API ---------------------------------------------------------------
@@ -427,7 +427,9 @@ export function setMusic(on) { enabled = !!on; if (enabled) ensure(); applyVolum
 export function setMusicMuted(m) { muted = !!m; applyVolume(); }
 // Music volume, 0–1.
 export function setMusicVolume(v) { volume = Math.max(0, Math.min(1, +v || 0)); applyVolume(); }
-export function musicOn() { return enabled && !muted; }
+export function musicOn() { return enabled && !muted && active; }
+// Music only plays while a game is on screen (not on the other pages).
+export function setMusicActive(on) { if (active === !!on) return; active = !!on; if (ctx) applyVolume(); }
 
 // The position: players [{ color, pips, home, base }] (pips = the race still to go).
 export function musicUpdate(players) {

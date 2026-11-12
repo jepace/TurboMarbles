@@ -10,7 +10,7 @@ import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squ
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS, LEAGUE_NAME } from './league.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube } from './music.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube, setMusicActive } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -112,6 +112,7 @@ function show(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const el = document.getElementById(id);
   el.classList.add('active');
+  setMusicActive(id === 'screen-game');
   if (id === 'screen-home') setTimeout(() => loadLiveGames(), 0);
   // Pages outside a game get the side navigation.
   document.body.classList.toggle('with-nav', el.classList.contains('page'));
