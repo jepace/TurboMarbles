@@ -1888,6 +1888,22 @@ function selectCube(i) {
   showPosition(c.marbles);
 }
 
+// Copying from a decision: the options table comes out as aligned columns
+// (the cells are separate spans, which a plain copy runs together).
+$('ap-detail').addEventListener('copy', e => {
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed) return;
+  const lines = [];
+  for (const node of $('ap-detail').children) {
+    if (!sel.containsNode(node, true)) continue;
+    if (node.classList.contains('ap-opt')) {
+      const [first, ...nums] = [...node.children].map(c => c.textContent.trim());
+      lines.push(first.padEnd(30) + nums.map(n => n.padStart(9)).join(''));
+    } else lines.push(node.innerText.trim());
+  }
+  e.clipboardData.setData('text/plain', lines.filter(Boolean).join('\n'));
+  e.preventDefault();
+});
 function selectRoll(idx, opt = null) {
   const rep = analysisReport;
   if (!rep || idx < 0 || idx >= rep.rolls.length) return;
@@ -1928,7 +1944,7 @@ function selectRoll(idx, opt = null) {
       const tags = [k === 0 && 'best', o.played && 'played', o.robot && 'coach'].filter(Boolean).join(' · ');
       const cls = o.played ? (a.severity === 'ok' ? ' good' : ` ${a.severity}`) : '';
       const line = el('div', { class: 'ap-opt' + cls + (view === k ? ' sel' : ''), title: `${o.n} playouts` },
-        el('span', {}, o.moves, el('span', { class: 'tags' }, tags)),
+        el('span', {}, o.moves, el('span', { class: 'tags' }, tags ? ' ' + tags : '')),
         el('span', { class: 'num hit' }, o.facts && o.facts.anyHit > 0 ? pctTxt(o.facts.anyHit) : '—'),
         el('span', { class: 'num', title: o.win != null ? `wins ${pctTxt(o.win)}` : '' }, (e => `${e >= 0 ? '+' : ''}${e.toFixed(3)}`)(o.eq ?? 2 * o.win - 1)),
         el('span', { class: 'num' }, o.loss > 0 ? `−${eqOf(o.loss)}` : ''));
