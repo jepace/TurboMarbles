@@ -3298,7 +3298,7 @@ function renderLobbySlots(slots) {
 
 function renderSidebar() {
   if (!gameState) return;
-  document.body.classList.toggle('streamview', KIOSK || watching);
+  if (document.body.classList.toggle('streamview', KIOSK || watching) !== document.body.dataset.sv) { document.body.dataset.sv = document.body.classList.contains('streamview'); setTimeout(placeCommentary, 0); }
   $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
   $('kb-season').style.display = KIOSK || (watching && gameState.score && !gameState.match) ? '' : 'none';
   $('btn-leave-after').style.display = watching && !KIOSK ? '' : 'none';
@@ -3759,21 +3759,27 @@ const commentator = createCommentator((parts, level) => {
 function placeCommentary() {
   const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
   if (!box || !area || !cv) return;
-  const room = KIOSK ? area.clientWidth - cv.clientWidth - 24 : (area.clientWidth - cv.clientWidth) / 2 - 28;
+  // Watching / the stream page: the board sits right, and the whole gap left of
+  // it is one column for the logo and the commentary. Playing: the board is
+  // centred and the commentary takes the left gap.
+  const stream = KIOSK || document.body.classList.contains('streamview');
+  const room = stream ? area.clientWidth - cv.clientWidth - 24 : (area.clientWidth - cv.clientWidth) / 2 - 28;
   const want = KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : commentaryOn();
-  // No room beside the board (a smaller screen): the feed goes in the sidebar,
+  // No room beside the board (a small screen): the feed goes in the sidebar,
   // above the move log, newest lines only.
-  const beside = KIOSK || room >= 180;
+  const beside = KIOSK || room >= (stream ? 120 : 180);
   const home = beside ? area : $('sidebar');
   if (box.parentElement !== home) { if (beside) area.append(box); else $('sidebar').insertBefore(box, $('game-log')); }
   box.classList.toggle('in-sidebar', !beside);
   box.style.display = want ? 'flex' : 'none';
-  box.style.width = beside ? (KIOSK ? room : Math.min(room, 460)) + 'px' : '';
-  // Watching (and the stream page): the logo and address have the top of the
-  // left space to themselves, when there's room; the commentary stops below.
+  box.style.width = beside ? (stream ? room : Math.min(room, 460)) + 'px' : '';
+  // Text scales with the column (the stream page has its own large sizes).
+  box.style.fontSize = beside && stream && !KIOSK ? `${Math.max(0.75, Math.min(1.25, room / 300))}rem` : '';
+  // The logo and address: as wide as the column, on top; the commentary stops below.
   const brand = $('kiosk-brand');
-  brand.classList.toggle('fits', room >= 180);
-  brand.style.width = Math.max(180, (KIOSK ? room : Math.min(room, 460)) - 12) + 'px';
+  brand.classList.toggle('fits', beside && stream);
+  brand.style.width = Math.max(100, room - 12) + 'px';
+  $('kb-url').style.fontSize = KIOSK ? '' : `${Math.max(0.7, Math.min(1.5, room / 260))}rem`;
   box.style.maxHeight = beside && brand.offsetHeight ? Math.max(0, area.clientHeight - brand.offsetTop - brand.offsetHeight - 40) + 'px' : '';
   // The dice: on the board's square, in its top-right corner. The cube: by its owner.
   const a = area.getBoundingClientRect(), c = cv.getBoundingClientRect(), d = $('dice-area');

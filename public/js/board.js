@@ -820,8 +820,9 @@ function drawCenter() {
   const wedgeR = outerR * 0.82;
   const wedges = hubWedgeColors(hubInstant);
   for (let i = 0; i < 6; i++) {
-    const startAng = (i / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
-    const endAng   = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
+    // Wedge i faces arm i, in that arm's colour.
+    const startAng = armAngle(i) - STEP / 2;
+    const endAng   = armAngle(i) + STEP / 2;
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.arc(CX, CY, wedgeR, startAng, endAng);
@@ -833,7 +834,7 @@ function drawCenter() {
 
   // Brass dividers between wedges
   for (let i = 0; i < 6; i++) {
-    const ang = (i / 6) * Math.PI * 2 - Math.PI / 2 - viewArm * STEP;
+    const ang = armAngle(i) - STEP / 2;
     ctx.beginPath();
     ctx.moveTo(CX, CY);
     ctx.lineTo(CX + Math.cos(ang) * wedgeR, CY + Math.sin(ang) * wedgeR);

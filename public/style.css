@@ -747,7 +747,7 @@ body.kiosk .kb-head { font-size: 1.6rem; font-weight: 800; color: #f0c040; margi
 body.streamview #turn-banner, body.streamview #game-chat-input { display: none !important; }
 /* Stream: three columns, the board centred as a square with equal columns either side. */
 body.kiosk #sidebar { width: calc((100vw - 100vh) / 2); box-sizing: border-box; }
-body.kiosk #board-area { justify-content: flex-end; }
+body.streamview #board-area { justify-content: flex-end; }
 /* Stream: the game's rows look like the season's (same size, same spacing). */
 body.kiosk #player-list { gap: 2px; }
 body.kiosk .player-row { font-size: 1.6rem; padding: 0 0.3rem; gap: 6px; line-height: 1.25; }
@@ -924,3 +924,4 @@ body.kiosk #board-cube { width: 64px; height: 64px; font-size: 2rem; }
 #btn-leave-after { width: 100%; }
 #btn-leave-after.on { border-color: #f0c040; color: #f0c040; }
 #cube-area #cube { display: none; }   /* the cube itself is on the board */
+body.streamview:not(.kiosk) .cm-line { font-size: 1em; } body.streamview:not(.kiosk) .cm-line.lvl3 { font-size: 1.08em; } body.streamview:not(.kiosk) .cm-line.lvl1 { font-size: 0.92em; }
