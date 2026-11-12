@@ -9,7 +9,7 @@ HOST=127.0.0.1
 ORIGIN=https://marbles.pacehouse.com
 # Behind nginx: take the client's IP from X-Forwarded-For ("" when not behind a proxy).
 TRUST_PROXY=1
-# Players, games, stats (SQLite).
+# Players, games, stats (SQLite). (The rc.d service sets this itself: turbomarbles_datadir in rc.conf.)
 DATA_DIR=/var/db/turbomarbles
 # The site's address for links in emails (else ORIGIN).
 PUBLIC_URL=https://marbles.pacehouse.com
@@ -19,6 +19,10 @@ PUBLIC_URL=https://marbles.pacehouse.com
 # Without a key: /usr/sbin/sendmail (SENDMAIL=path), else the links only go to the server log.
 MAIL_FROM=noreply@marbles.pacehouse.com
 RESEND_API_KEY=
+# …or keep the key in its own file (owner marbles, mode 400):
+#RESEND_API_KEY_FILE=/usr/local/etc/turbomarbles-resend.key
+# sendmail's path, when not using Resend:
+#SENDMAIL=/usr/sbin/sendmail
 
 # Fallback live-stream link (normally set on the Admin page → Stream).
 STREAM_URL=
