@@ -1,6 +1,6 @@
 // League tracker: robot games played through it (engine + robot, no server),
 // checking careers, streaks, records, session table and the notes it sends.
-import { createGame, applyMove, earnsExtraRoll, rollDice, skipDie, gameResult } from '../src/GameEngine.js';
+import { ARM_MAP, PLAYER_CONFIG, createGame, applyMove, earnsExtraRoll, rollDice, skipDie, gameResult } from '../src/GameEngine.js';
 import { pickNextRobotMove } from '../src/RobotPlayer.js';
 import { LeagueTracker, leagueOverview } from '../src/LeagueTracker.js';
 import * as store from '../src/Store.js';
@@ -10,12 +10,13 @@ let passed = 0, failed = 0;
 const assert = (c, l) => { if (c) { console.log(`  ✓ ${l}`); passed++; } else { console.error(`  ✗ ${l}`); failed++; } };
 
 const sent = [];
-const room = { slots: ['Data', 'Worf', 'Kira', 'Odo'].map(name => ({ name })), game: null };
+// Teams in seats that aren't their colour's own (teams are free of seats).
+const room = { slots: ['Data', 'Worf', 'Kira', 'Odo'].map((name, i) => ({ name, armIndex: ARM_MAP[4][i], color: PLAYER_CONFIG[ARM_MAP[4][(i + 1) % 4]].color })), game: null };
 const lt = new LeagueTracker(room, { send: m => sent.push(m) });
 const realSetTimeout = setTimeout; globalThis.setTimeout = (fn) => { fn(); return 0; };   // notes at once
 
 function playGame() {
-  room.game = createGame(room.slots.map(s => ({ name: s.name })), undefined, 0);
+  room.game = createGame(room.slots.map(s => ({ name: s.name, color: s.color })), room.slots.map(s => s.armIndex), 0);
   const g = room.game, ev = m => lt.observe(m);
   ev({ event: 'gameStarted' });
   for (let t = 0; t < 3000 && g.winner == null; t++) {
@@ -37,8 +38,8 @@ function playGame() {
 
 console.log('\nleague: six games of four teams');
 const wins = {};
-for (let i = 0; i < 6; i++) { const w = playGame(); const c = room.game.players[w].config.color; wins[c] = (wins[c] ?? 0) + 1; }
-const colors = room.game.players.map(p => p.config.color);
+for (let i = 0; i < 6; i++) { const w = playGame(); const c = room.game.players[w].color; wins[c] = (wins[c] ?? 0) + 1; }
+const colors = room.game.players.map(p => p.color);
 const teams = colors.map(c => ({ c, ...store.leagueGet('team', c) }));
 assert(teams.every(t => t.games === 6), 'every team played 6 games');
 assert(teams.reduce((s, t) => s + (t.wins ?? 0), 0) === 6 && colors.every(c => (store.leagueGet('team', c).wins ?? 0) === (wins[c] ?? 0)), 'wins add up');
@@ -65,8 +66,9 @@ console.log('\n  sample notes:\n' + [...new Set(notes)].slice(0, 12).map(n => ' 
 globalThis.setTimeout = realSetTimeout;
 // Crossing the home line: a hand-made move past the home entry.
 {
-  const before = store.leagueGet('marble', 'blue:0').goArounds ?? 0;
-  room.game = createGame(room.slots.map(x => ({ name: x.name })), undefined, 0);
+  const team0 = room.slots[0].color;
+  const before = store.leagueGet('marble', `${team0}:0`).goArounds ?? 0;
+  room.game = createGame(room.slots.map(x => ({ name: x.name, color: x.color })), room.slots.map(x => x.armIndex), 0);
   lt.observe({ event: 'gameStarted' });
   const entry = room.game.players[0].config.homeEntry, after = entry % 84 + 1;
   lt.observe({ event: 'rolled', playerIndex: 0, dice: [3, 2] });
@@ -74,7 +76,7 @@ globalThis.setTimeout = realSetTimeout;
     path: [{ zone: 'track', space: entry }, { zone: 'track', space: after }, { zone: 'track', space: after + 1 }] });
   room.game.players[0].marbles.forEach(m => Object.assign(m, { zone: 'home', slot: 4 }));
   lt.observe({ event: 'gameResult', winnerIndex: 0, result: { winner: 0, points: 1, losers: [1, 2, 3].map(pi => ({ pi, points: 1, mult: 1 })) } });
-  assert((store.leagueGet('marble', 'blue:0').goArounds ?? 0) === before + 1, 'crossing the home line is counted');
+  assert((store.leagueGet('marble', `${team0}:0`).goArounds ?? 0) === before + 1, 'crossing the home line is counted');
 }
 console.log(`\n=== Results: ${passed} passed, ${failed} failed ===\n`);
 process.exit(failed ? 1 : 0);

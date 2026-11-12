@@ -110,7 +110,7 @@ function migrate() {
   `);
   // Added later: cube-decision numbers per seat.
   const cols = new Set(db.prepare('PRAGMA table_info(seats)').all().map(c => c.name));
-  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL'], ['rating_after', 'REAL'], ['luck', 'REAL']]) {
+  for (const [c, t] of [['cube_decisions', 'INTEGER'], ['cube_errors', 'INTEGER'], ['cube_blunders', 'INTEGER'], ['cube_eq_lost', 'REAL'], ['rating_after', 'REAL'], ['luck', 'REAL'], ['arm', 'INTEGER']]) {
     if (!cols.has(c)) db.exec(`ALTER TABLE seats ADD COLUMN ${c} ${t}`);
   }
   const pcols = new Set(db.prepare('PRAGMA table_info(players)').all().map(c => c.name));
@@ -652,9 +652,9 @@ export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, se
   try {
     db.prepare('INSERT INTO games (id, ended_at, n_players, vs_robot, cube, winner_seat, rolls_gz, dice_seed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, endedAt, seats.length, vsRobot, cube ? 1 : 0, winnerSeat ?? null, rolls ? gzipSync(JSON.stringify(rolls)) : null, diceSeed);
-    const ins = db.prepare(`INSERT INTO seats (game_id, seat, player_id, name, color, is_robot, won, points, aggro, doubles, takes, drops)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-    seats.forEach((s, i) => ins.run(id, i, s.playerId ?? null, s.name, s.color, s.isRobot ? 1 : 0, s.won ? 1 : 0,
+    const ins = db.prepare(`INSERT INTO seats (game_id, seat, player_id, name, color, arm, is_robot, won, points, aggro, doubles, takes, drops)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    seats.forEach((s, i) => ins.run(id, i, s.playerId ?? null, s.name, s.color, Number.isInteger(s.arm) ? s.arm : null, s.isRobot ? 1 : 0, s.won ? 1 : 0,
       s.points | 0, s.aggro ? 1 : 0, s.doubles | 0, s.takes | 0, s.drops | 0));
     db.exec('COMMIT');
   } catch (err) {
@@ -683,6 +683,11 @@ export function saveAnalysis(gameId, report, perSeat) {
     s.cubeDecisions ?? null, s.cubeErrors ?? null, s.cubeBlunders ?? null, s.cubeEqLost ?? null, s.luck ?? null, gameId, seat));
 }
 
+// A seat's arm (board position). Games stored before teams were free of seats
+// have none: their colour was their arm's.
+const ARM_COLORS6 = ['blue', 'pink', 'orange', 'yellow', 'green', 'white'];
+const seatArm = s => (Number.isInteger(s.arm) ? s.arm : ARM_COLORS6.indexOf(s.color));
+
 export function getGame(gameId) {
   if (!db) return null;
   const g = db.prepare('SELECT * FROM games WHERE id = ?').get(gameId);
@@ -690,7 +695,7 @@ export function getGame(gameId) {
   const seats = db.prepare('SELECT * FROM seats WHERE game_id = ? ORDER BY seat').all(gameId);
   return {
     id: g.id, endedAt: g.ended_at, cube: !!g.cube, vsRobot: !!g.vs_robot, winnerSeat: g.winner_seat, diceSeed: g.dice_seed ?? null,
-    seats: seats.map(s => ({ playerId: s.player_id, name: s.name, color: s.color, isRobot: !!s.is_robot, won: !!s.won, points: s.points })),
+    seats: seats.map(s => ({ playerId: s.player_id, name: s.name, color: s.color, arm: seatArm(s), isRobot: !!s.is_robot, won: !!s.won, points: s.points })),
     rolls: g.rolls_gz ? JSON.parse(gunzipSync(g.rolls_gz)) : null,
     report: g.report_gz ? JSON.parse(gunzipSync(g.report_gz)) : null,
   };
@@ -739,7 +744,7 @@ export function playerGames(playerId, { limit = 50, before = Infinity, players =
     FROM seats me JOIN games g ON g.id = me.game_id
     WHERE me.player_id = ? AND g.ended_at < ?${players === '2' ? ' AND g.n_players = 2' : players === '3+' ? ' AND g.n_players >= 3' : ''}${robots === 'none' ? ' AND g.vs_robot = 0' : ''}
     ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
-  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after,
+  const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.arm, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after,
     s.choices, s.eq_lost, s.cube_decisions, s.cube_eq_lost FROM seats s WHERE s.game_id = ? ORDER BY s.seat`);
   // PR (performance rating, as in XG): 500 × equity lost per decision.
   const prOf = x => { const n = (x.choices ?? 0) + (x.cube_decisions ?? 0); return n ? Math.round(500 * (2 * (x.eq_lost ?? 0) + (x.cube_eq_lost ?? 0)) / n * 10) / 10 : null; };
@@ -751,7 +756,7 @@ export function playerGames(playerId, { limit = 50, before = Infinity, players =
   return rows.map(r => ({
     id: r.id, endedAt: r.ended_at, players: r.n_players, vsRobot: !!r.vs_robot, cube: !!r.cube, analysed: !!r.analysed,
     seat: r.seat, won: !!r.won, points: r.points, aggro: !!r.aggro,
-    seats: seatsQ.all(r.id).map(x => ({ name: x.name, color: x.color, isRobot: !!x.is_robot, won: !!x.won, points: x.points,
+    seats: seatsQ.all(r.id).map(x => ({ name: x.name, color: x.color, arm: seatArm(x), isRobot: !!x.is_robot, won: !!x.won, points: x.points,
       aggro: !!x.aggro, rating: x.rating_after != null ? Math.round(x.rating_after) : null, pr: prOf(x) })),
     final: r.rolls_gz ? finalOf(r.rolls_gz) : null,
   }));

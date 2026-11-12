@@ -211,7 +211,7 @@ function findMarbleAtHome(gameState, armIndex, slot) {
   for (let pi = 0; pi < gameState.players.length; pi++) {
     const p = gameState.players[pi];
     // find which arm this player occupies
-    const armIdx = PLAYER_CONFIG.findIndex(c => c.color === p.color);
+    const armIdx = seatArm(p);
     if (armIdx !== armIndex) continue;
     for (let mi = 0; mi < p.marbles.length; mi++) {
       const m = p.marbles[mi];
@@ -224,7 +224,7 @@ function findMarbleAtBase(gameState, armIndex, slotIndex) {
   // Count marbles in base for this player; slotIndex is just visual placement
   for (let pi = 0; pi < gameState.players.length; pi++) {
     const p = gameState.players[pi];
-    const armIdx = PLAYER_CONFIG.findIndex(c => c.color === p.color);
+    const armIdx = seatArm(p);
     if (armIdx !== armIndex) continue;
     const baseMarbles = p.marbles.filter(m => m.zone === 'base');
     return baseMarbles[slotIndex] ? { playerIndex: pi, marbleId: baseMarbles[slotIndex].id } : null;
@@ -292,7 +292,7 @@ function drawBoardAscii(gameState) {
     let playerIdx = -1;
     for (let pi = 0; pi < gameState.players.length; pi++) {
       const p = gameState.players[pi];
-      if (PLAYER_CONFIG.findIndex(c => c.color === p.color) !== arm) continue;
+      if (seatArm(p) !== arm) continue;
       playerIdx = pi;
       baseMarbles = p.marbles
         .map((m, mi) => ({ m, mi }))
@@ -401,7 +401,9 @@ export function describeMove(move, dice, arm = 0) {
 
 let gameState      = null;
 let myPlayerIndex  = null;
-const myArm = () => Math.max(0, armOf(gameState?.players?.[myPlayerIndex]?.color ?? ''));
+// A player's seat: their arm (colours aren't tied to seats; older servers: the colour's arm).
+function seatArm(p) { return Number.isInteger(p?.arm) ? p.arm : PLAYER_CONFIG.findIndex(c => c.color === p?.color); }
+const myArm = () => Math.max(0, seatArm(gameState?.players?.[myPlayerIndex]));
 let reconnectInfo  = null;
 
 function nameOf(index) {
@@ -424,7 +426,7 @@ function registerSpectatorEvents() {
     print(`  ${nameOf(playerIndex)} rolled a 6 — extra roll!`);
   });
   on('marbleMoved', ({ playerIndex, marbleId, from, to }) => {
-    const mArm = armOf(gameState?.players?.[playerIndex]?.color ?? '');
+    const mArm = seatArm(gameState?.players?.[playerIndex]);
     print(`  ${nameOf(playerIndex)} moved marble #${marbleId + 1}: ${locStr(from, mArm)} → ${locStr(to, mArm)}`);
   });
   on('marbleBumped', ({ ownerIndex, marbleId }) => {

@@ -40,7 +40,7 @@ export function setPalette(hexes) {
   const ok = Array.isArray(hexes) && hexes.length === 6 && hexes.every(h => /^#[0-9a-f]{6}$/i.test(h));
   const src = ok ? hexes : DEFAULT_PALETTE;
   for (let i = 0; i < 6; i++) { BASE_COLORS[i] = src[i].toLowerCase(); BASE_DARK[i] = mix(BASE_COLORS[i], '#000000', 0.42); }
-  setColorShift(curShift);
+  applyArmColors();
 }
 
 // ---- Board themes: every colour the board is drawn with ----
@@ -72,7 +72,7 @@ export const THEMES = {
     socket: 'rgba(60,62,66,0.95)', shadow: 'rgba(0,0,0,0.3)' },
 };
 let T = THEMES.midnight;
-export function setTheme(name) { T = THEMES[name] ?? THEMES.midnight; textureCache = null; setColorShift(curShift); }
+export function setTheme(name) { T = THEMES[name] ?? THEMES.midnight; textureCache = null; applyArmColors(); }
 
 // Procedural textures for the disc (drawn once per theme and board size).
 let textureCache = null;
@@ -154,9 +154,26 @@ function onTheme(hex) {
   const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.8 ? mix(hex, '#5a6272', 0.45) : hex;
 }
+// Which colour each arm is painted in: armColor[arm] = a colour index (palette
+// order: blue, pink, orange, yellow, green, white). Players' colours aren't tied
+// to their seats, so a game sets this from its players (setArmColors).
+let armColor = [0, 1, 2, 3, 4, 5];
+function applyArmColors() {
+  for (let i = 0; i < 6; i++) { COLORS[i] = onTheme(BASE_COLORS[armColor[i]]); DARK_C[i] = onTheme(BASE_DARK[armColor[i]]); }
+}
+// byArm: { arm: colourIndex } for the seated arms; the empty arms get the
+// colours left over, in order, so all six stay different.
+export function setArmColors(byArm = {}) {
+  const used = new Set(Object.values(byArm));
+  const spare = [0, 1, 2, 3, 4, 5].filter(c => !used.has(c));
+  armColor = [0, 1, 2, 3, 4, 5].map(a => byArm[a] ?? spare.shift() ?? a);
+  applyArmColors();
+}
+// The colours turned round the ring (the Board page preview's "my colour").
 export function setColorShift(shift = 0) {
   curShift = shift;
-  for (let i = 0; i < 6; i++) { COLORS[i] = onTheme(BASE_COLORS[(i + shift + 6) % 6]); DARK_C[i] = onTheme(BASE_DARK[(i + shift + 6) % 6]); }
+  armColor = [0, 1, 2, 3, 4, 5].map(i => (i + shift + 6) % 6);
+  applyArmColors();
 }
 
 // (star colours come from the theme: T.star …)
@@ -417,7 +434,9 @@ export function drawBoard(gameState, opts = {}) {
   hubLastState = gameState;
   hubInstant = !!opts.instantHub;
   const n = gameState?.players?.length ?? ALL_ARMS;
-  playerToArm = ARM_MAP[n] ?? Array.from({ length: n }, (_, i) => i);
+  // Each player's seat: their own arm (any arm; colours are separate), else the usual seats.
+  const usual = ARM_MAP[n] ?? Array.from({ length: n }, (_, i) => i);
+  playerToArm = Array.from({ length: n }, (_, i) => (Number.isInteger(gameState?.players?.[i]?.arm) ? gameState.players[i].arm : usual[i]));
 
   ctx.clearRect(0, 0, W, W);
   drawBackground();

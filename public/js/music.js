@@ -201,7 +201,11 @@ const stepDur = () => 60 / bpm() / 4;
 
 function tick() {
   if (!ctx) return;
-  while (nextTime < ctx.currentTime + 0.12) { playStep(step, nextTime); nextTime += stepDur(); step++; }
+  // A hidden tab's timer runs about once a second: schedule further ahead then.
+  // After a longer stall, skip the missed steps rather than play them all at once.
+  if (nextTime < ctx.currentTime - 0.25) nextTime = ctx.currentTime + 0.05;
+  const ahead = document.hidden ? 1.6 : 0.12;
+  while (nextTime < ctx.currentTime + ahead) { playStep(step, nextTime); nextTime += stepDur(); step++; }
 }
 
 function playStep(n, t) {

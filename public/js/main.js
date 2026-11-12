@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels, setLite, THEMES, FINISHES, DEFAULT_PALETTE } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels, setLite, setArmColors, THEMES, FINISHES, DEFAULT_PALETTE } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
@@ -86,16 +86,24 @@ let selectedHostColor = 'blue';
 // ---- My colour: the board's colours turn round the ring (order kept) so my
 // arm shows in my favourite colour. Display only, for me alone; chosen on the
 // start screen or the settings page, applied when a game starts.
-let colorShift = 0;
+// Players' colours aren't tied to their seats: each player has a colour (in the
+// league: their team) and an arm (seat). dc() is the colour a player's colour is
+// shown in: the same, except "my colour" swaps mine with my favourite (and whoever
+// had it gets mine). The board paints each seat in its player's shown colour.
+let colorSwap = {};
 const armOfColor = c => PLAYER_CONFIG.findIndex(x => x.color === c);
-function dc(c) {
-  const a = armOfColor(c);
-  return !colorShift || a < 0 ? c : PLAYER_CONFIG[(a + colorShift) % 6].color;
+function dc(c) { return colorSwap[c] ?? c; }
+// A player's seat: their arm (stored games from before seats were free: their colour's arm).
+function armOfP(p) { return Number.isInteger(p?.arm) ? p.arm : armOfColor(p?.color); }
+function paintSeats(players) {
+  const byArm = {};
+  for (const p of players ?? []) { const a = armOfP(p), c = armOfColor(dc(p.color)); if (a >= 0 && c >= 0) byArm[a] = c; }
+  setArmColors(byArm);
 }
 function applyColorSwap() {
   const fav = settings.myColor, mine = gameState?.players?.[myPlayerIndex]?.color;
-  colorShift = fav && mine ? (armOfColor(fav) - armOfColor(mine) + 6) % 6 : 0;
-  setColorShift(colorShift);
+  colorSwap = fav && mine && fav !== mine ? { [mine]: fav, [fav]: mine } : {};
+  paintSeats(gameState?.players);
 }
 
 // ---- Screen management ----
@@ -109,7 +117,7 @@ function show(id) {
   document.body.classList.toggle('with-nav', el.classList.contains('page'));
   for (const b of document.querySelectorAll('#side-nav .nav-item')) b.classList.toggle('on', b.dataset.go === id);
   // The Board page borrows the board renderer for its preview: give it back.
-  if ((prev === 'screen-board' && id !== 'screen-board') || (prev === 'screen-profile' && boardBorrowed)) { initBoard($('board-canvas')); setColorShift(0); boardBorrowed = false; }
+  if ((prev === 'screen-board' && id !== 'screen-board') || (prev === 'screen-profile' && boardBorrowed)) { initBoard($('board-canvas')); paintSeats(gameState?.players); boardBorrowed = false; }
   if (id === 'screen-landing') focusName();
 }
 
@@ -1076,12 +1084,12 @@ new IntersectionObserver(entries => { if (entries.some(e => e.isIntersecting)) l
 function previewGame(g) {
   const box = $('games-preview');
   if (!box || !g.final) return;
-  const gs = { players: g.seats.map((x, i) => ({ index: i, name: x.name, color: x.color, marbles: g.final[i] ?? [] })),
+  const gs = { players: g.seats.map((x, i) => ({ index: i, name: x.name, color: x.color, arm: x.arm, marbles: g.final[i] ?? [] })),
     turnIndex: 0, phase: 'GAME_OVER', dice: null, diceUsed: [false, false] };
   // Next frame: the page must be showing for the canvas to have its size.
   requestAnimationFrame(() => {
     if (!$('screen-profile').classList.contains('active')) return;
-    setColorShift(0); setViewArm(PLAYER_CONFIG.findIndex(c => c.color === g.seats[g.seat]?.color));
+    colorSwap = {}; paintSeats(gs.players); setViewArm(Math.max(0, armOfP(gs.players[g.seat])));
     initBoard($('games-preview-canvas'));
     drawBoard(gs);
     boardBorrowed = true;
@@ -1244,7 +1252,7 @@ on('storedGame', ({ game, report }) => {
   const mySeat = game.seats.findIndex(x => me && x.playerId === me.id);
   const last = report.rolls.at(-1)?.marbles;
   gameState = {
-    players: report.players.map((p, i) => ({ index: i, name: p.name, color: p.color, isRobot: p.isRobot, marbles: last?.[i] ?? [] })),
+    players: report.players.map((p, i) => ({ index: i, name: p.name, color: p.color, arm: p.arm, isRobot: p.isRobot, marbles: last?.[i] ?? [] })),
     turnIndex: 0, phase: 'GAME_OVER', dice: null, diceUsed: [false, false], cube: null, score: null,
   };
   myPlayerIndex = mySeat >= 0 ? mySeat : 0;
@@ -3018,6 +3026,9 @@ let   animationRunning = false;
 // end, so it lands exactly when the marble arrives.
 function enqueueTween(tween) {
   if (!tween.waypoints || tween.waypoints.length === 0) return;
+  // A hidden tab doesn't animate (the browser pauses it): the move just lands,
+  // so coming back shows the game as it is now, not a fast replay of the backlog.
+  if (document.hidden) { drawBoard(gameState); return; }
   animationQueue.push(tween);
   pinQueuedMarbles();
   if (!animationRunning) runNextAnimation();
@@ -3065,6 +3076,17 @@ function resetAnimations() {
 }
 
 // Run fn once every queued marble animation has finished (now if none).
+// Leaving or returning to the tab: finish every queued animation at once.
+function drainAnimations() {
+  if (!animationRunning && !animationQueue.length) return;
+  animationGen++;
+  animationQueue.length = 0;
+  clearAllMarbleOverrides(); clearAnimatingMarble();
+  animationRunning = false; runningMarble = null; lastAnimEnd = null;
+  for (const fn of afterAnimWaiters.splice(0)) fn();
+  if (gameState) drawBoard(gameState);
+}
+document.addEventListener('visibilitychange', drainAnimations);
 function afterAnimations(fn) {
   if (!animationRunning && animationQueue.length === 0) fn();
   else afterAnimWaiters.push(fn);
@@ -3161,7 +3183,7 @@ function locNotation(loc, pi) {
   return '?';
 }
 function playerArm(pi) {
-  const a = armOf(gameState?.players?.[pi]?.color ?? '');
+  const a = armOfP(gameState?.players?.[pi]);
   return a >= 0 ? a : 0;
 }
 
@@ -3315,7 +3337,7 @@ function renderSidebar() {
 function updatePips() {
   if (!gameState) return;
   const standing = gameState.players.map(p => {
-    const arm = PLAYER_CONFIG.findIndex(c => c.color === p.color);
+    const arm = armOfP(p);
     return { color: p.color, pips: arm >= 0 ? pipCount(arm, p.marbles) : 346,
       home: p.marbles.filter(m => m.zone === 'home').length, base: p.marbles.filter(m => m.zone === 'base').length };
   });
@@ -3323,7 +3345,7 @@ function updatePips() {
   afterAnimations(() => commentator.update(standing));
   for (const el of document.querySelectorAll('#player-list .pips')) {
     const p = gameState.players[Number(el.dataset.player)];
-    const arm = PLAYER_CONFIG.findIndex(c => c.color === p?.color);
+    const arm = armOfP(p);
     el.textContent = arm >= 0 ? `${pipCount(arm, p.marbles)} pips` : '';
   }
 }
@@ -3383,8 +3405,7 @@ function isMyTurn() {
 // Rotate the board so my own arm is at the bottom of the screen.
 function faceMyArm() {
   applyColorSwap();
-  const color = gameState?.players?.[myPlayerIndex]?.color;
-  const arm = PLAYER_CONFIG.findIndex(c => c.color === color);
+  const arm = armOfP(gameState?.players?.[myPlayerIndex]);
   setViewArm(arm >= 0 ? arm : 0);
   applySquareNumbers();
 }

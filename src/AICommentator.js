@@ -58,11 +58,11 @@ export class AICommentator {
   stop() { clearInterval(this.timer); }
 
   name(pi) {
-    const name = this.room.slots[pi]?.name ?? `Player ${pi + 1}`, c = this.room.game?.players[pi]?.config.color;
+    const name = this.room.slots[pi]?.name ?? `Player ${pi + 1}`, c = this.room.game?.players[pi]?.color;
     return this.room.league && c && TEAMS[c] ? TEAMS[c].name : name;
   }
   marble(pi, id) {
-    const c = this.room.game?.players[pi]?.config.color;
+    const c = this.room.game?.players[pi]?.color;
     return this.room.league && c && TEAMS[c] ? `${marbleName(c, id)} of The ${teamShort(c)}` : `${this.name(pi)}'s marble`;
   }
 
@@ -117,7 +117,7 @@ export class AICommentator {
     return g.players.map((p, i) => {
       const home = p.marbles.filter(m => m.zone === 'home').map(m => m.slot).sort((a, b) => b - a);
       const base = p.marbles.filter(m => m.zone === 'base').length, hub = p.marbles.some(m => m.zone === 'center');
-      return `${this.name(i)} (${p.config.color}): ${pipCount(armOf(p), p.marbles)} pips, home ${home.length}${home.length ? ` [slots ${home.join(',')}]` : ''}, base ${base}${hub ? ', one in the hub' : ''}; bonks this game ${this.bonks.by[i] ?? 0} given / ${this.bonks.of[i] ?? 0} taken; this session ${this.session.by[this.name(i)] ?? 0} / ${this.session.of[this.name(i)] ?? 0}`;
+      return `${this.name(i)} (${p.color}): ${pipCount(armOf(p), p.marbles)} pips, home ${home.length}${home.length ? ` [slots ${home.join(',')}]` : ''}, base ${base}${hub ? ', one in the hub' : ''}; bonks this game ${this.bonks.by[i] ?? 0} given / ${this.bonks.of[i] ?? 0} taken; this session ${this.session.by[this.name(i)] ?? 0} / ${this.session.of[this.name(i)] ?? 0}`;
     }).join('\n') + `\nBonks: ${this.bonks.total} this game, ${this.session.total} in ${this.session.games} game${this.session.games === 1 ? '' : 's'} this session.`;
   }
 

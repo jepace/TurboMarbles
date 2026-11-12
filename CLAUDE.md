@@ -57,6 +57,10 @@ node test/integration.mjs # integration tests (requires server running)
   felt, stone — every colour the board uses, procedural textures, neon glow), `setPalette` (one display colour per arm;
   main.js `COLOR_MAP` follows it), marble finishes (glossy, glass, swirl, matte, metal, pearl), ring and track styles.
   The app's light/dark mode is `body.light` (CSS variables). Stream page: `theme=`, `finish=`, `palette=` (preset or six hex).
+- Seats and colours are separate: every player has an `arm` (seat, geometry; the engine's `config`) and a `color`
+  (identity; in the league, the team). publicState / stored seats carry both (old stored games: arm = the colour's arm).
+  The board draws player i at `players[i].arm` and paints each arm in its player's colour (`setArmColors`); the page
+  uses `armOfP(p)` for geometry, never the colour. Robots-only rooms draw random teams for their seats every game.
 - `public/js/main.js` — UI controller. Handles WebSocket events, marble animation, game log.
 - `public/js/socket.js` — thin WebSocket client wrapper.
 - `cli.mjs` — standalone terminal client. ASCII board renderer, interactive play via readline.

@@ -28,7 +28,7 @@ export class LeagueTracker {
     this.g = null;
   }
 
-  colorOf(pi) { return this.room.game?.players[pi]?.config.color; }
+  colorOf(pi) { return this.room.game?.players[pi]?.color; }   // the team (not the seat)
   note(level, ...parts) { this.send({ event: 'leagueNote', level, parts }); }
 
   // ---- live game ----
@@ -80,7 +80,7 @@ export class LeagueTracker {
           if (m.hubTurns >= 3 && !g.said.has('escape:' + color + msg.marbleId + m.hubExits)) { g.said.add('escape:' + color + msg.marbleId + m.hubExits); this.note(1, { marble: [color, msg.marbleId] }, ` finally escapes the hub after ${m.hubTurns} turns waiting!`); }
         }
         // Crossing its own home line and going round again.
-        const entry = PLAYER_CONFIG[armOf(color)]?.homeEntry;
+        const entry = this.room.game?.players[msg.playerIndex]?.config.homeEntry;
         // (It stepped on its home entry square on the way and ended up out on the track beyond it.)
         if (m && msg.to?.zone === 'track' && msg.to.space !== entry && (msg.from?.space === entry || (msg.path ?? []).slice(0, -1).some(p => p.zone === 'track' && p.space === entry))) {
           m.goArounds++;
@@ -125,7 +125,7 @@ export class LeagueTracker {
     if (!game) return;
     const teams = {}, marbles = {};
     game.players.forEach((p, pi) => {
-      const color = p.config.color;
+      const color = p.color;
       teams[color] = { color, pi, distance: 0, starSpaces: 0, rolls: 0, sixes: 0, doubles: 0, hubTurns: 0, bonks: 0, bonked: 0, maxDeficit: 0, ledEver: false, lostLead: false };
       p.marbles.forEach((_, id) => { marbles[`${color}:${id}`] = { color, id, distance: 0, starSpaces: 0, hubTurns: 0, hubExits: 0, hubPassThrough: 0, goArounds: 0, hubHits: 0, circleHits: 0, bonks: 0, bonked: 0, exits: 0, hubTrips: 0, homeOrder: null, firstHome: false }; });
     });
@@ -151,7 +151,7 @@ export class LeagueTracker {
   standings() {
     const game = this.room.game, g = this.g;
     if (!game || !g) return;
-    const pips = game.players.map(p => ({ color: p.config.color, pips: pipCount(armOf(p.config.color), p.marbles) }));
+    const pips = game.players.map(p => ({ color: p.color, pips: pipCount(armOf(p.config.color), p.marbles) }));
     const order = [...pips].sort((a, b) => a.pips - b.pips), lead = order[0];
     const progress = (START_PIPS - lead.pips) / START_PIPS;
     for (const x of pips) { const t = g.teams[x.color]; t.maxDeficit = Math.max(t.maxDeficit, x.pips - lead.pips); }
@@ -175,7 +175,7 @@ export class LeagueTracker {
     const losers = msg.result?.losers ?? game.players.map((_, i) => ({ pi: i, points: msg.result?.points ?? 1, mult: 1 })).filter(l => l.pi !== msg.winnerIndex);
     for (const l of losers) { pts[this.colorOf(l.pi)] = -(l.points ?? 1); }
     pts[wColor] = losers.reduce((s, l) => s + (l.points ?? 1), 0);
-    const pipsLeft = game.players.map(p => ({ color: p.config.color, pips: pipCount(armOf(p.config.color), p.marbles) })).filter(x => x.color !== wColor).sort((a, b) => a.pips - b.pips);
+    const pipsLeft = game.players.map(p => ({ color: p.color, pips: pipCount(armOf(p.config.color), p.marbles) })).filter(x => x.color !== wColor).sort((a, b) => a.pips - b.pips);
     const margin = pipsLeft[0]?.pips ?? 0;
     const wire = w.ledEver && !w.lostLead;
     const notes = [];
@@ -262,7 +262,7 @@ export class LeagueTracker {
     return {
       season: mon,
       teams: game.players.map((p, pi) => {
-        const c = p.config.color, career = store.leagueGet('team', c), sea = store.leagueGet('season:' + mon, c);
+        const c = p.color, career = store.leagueGet('team', c), sea = store.leagueGet('season:' + mon, c);
         return { color: c, name: teamName(c), short: teamShort(c), emoji: TEAMS[c]?.emoji, captain: captainOf(c),
           marbles: (TEAMS[c]?.marbles ?? []).map(m => m.name),
           session: this.session.teams[c] ?? { wins: 0, points: 0, games: 0, bonks: 0 },
@@ -279,7 +279,7 @@ function attackerOf(game, from) {
   const pi = game?.turnIndex, p = game?.players[pi];
   if (!p || !from) return null;
   const id = p.marbles.findIndex(m => m.zone === from.zone && (from.zone === 'center' || m.space === from.space));
-  return id >= 0 ? { color: p.config.color, id } : null;
+  return id >= 0 ? { color: p.color, id } : null;
 }
 
 function pick(a) { return a[Math.floor(Math.random() * a.length)]; }

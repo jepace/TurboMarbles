@@ -182,7 +182,7 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
   // The client must store this and send it back in any 'reconnect' action.
   return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers, cube: room.cube, watch: !!room.watch,
     matchTo: room.match?.length ?? 0,
-    slots: slots.map(s => ({ index: s.index, name: s.name, color: s.color, isRobot: s.isRobot, filled: !!s.playerId })) };
+    slots: slots.map(s => ({ index: s.index, name: s.name, color: s.color, arm: s.armIndex, isRobot: s.isRobot, filled: !!s.playerId })) };
 }
 
 export function joinRoom(ws, code, playerName) {
@@ -227,6 +227,12 @@ const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name,
 
 // League rooms: each seat is its colour's team.
 function assignTeams(room) {
+  // Robots-only rooms: a fresh line-up every game. Any teams, in any seats (the
+  // seats themselves stay evenly spaced): new rivalries, new music.
+  if (room.slots.every(s => s.isRobot)) {
+    const pool = PLAYER_CONFIG.map(c => c.color).sort(() => Math.random() - 0.5);
+    room.slots.forEach((s, i) => { s.color = pool[i]; });
+  }
   for (const s of room.slots) { const t = TEAMS[s.color]; if (t) s.name = t.short; }
 }
 
@@ -406,7 +412,7 @@ function finishGame(room) {
   room.records ??= [];
   if (!m) room.records = [];
   const rec = { n: (room.records.at(-1)?.n ?? 0) + 1, game, analysis: null, storedGameId: room.storedGameId ?? null,
-    score: m ? m.score.slice() : null, result: r, players: room.slots.map((s, i) => ({ name: s.name, color: game.players[i]?.color, isRobot: !!s.isRobot })) };
+    score: m ? m.score.slice() : null, result: r, players: room.slots.map((s, i) => ({ name: s.name, color: s.color ?? game.players[i]?.color, arm: s.armIndex, isRobot: !!s.isRobot })) };
   room.records.push(rec);
   room.storedGameId = null;
   // In a match, every game goes straight on to the next (after a moment) —
@@ -452,7 +458,7 @@ function storeFinishedGame(room, r) {
         const c = game._cubeStats?.[i] ?? {};
         const won = game.winner === i;
         return {
-          playerId: s.accountId ?? null, name: s.name ?? `Player ${i + 1}`, color: s.color,
+          playerId: s.accountId ?? null, name: s.name ?? `Player ${i + 1}`, color: s.color, arm: s.armIndex,
           isRobot: !!s.isRobot && !s.accountId, won,
           points: r ? (won ? r.points : -(r.losers?.find(l => l.pi === i)?.points ?? (two ? r.points : 0))) : 0,
           aggro: won ? !!r?.aggro : (r?.losers?.find(l => l.pi === i)?.mult ?? (r?.aggro ? 2 : 1)) >= 2,
@@ -523,7 +529,7 @@ function recordFor(room, gameNo) {
   if (room.state === 'finished' && room.game && !recs.some(r => r.game === room.game)) {
     recs.push({ n: (recs.at(-1)?.n ?? 0) + 1, game: room.game, analysis: null, storedGameId: room.storedGameId ?? null,
       score: room.match ? room.match.score.slice() : null, result: room.game.result ?? null,
-      players: room.slots.map((s, i) => ({ name: s.name, color: room.game.players[i]?.color, isRobot: !!s.isRobot })) });
+      players: room.slots.map((s, i) => ({ name: s.name, color: s.color ?? room.game.players[i]?.color, arm: s.armIndex, isRobot: !!s.isRobot })) });
   }
   if (gameNo == null) return recs[recs.length - 1] ?? null;
   return recs.find(r => r.n === gameNo) ?? null;
@@ -535,7 +541,7 @@ export function storedGameReport(g) {
   if (g.report) return g.report;
   const rolls = g.rolls ?? [];
   return {
-    players: g.seats.map(s => ({ name: s.name, color: s.color, isRobot: s.isRobot })),
+    players: g.seats.map(s => ({ name: s.name, color: s.color, arm: s.arm, isRobot: s.isRobot })),
     winner: g.winnerSeat,
     dice: g.diceSeed ? { commit: createHash('sha256').update(Buffer.from(g.diceSeed, 'hex')).digest('hex'), seed: g.diceSeed } : null,
     rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
@@ -1507,7 +1513,7 @@ export function streamChat(messages) {
 export function liveGames() {
   return [...rooms.values()].filter(r => r.game && (r.state === 'playing' || r.state === 'finished')).map(r => ({
     roomId: r.id, state: r.state, game: r.gamesPlayed + (r.state === 'playing' ? 1 : 0),
-    players: r.slots.map(s => ({ name: s.name, color: s.color, isRobot: !!s.isRobot })),
+    players: r.slots.map(s => ({ name: s.name, color: s.color, arm: s.armIndex, isRobot: !!s.isRobot })),
     watchers: r.watchers.size, watch: !!r.watch, cube: !!r.cube,
     match: r.match ? { length: r.match.length, score: r.match.score.slice() } : null,
   }));
@@ -1583,6 +1589,7 @@ function lobbySnapshot(room) {
       index: s.index,
       name: s.name,
       color: s.color,
+      arm: s.armIndex,
       isRobot: s.isRobot,
       filled: !!s.playerId,
     })),
@@ -1599,7 +1606,8 @@ function publicState(room) {
     players: game.players.map((p, i) => ({
       index: i,
       name: room.slots[i].name,
-      color: p.config.color,
+      color: room.slots[i].color ?? p.config.color,   // the player's colour (league: the team), not tied to the seat
+      arm: armOfPlayer(p),                             // the seat on the board (0–5)
       isRobot: room.slots[i].isRobot,
       marbles: p.marbles,
     })),
@@ -1855,7 +1863,7 @@ export function handleAnalyzeGame(ws, roomId, gameNo) {
   const rolls = game._rolls ?? [];
   const decisions = rolls.map((r, idx) => ({ r, idx })).filter(x => !x.r.forced);
   const base = {
-    players: room.slots.map((s, i) => ({ name: s.name, color: game.players[i]?.color, isRobot: !!s.isRobot })),
+    players: room.slots.map((s, i) => ({ name: s.name, color: s.color ?? game.players[i]?.color, arm: s.armIndex, isRobot: !!s.isRobot })),
     winner: game.winner,
     rolls: rolls.map(({ turn, pi, dice, forced, played, options, before, steps }) =>
       ({ turn, pi, dice, forced, played, options, steps, marbles: before ? before.players.map(p => p.marbles) : null })),
