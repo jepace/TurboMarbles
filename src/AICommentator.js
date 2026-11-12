@@ -33,7 +33,7 @@ How to commentate:
 
 // The league roster (fixed): teams by colour, their marbles and personalities.
 const ROSTER = `\n\n${LEAGUE_NAME} (stats tracked include each marble's bonks and spaces travelled): six permanent teams, one per colour; the teams are the players. Each team has four named marbles (one is the captain); all teams play the same way, so results come down to the dice and position. Talk about the teams and marbles like a sports broadcast: rivalries, streaks, records, a marble's personality. Teams and marbles:\n`
-  + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "the ${t.short}"): ` + t.marbles.map(m => `${m.name}${m.captain ? ' (captain)' : ''}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
+  + Object.entries(TEAMS).map(([c, t]) => `- ${t.name} (${c}, "The ${t.short}" — always capital The): ` + t.marbles.map(m => `${m.name}${m.captain ? ' (captain)' : ''}: ${m.trait}, ${m.bio}`).join(' ')).join('\n');
 
 const MAX_EVENTS = 30;
 
@@ -63,7 +63,7 @@ export class AICommentator {
   }
   marble(pi, id) {
     const c = this.room.game?.players[pi]?.config.color;
-    return this.room.league && c && TEAMS[c] ? `${marbleName(c, id)} of the ${teamShort(c)}` : `${this.name(pi)}'s marble`;
+    return this.room.league && c && TEAMS[c] ? `${marbleName(c, id)} of The ${teamShort(c)}` : `${this.name(pi)}'s marble`;
   }
 
   // Game events, as broadcast to the room; kept as short plain notes.

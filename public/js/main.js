@@ -3672,8 +3672,8 @@ const commentator = createCommentator((parts, level) => {
       const p = gameState?.players?.[x.player];
       const color = x.team ?? (x.marble ? (typeof x.marble[0] === 'number' ? gameState?.players?.[x.marble[0]]?.color : x.marble[0]) : p?.color);
       const text = x.marble ? (TEAMS[color]?.marbles[x.marble[1]]?.name ?? 'a marble')
-        : x.team ? (TEAMS[color] ? `${x.cap ? 'The' : 'the'} ${TEAMS[color].short}` : color)
-        : inLeague() ? (TEAMS[p?.color] ? `${x.cap ? 'The' : 'the'} ${TEAMS[p.color].short}` : p?.name) : p?.name;
+        : x.team ? (TEAMS[color] ? `The ${TEAMS[color].short}` : color)
+        : inLeague() ? (TEAMS[p?.color] ? `The ${TEAMS[p.color].short}` : p?.name) : p?.name;
       return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(color)] ?? '#888'}` }), text ?? '?');
     })()));
   box.append(line);
