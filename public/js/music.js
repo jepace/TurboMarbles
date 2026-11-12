@@ -210,6 +210,8 @@ function tick() {
 
 function playStep(n, t) {
   const s16 = n % 16, bar = Math.floor(n / 16), chordDeg = prog()[bar % 4];
+  // During the winner's fanfare the song itself is silent (cues still play).
+  if (S.fanfareUntil && t < S.fanfareUntil) { if (s16 % 2 === 0) while (queue.length) playCue(queue.shift(), t, chordDeg); return; }
   const I = S.intensity;
   // Smooth the mix once per 16th.
   S.intensity += (S.target - S.intensity) * 0.02;
@@ -376,26 +378,36 @@ function playCue({ kind, color, extra }, t, chordDeg) {
       break;
     }
     case 'win': {
-      // The winner's flourish, in the song's style: a snare roll into the
-      // winner's motif up an octave over two bars of the song's chords (their
-      // instrument, doubled by brass), then the home chord held out.
-      const v = VOICES[color], inst = song.chip ? 'pluck' : v?.inst ?? 'brass';
-      for (let i = 0; i < 8; i++) snare(t + i * sd, 0.08 + 0.03 * i);
-      const t0 = t + 8 * sd, pr = prog();
-      if (v) for (const [st, deg, len] of v.motif) {
-        const ch = pr[Math.floor(st / 16) % 4];
-        note(inst, degree(ch, deg + song.shift, v.oct + 1), t0 + st * sd, len * sd, 0.9);
-        if (st % 4 === 0) note('brass', degree(ch, deg + song.shift, v.oct), t0 + st * sd, len * sd, 0.3);
-      }
-      for (let b = 0; b < 2; b++) {
-        kick(t0 + b * 16 * sd, 0.6);
-        for (const d of [0, 2, 4]) note('pad', degree(pr[b], d, 1), t0 + b * 16 * sd, 16 * sd, 0.45);
-      }
+      // The winner's fanfare, always bright: the song steps aside, a snare roll,
+      // then a major IV – V – I in the winner's instrument doubled by brass
+      // (the winner's motif rhythm on top), and the home chord held out.
+      // Major whatever the song's mood (a minor song's "bright" scale would
+      // turn the win sour), in the song's key and tempo.
+      const v = VOICES[color], inst = song.chip ? 'pluck' : v?.inst === 'glass' ? 'flute' : v?.inst ?? 'brass';
+      const M = (deg, oct) => song.root + keyShift + 12 * (oct + Math.floor(deg / 7)) + MAJOR[((deg % 7) + 7) % 7];
+      S.fanfareUntil = t + 48 * sd;
+      for (let i = 0; i < 8; i++) snare(t + i * sd, 0.06 + 0.025 * i);
+      const t0 = t + 8 * sd, oct = v?.oct ?? 1;
+      // Two bars: IV then V, the winner's motif notes snapped to each chord's tones.
+      [3, 4].forEach((root, b) => {
+        const tb = t0 + b * 16 * sd;
+        kick(tb, 0.6);
+        for (const d of [0, 2, 4]) note('pad', M(root + d, 1), tb, 16 * sd, 0.5);
+        note('bass', M(root, -1), tb, 14 * sd, 0.8);
+        const motif = v?.motif ?? [[0, 0, 4], [4, 2, 4], [8, 4, 8]];
+        for (const [st, deg, len] of motif) {
+          if (Math.floor(st / 16) % 2 !== b) continue;   // the motif's first bar over IV, its second over V
+          const s16 = st % 16, tone = [0, 2, 4, 7][Math.abs(deg) % 4];
+          note(inst, M(root + tone, oct + 1), tb + s16 * sd, Math.min(len, 4) * sd, 0.8);
+          if (s16 % 4 === 0) note('brass', M(root + tone, oct), tb + s16 * sd, Math.min(len, 4) * sd, 0.35);
+        }
+      });
+      // I: the home chord, rising arpeggio into a held triad with the octave.
       const tEnd = t0 + 32 * sd;
-      kick(tEnd, 0.8); noise(tEnd, 1.2, 0.09, 3000);
-      for (const d of [0, 2, 4, 7]) note(inst, degree(0, d, (v?.oct ?? 1)), tEnd, sd * 24, 0.55);
-      for (const d of [0, 2, 4]) note('pad', degree(0, d, 1), tEnd, sd * 32, 0.8);
-      note('bass', degree(0, 0, -1), tEnd, sd * 16, 0.9);
+      kick(tEnd, 0.8); noise(tEnd, 1.4, 0.07, 4000);
+      [0, 2, 4, 7].forEach((d, i) => note(inst, M(d, oct + 1), tEnd + i * sd * 0.5, sd * 20, 0.55));
+      for (const d of [0, 2, 4]) { note('pad', M(d, 1), tEnd, sd * 32, 0.8); note('brass', M(d, 0), tEnd + sd, sd * 14, 0.35); }
+      note('bass', M(0, -1), tEnd, sd * 16, 0.9);
       break;
     }
   }
