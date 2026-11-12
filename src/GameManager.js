@@ -227,6 +227,13 @@ const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name,
 
 // League rooms: each seat is its colour's team.
 function assignTeams(room) {
+  // Fewer than six teams: a different line-up every game (a random turn of the
+  // board's seats, which keeps the seats evenly spaced; so new teams, new rivalries
+  // and new music). Robots-only rooms only: people keep the colour they picked.
+  if (room.totalPlayers < 6 && room.slots.every(s => s.isRobot)) {
+    const k = Math.floor(Math.random() * 6);
+    for (const s of room.slots) { s.armIndex = (s.armIndex + k) % 6; s.color = PLAYER_CONFIG[s.armIndex].color; }
+  }
   for (const s of room.slots) { const t = TEAMS[s.color]; if (t) s.name = t.short; }
 }
 
