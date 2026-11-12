@@ -155,7 +155,7 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   "Stream it" fold-out builds the URL. Kiosk options are per URL, never saved to the browser's settings.
 - Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; on by default
   on the stream page, `music=0` turns it off). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
-  win): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
+  win, out of base, star circle, hub in/out, home tidy, new leader, final lap): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
   motif + instrument per colour with the leader's in front. Ten song bases (`SONGS`: key, scales, chord loops, tempo,
   beat, bass, chord style, swing, echo, motif twist); each game picks one at random, and the DJ blends into it (8 bars: tempo glide + filter sweep, starting 6 s after a win). The win is a flourish of the winner's motif in the song's style. With music on, the music plays bonk/home moments in key (no home chime; the bonk keeps its thud). Console: `__music()`,
   `__musicSong(i)`, `__musicSet({...})`.

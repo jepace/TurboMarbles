@@ -10,7 +10,7 @@ import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squ
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS, LEAGUE_NAME } from './league.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn } from './music.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2373,6 +2373,8 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
     afterAnimations(() => commentator.home(playerIndex, slots.length, slots, marbleId));
   } else if (to?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, true));
   else if (from?.zone === 'center') afterAnimations(() => commentator.hub(playerIndex, false));
+  { const color = gameState.players[playerIndex].color, f = from, t = to;
+    afterAnimations(() => musicMove(color, f, t, l => l.zone === 'track' && ALL_STARS.has(l.space))); }
   // Grey out the die this move used — for everyone watching, not just the mover.
   if ((dieIndex === 0 || dieIndex === 1) && gameState.diceUsed) {
     gameState.diceUsed[dieIndex] = true;

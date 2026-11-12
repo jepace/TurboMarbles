@@ -8,8 +8,11 @@
 //   - Every colour has its own motif and instrument. The leader's motif carries
 //     the melody; close chasers answer in the gaps, louder as they close in; a
 //     change of lead cross-fades over a couple of bars.
-//   - Cues on the beat: 6 (rising run; 6-6 bigger), 1 (bell), doubles (echo),
-//     hits (sting; the victim's voice ducks), marbles home, and the winner's fanfare.
+//   - Cues on the beat: 6 (rising run + a stuttered double beat; 6-6 bigger), 1 (bell),
+//     doubles (echo), out of base (pickup), onto the star circle (shimmer), into the hub
+//     (swirl down, the mix dips) and out (sweep up), a home slot climbed (tick), hits
+//     (sting; the victim's voice ducks), marbles home, a new leader (crash + its motif),
+//     the final lap (snare riser), and the winner's flourish.
 //
 // A look-ahead scheduler (the usual Web Audio pattern) queues 16th-note steps
 // slightly ahead of time, so timing stays tight even when the page is busy.
@@ -283,9 +286,40 @@ function playCue({ kind, color, extra }, t, chordDeg) {
       const n = extra?.double ? 8 : 4;
       for (let i = 0; i < n; i++) note('pluck', degree(chordDeg, i * 2, 1), t + i * sd, sd * 1.5, 0.5);
       if (extra?.double) note('bell', degree(chordDeg, 7, 1), t + n * sd, sd * 4, 0.5);
+      // The extra roll: a stuttered double beat (twice for 6-6).
+      for (let i = 0; i < (extra?.double ? 4 : 2); i++) { kick(t + i * sd * 0.5, 0.4); snare(t + (i + 0.5) * sd * 0.5, 0.06); }
       break;
     }
-    case 'one': note('bell', degree(chordDeg, extra?.hub ? 7 : 4, 1), t, sd * 4, 0.45); break;
+    case 'one': note('bell', degree(chordDeg, 4, 1), t, sd * 4, 0.45); break;
+    case 'out': {   // out of base: a two-note pickup in the team's voice
+      const v = VOICES[color];
+      note(v?.inst ?? 'pluck', degree(chordDeg, 0, v?.oct ?? 1), t, sd, 0.5);
+      note(v?.inst ?? 'pluck', degree(chordDeg, 4, v?.oct ?? 1), t + sd, sd * 2, 0.6);
+      break;
+    }
+    case 'star':    // onto the star circle: a quick shimmer up
+      [0, 2, 4, 7].forEach((d, i) => note('glass', degree(chordDeg, d, 2), t + i * sd * 0.5, sd * 2, 0.3));
+      break;
+    case 'hubIn':   // into the hub: a swirl down, and the mix dips
+      [7, 5, 4, 2, 0].forEach((d, i) => note('glass', degree(chordDeg, d, 2), t + i * sd * 0.5, sd * 1.5, 0.28));
+      if (tone) { tone.frequency.setTargetAtTime(1400, t, 0.05); tone.frequency.setTargetAtTime(5500, t + sd * 6, 0.3); }
+      break;
+    case 'hubOut':  // out of the hub: a sweep up to a bell
+      [0, 2, 4, 7].forEach((d, i) => note('pluck', degree(chordDeg, d, 1), t + i * sd * 0.5, sd, 0.35));
+      note('bell', degree(chordDeg, 7, 1), t + sd * 2, sd * 4, 0.5);
+      break;
+    case 'tidy':    // a home slot climbed: one soft tick, a step up
+      note('marimba', degree(chordDeg, 2 + (extra?.slot ?? 0), 2), t, sd, 0.35);
+      break;
+    case 'lead': {  // a new leader: crash, and its motif head steps forward
+      noise(t, 1.0, 0.07, 3000); kick(t, 0.6);
+      const v = VOICES[color];
+      if (v) v.motif.slice(0, 4).forEach(([st, deg, len]) => note(v.inst, degree(chordDeg, deg + song.shift, v.oct), t + st * sd, len * sd, 0.75));
+      break;
+    }
+    case 'lap':     // the final lap begins: a snare riser into the key lift
+      for (let i = 0; i < 8; i++) snare(t + i * sd * 0.5, 0.04 + 0.025 * i);
+      break;
     case 'double': note('marimba', degree(chordDeg, 4, 2), t, sd, 0.5); note('marimba', degree(chordDeg, 4, 2), t + sd * 2, sd, 0.3); break;
     case 'hit': {
       // Dissonant sting, then the hitter's motif head.
@@ -362,12 +396,21 @@ export function musicUpdate(players) {
   const progress = Math.min(1, Math.max(0, (START - lead.pips) / (START - 20)));
   const close = second ? Math.max(0, 1 - (second.pips - lead.pips) / 60) : 0;
   S.target = Math.min(1, 0.12 + 0.6 * progress + 0.25 * close * progress);
-  S.finalLap = lead.home >= 3 || lead.pips <= 40;
+  const lap = lead.home >= 3 || lead.pips <= 40;
+  if (lap && !S.finalLap && musicOn()) queue.push({ kind: 'lap' });
+  S.finalLap = lap;
+  // A new leader (by a clear margin, not a tie flicking back and forth).
+  if (S.leader && lead.color !== S.leader && second && second.pips - lead.pips >= 3 && musicOn()) queue.push({ kind: 'lead', color: lead.color });
+  else if (S.leader && lead.color !== S.leader && !(second && second.pips - lead.pips >= 3)) return finishUpdate(players, S.leader);
   // Aggro / baggro risk: someone with nothing home (or all in base) while the leader is well on the way.
   const risk = players.reduce((r, p) => Math.max(r, p === lead ? 0 : (p.base === 4 ? 1 : p.home === 0 ? 0.7 : 0) * progress), 0);
   S.dark = risk;
+  finishUpdate(players, lead.color);
+}
+function finishUpdate(players, leader) {
+  const lead = players.find(p => p.color === leader) ?? players[0];
   S.colors = players.map(p => p.color);
-  S.leader = lead.color;
+  S.leader = leader;
   for (const p of players) {
     const gap = p.pips - lead.pips;
     S.targets[p.color] = p === lead ? 1 : Math.max(0, 0.75 * Math.exp(-gap / 25));
@@ -388,7 +431,13 @@ export function musicHit(byColor, victimColor) {
 }
 export function musicDuck(color) { if (color) S.duck[color] = 32; }
 export function musicHome(color) { if (musicOn()) queue.push({ kind: 'home', color }); }
-export function musicHubExit(color) { if (musicOn()) queue.push({ kind: 'one', color, extra: { hub: true } }); }
+// A marble's move: out of base, onto the star circle, into / out of the hub, a home slot climbed.
+export function musicMove(color, from, to, isStar) {
+  if (!musicOn() || !from || !to) return;
+  const kind = from.zone === 'base' ? 'out' : to.zone === 'center' ? 'hubIn' : from.zone === 'center' ? 'hubOut'
+    : from.zone === 'home' && to.zone === 'home' ? 'tidy' : to.zone === 'track' && isStar(to) && !isStar(from) ? 'star' : null;
+  if (kind) queue.push({ kind, color, extra: { slot: to.slot } });
+}
 export function musicWin(color) {
   if (!musicOn()) return;
   queue.length = 0;
