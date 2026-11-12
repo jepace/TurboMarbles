@@ -738,17 +738,21 @@ body.kiosk #settings, body.kiosk #game-chat-input, body.kiosk #action-slot, body
 body.kiosk #win-overlay, body.kiosk #nav, body.kiosk .report-btn, body.kiosk #btn-roll { display: none !important; }
 body.kiosk { cursor: none; }
 body.kiosk #score-line { font-size: 1.05rem; font-weight: 700; color: #f0c040; padding: 0.3rem 0; }
-#kiosk-brand, #kb-game { display: none; }
+#kiosk-brand, .kb-head { display: none; }
 body.kiosk #kiosk-brand { display: flex; flex-direction: column; gap: 0.2rem; position: absolute; left: 18px; top: 14px; z-index: 4; pointer-events: none; }
 #kiosk-brand img { width: 100%; height: auto; }
 #kb-url { font-size: 1.5rem; font-weight: 700; color: #e8eef8; letter-spacing: 0.5px; padding-left: 8px; }
-body.kiosk #kb-game { display: block; font-size: 1.5rem; font-weight: 800; color: #f0c040; }
+body.kiosk .kb-head { display: block; font-size: 1.6rem; font-weight: 800; color: #f0c040; margin-top: 0.3rem; }
 body.kiosk #turn-banner { display: none !important; }
 /* Stream: three columns, the board centred as a square with equal columns either side. */
 body.kiosk #sidebar { width: calc((100vw - 100vh) / 2); box-sizing: border-box; }
 body.kiosk #board-area { justify-content: flex-end; }
-body.kiosk .player-row { font-size: 1.15rem; }
-body.kiosk .player-row .pips { font-size: 1rem; }
+/* Stream: the game's rows look like the season's (same size, same spacing). */
+body.kiosk #player-list { gap: 2px; }
+body.kiosk .player-row { font-size: 1.6rem; padding: 0 0.3rem; gap: 6px; line-height: 1.25; }
+body.kiosk .player-row .pips { font-size: inherit; color: inherit; }
+body.kiosk #game-log { font-size: 1.3rem; }   /* the longest move line (≈36 characters) fits */
+body.kiosk #game-log .log-entry { white-space: nowrap; }
 body.kiosk #commentary { overflow: hidden; }
 /* Stream: the dice sit in the board's top-right corner, next to the action. */
 body.kiosk #board-area > #dice-area { position: absolute; z-index: 4; gap: 0.8rem; flex-wrap: nowrap; }

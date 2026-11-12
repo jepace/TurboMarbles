@@ -2274,7 +2274,7 @@ on('gameStarted', ({ gameState: gs }) => {
   musicReset();
   applyWatch(gs);
   gameState = gs;
-  if (gs.diceCommit) setTimeout(() => log(`🎲 Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`, null, 'log-dice'), 0);
+  if (gs.diceCommit) setTimeout(() => log(`🎲 ${KIOSK ? `Dice fixed · ${gs.diceCommit.slice(0, 8)}` : `Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`}`, null, 'log-dice'), 0);
   pendingFeedback = null;
   resetAnalyzeButton();
   analysisReport = null; apSel = -1; curGame = null; waitingFor = null;
