@@ -3683,16 +3683,16 @@ const commentator = createCommentator((parts, level) => {
 function placeCommentary() {
   const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
   if (!box || !area || !cv) return;
-  const room = (area.clientWidth - cv.clientWidth) / 2 - (KIOSK ? 20 : 28);
+  const room = KIOSK ? area.clientWidth - cv.clientWidth - 24 : (area.clientWidth - cv.clientWidth) / 2 - 28;
   const on = (KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : commentaryOn()) && room >= 180;
   box.style.display = on ? 'flex' : 'none';
-  if (on) box.style.width = Math.min(room, 460) + 'px';
+  if (on) box.style.width = (KIOSK ? room : Math.min(room, 460)) + 'px';
   if (!KIOSK) return;
   // Stream: the logo has the top of the left space to itself (as wide as the
   // commentary); the commentary stops below it. The dice sit on the board's
   // square, in its top-right corner.
   const brand = $('kiosk-brand');
-  brand.style.width = Math.max(180, Math.min(room, 460)) + 'px';
+  brand.style.width = Math.max(180, room - 12) + 'px';
   box.style.maxHeight = Math.max(0, area.clientHeight - brand.offsetTop - brand.offsetHeight - 40) + 'px';
   const a = area.getBoundingClientRect(), c = cv.getBoundingClientRect(), d = $('dice-area');
   d.style.left = (c.right - a.left - d.offsetWidth - 14) + 'px';

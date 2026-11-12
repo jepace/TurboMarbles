@@ -741,10 +741,12 @@ body.kiosk #score-line { font-size: 1.05rem; font-weight: 700; color: #f0c040; p
 #kiosk-brand, #kb-game { display: none; }
 body.kiosk #kiosk-brand { display: flex; flex-direction: column; gap: 0.2rem; position: absolute; left: 18px; top: 14px; z-index: 4; pointer-events: none; }
 #kiosk-brand img { width: 100%; height: auto; }
-#kb-url { font-size: 1.35rem; font-weight: 700; color: #e8eef8; letter-spacing: 0.5px; padding-left: 8px; }
+#kb-url { font-size: 1.5rem; font-weight: 700; color: #e8eef8; letter-spacing: 0.5px; padding-left: 8px; }
 body.kiosk #kb-game { display: block; font-size: 1.5rem; font-weight: 800; color: #f0c040; }
 body.kiosk #turn-banner { display: none !important; }
-body.kiosk #sidebar { width: 340px; }
+/* Stream: three columns, the board centred as a square with equal columns either side. */
+body.kiosk #sidebar { width: calc((100vw - 100vh) / 2); box-sizing: border-box; }
+body.kiosk #board-area { justify-content: flex-end; }
 body.kiosk .player-row { font-size: 1.15rem; }
 body.kiosk .player-row .pips { font-size: 1rem; }
 body.kiosk #commentary { overflow: hidden; }
