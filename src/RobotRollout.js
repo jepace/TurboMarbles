@@ -21,6 +21,16 @@ export function worthThinking(game, pi) {
   return outside(game.players[pi]) <= 2 || game.players.some((p, i) => i !== pi && outside(p) <= 1);
 }
 
+// Earlier in the game: worth thinking when a bonk is on the table (some play
+// sends an opponent's marble home). Those swing the game most, and the rules'
+// value of a bonk against the counter-hit is where the robot errs.
+export function contested(game, pi) {
+  const inBase = g => g.players.reduce((n, p, i) => n + (i === pi ? 0 : p.marbles.filter(m => m.zone === 'base').length), 0);
+  const before = inBase(game);
+  const plays = allPlays(game, pi);
+  return plays.length >= 2 && plays.some(p => inBase(p.game) > before);
+}
+
 // Returns { moves: [engine move, …] (to play in order), changed, n } or null
 // (nothing to decide / no time).
 export function chooseByRollouts(game, pi, { budgetMs = 1200, seed = 1, batch = 8, maxCands = 16, points = false } = {}) {
