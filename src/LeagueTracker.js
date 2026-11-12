@@ -196,6 +196,8 @@ export class LeagueTracker {
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
       store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks });
+      // How often each pair of teams has met this month (for fair line-ups).
+      for (const o of Object.keys(g.teams)) if (o > t.color) store.leagueAdd('meets:' + mon, `${t.color}|${o}`, { games: 1 });
       // Session table.
       const st = (this.session.teams[t.color] ??= { wins: 0, points: 0, games: 0, bonks: 0 });
       st.games++; st.wins += won ? 1 : 0; st.points += pts[t.color] ?? 0; st.bonks += t.bonks;
@@ -279,6 +281,27 @@ export class LeagueTracker {
     };
   }
   sendState(extra = {}) { const s = this.state(); if (s) this.send({ event: 'leagueState', ...s, ...extra }); }
+}
+
+// The next line-up of n teams, for a fair season: the teams that have played
+// the fewest games this month go first, and among them the pairs that have met
+// least (ties at random). Six teams: everyone plays.
+export function pickLineup(n) {
+  const mon = season(), all = Object.keys(TEAMS);
+  const games = Object.fromEntries(all.map(c => [c, store.leagueGet('season:' + mon, c).games ?? 0]));
+  const meets = (a, b) => store.leagueGet('meets:' + mon, a < b ? `${a}|${b}` : `${b}|${a}`).games ?? 0;
+  const pick = [];
+  const pool = all.map(c => ({ c, r: Math.random() }));
+  while (pick.length < Math.min(n, all.length)) {
+    let best = null, bestKey = Infinity;
+    for (const { c, r } of pool) {
+      if (pick.includes(c)) continue;
+      const key = games[c] * 1000 + pick.reduce((s, o) => s + meets(c, o), 0) * 10 + r;
+      if (key < bestKey) { bestKey = key; best = c; }
+    }
+    pick.push(best);
+  }
+  return pick.sort(() => Math.random() - 0.5);   // random seats
 }
 
 function attackerOf(game, from) {

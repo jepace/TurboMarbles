@@ -17,7 +17,7 @@ import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
-import { LeagueTracker } from './LeagueTracker.js';
+import { LeagueTracker, pickLineup } from './LeagueTracker.js';
 import { TEAMS } from '../public/js/league.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
@@ -229,8 +229,9 @@ const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name,
 function assignTeams(room) {
   // Robots-only rooms: a fresh line-up every game. Any teams, in any seats (the
   // seats themselves stay evenly spaced): new rivalries, new music.
+  // The teams that have played least this month go next (a fair season).
   if (room.slots.every(s => s.isRobot)) {
-    const pool = PLAYER_CONFIG.map(c => c.color).sort(() => Math.random() - 0.5);
+    const pool = pickLineup(room.slots.length);
     room.slots.forEach((s, i) => { s.color = pool[i]; });
   }
   for (const s of room.slots) { const t = TEAMS[s.color]; if (t) s.name = t.short; }
