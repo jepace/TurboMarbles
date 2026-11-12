@@ -3797,11 +3797,26 @@ function placeCommentary() {
   placeBoardCube();
   if ($('cube-offer').classList.contains('cube-modal')) centreOnBoard($('cube-offer'));
 }
-// Centre a pop-up on the board itself (the board isn't always in the middle of its area).
+// The double to answer goes where it hides none of the board: in the widest
+// free space beside it (centred vertically), else in a corner of the board's
+// square, outside the round board, overlapping as little as possible.
 function centreOnBoard(elx) {
   const a = $('board-area').getBoundingClientRect(), r = $('board-canvas').getBoundingClientRect();
-  elx.style.left = (r.left - a.left + r.width / 2) + 'px';
-  elx.style.top = (r.top - a.top + r.height / 2) + 'px';
+  const left = r.left - a.left, right = a.right - r.right, gap = Math.max(left, right);
+  elx.style.position = ''; elx.style.maxWidth = '';
+  if (gap >= 180) {
+    // Beside the board, in the wider gap, shrunk to fit it.
+    elx.style.maxWidth = (gap - 16) + 'px';
+    elx.style.left = (left >= right ? left / 2 : r.right - a.left + right / 2) + 'px';
+    elx.style.top = (r.top - a.top + r.height / 2) + 'px';
+  } else {
+    // No room beside the board: over the top of the sidebar.
+    const sb = $('sidebar').getBoundingClientRect();
+    elx.style.position = 'fixed';
+    elx.style.maxWidth = (sb.width - 16) + 'px';
+    elx.style.left = (sb.left + sb.width / 2) + 'px';
+    elx.style.top = (sb.top + 16 + (elx.offsetHeight || 140) / 2) + 'px';
+  }
 }
 // The cube on the board, next to its owner's base and in their colour; centred: at the board's side.
 function placeBoardCube() {
