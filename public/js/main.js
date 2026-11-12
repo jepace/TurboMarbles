@@ -2621,7 +2621,7 @@ function renderCube() {
     if (o && o.to === myPlayerIndex && gameState.phase === 'CUBE_OFFERED') {
       $('cube-offer-msg').replaceChildren(el('div', { class: 'cube-face' }, String(o.value)),
         el('div', {}, `${playerName(o.from)} doubles`, help(`Take: play on for ${o.value}, and own the cube. Drop: lose ${c.value} now.`)));
-      $('cube-offer').style.display = 'flex';
+      showCubeOffer();
     } else if (!o) $('cube-offer').style.display = 'none';
   }
   const line = sessionLine(true);
@@ -2680,9 +2680,23 @@ on('opponentLeft', ({ playerIndex }) => {
   $('btn-rematch').disabled = true;
   $('btn-rematch').textContent = 'Rematch';
 });
+// A double to answer: a pop-up in the middle of the board, nothing focused,
+// and Enter does nothing (no taking a bad cube by habit): click, T or D.
+function showCubeOffer() {
+  const box = $('cube-offer');
+  box.classList.add('cube-modal');
+  if (box.parentElement !== $('board-area')) $('board-area').append(box);
+  box.style.display = 'flex';
+  document.activeElement?.blur?.();
+}
+const cubeOfferOpen = () => $('cube-offer').style.display !== 'none';
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && cubeOfferOpen() && $('screen-game').classList.contains('active')) { e.preventDefault(); e.stopImmediatePropagation(); }
+}, true);
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (!$('screen-game').classList.contains('active')) return;
+  if ((e.key === 'd' || e.key === 'D') && cubeOfferOpen()) { e.preventDefault(); $('btn-drop').click(); return; }
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
   if ((e.key === 'd' || e.key === 'D') && canIDouble()) { e.preventDefault(); doDouble(); }
   if ((e.key === 't' || e.key === 'T') && $('cube-offer').style.display !== 'none') { e.preventDefault(); $('btn-take').click(); }
@@ -2696,7 +2710,7 @@ on('doubleOffered', ({ playerIndex, value }) => {
   if (playerIndex !== myPlayerIndex) {
     $('cube-offer-msg').replaceChildren(el('div', { class: 'cube-face' }, String(value)),
       el('div', {}, `${playerName(playerIndex)} doubles`, help(`Take: play on for ${value}, and own the cube. Drop: lose ${gameState.cube.value} now.`)));
-    $('cube-offer').style.display = 'flex';
+    showCubeOffer();
     $('turn-banner').textContent = 'Doubled';
   } else {
     $('turn-banner').textContent = `${playerName(1 - playerIndex)} to answer`;
