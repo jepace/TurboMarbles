@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 200" role="img" aria-label="TurboMarbles">
+  <defs>
+    <radialGradient id="m1" cx="35%" cy="32%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="0.28" stop-color="#ffb366"/><stop offset="0.7" stop-color="#ff7800"/><stop offset="1" stop-color="#8a3a00"/></radialGradient>
+    <radialGradient id="m2" cx="35%" cy="32%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="0.28" stop-color="#7fc0ff"/><stop offset="0.7" stop-color="#2288f0"/><stop offset="1" stop-color="#0b3f80"/></radialGradient>
+    <radialGradient id="m3" cx="35%" cy="32%" r="70%"><stop offset="0" stop-color="#fff"/><stop offset="0.28" stop-color="#ff8fcb"/><stop offset="0.7" stop-color="#e8208c"/><stop offset="1" stop-color="#6e0a41"/></radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset="0.55" stop-color="#f5c842"/><stop offset="1" stop-color="#c8920a"/></linearGradient>
+  </defs>
+  <g stroke="#f5c842" stroke-linecap="round" opacity="0.85">
+    <line x1="40" y1="44" x2="74" y2="44" stroke-width="5"/>
+    <line x1="48" y1="58" x2="78" y2="58" stroke-width="5" opacity="0.7"/>
+    <line x1="36" y1="72" x2="72" y2="72" stroke-width="5" opacity="0.5"/>
+  </g>
+  <circle cx="106" cy="58" r="24" fill="url(#m1)"/>
+  <circle cx="146" cy="46" r="18" fill="url(#m2)"/>
+  <circle cx="138" cy="82" r="14" fill="url(#m3)"/>
+  <circle cx="98" cy="49" r="6" fill="#fff" opacity="0.8"/>
+  <circle cx="141" cy="40" r="4.5" fill="#fff" opacity="0.8"/>
+  <circle cx="134" cy="77" r="3.5" fill="#fff" opacity="0.8"/>
+  <g font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-style="italic" text-anchor="middle">
+    <text x="120" y="142" font-size="46" fill="url(#gold)" textLength="200" lengthAdjust="spacingAndGlyphs">TURBO</text>
+    <text x="120" y="186" font-size="46" fill="#ffffff" textLength="220" lengthAdjust="spacingAndGlyphs">MARBLES</text>
+  </g>
+</svg>

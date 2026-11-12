@@ -741,12 +741,15 @@ body.kiosk #score-line { font-size: 1.05rem; font-weight: 700; color: #f0c040; p
 #kiosk-brand, .kb-head { display: none; }
 body.streamview #kiosk-brand.fits { display: flex; flex-direction: column; gap: 0.2rem; position: absolute; left: 18px; top: 14px; z-index: 4; pointer-events: none; }
 #kiosk-brand img { width: 100%; height: auto; }
+#kiosk-brand.square img { max-width: 220px; align-self: center; }
+#kiosk-brand.square #kb-url { text-align: center; padding-left: 0; }
 #kb-url { font-size: 1.5rem; font-weight: 700; color: #e8eef8; letter-spacing: 0.5px; padding-left: 8px; }
 body.streamview .kb-head { display: block; font-size: 1.15rem; font-weight: 800; color: #f0c040; margin-top: 0.2rem; }
 body.kiosk .kb-head { font-size: 1.6rem; font-weight: 800; color: #f0c040; margin-top: 0.3rem; }
 body.streamview #turn-banner, body.streamview #game-chat-input { display: none !important; }
 /* Stream: three columns, the board centred as a square with equal columns either side. */
-body.kiosk #sidebar { width: calc((100vw - 100vh) / 2); box-sizing: border-box; }
+/* Watching and the stream page: equal columns either side of the square board. */
+body.streamview #sidebar { width: max(240px, calc((100vw - 100vh) / 2)); box-sizing: border-box; }
 body.streamview #board-area { justify-content: flex-end; }
 /* Stream: the game's rows look like the season's (same size, same spacing). */
 body.kiosk #player-list { gap: 2px; }

@@ -3779,7 +3779,12 @@ function placeCommentary() {
   const brand = $('kiosk-brand');
   brand.classList.toggle('fits', beside && stream);
   brand.style.width = Math.max(100, room - 12) + 'px';
-  $('kb-url').style.fontSize = KIOSK ? '' : `${Math.max(0.7, Math.min(1.5, room / 260))}rem`;
+  // A narrow column gets the square logo (marbles over the name).
+  const square = room < 330, img = brand.querySelector('img');
+  brand.classList.toggle('square', square);
+  const src = square ? 'img/logo-square.svg' : 'img/logo.svg';
+  if (!img.src.endsWith(src)) img.src = src;
+  $('kb-url').style.fontSize = KIOSK && !square ? '' : `${Math.max(0.7, Math.min(1.5, room / 260))}rem`;
   box.style.maxHeight = beside && brand.offsetHeight ? Math.max(0, area.clientHeight - brand.offsetTop - brand.offsetHeight - 40) + 'px' : '';
   // The dice: on the board's square, in its top-right corner. The cube: by its owner.
   const a = area.getBoundingClientRect(), c = cv.getBoundingClientRect(), d = $('dice-area');
