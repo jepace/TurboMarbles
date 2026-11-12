@@ -2714,6 +2714,7 @@ function showCubeOffer() {
   box.classList.add('cube-modal');
   if (box.parentElement !== $('board-area')) $('board-area').append(box);
   box.style.display = 'flex';
+  centreOnBoard(box);
   document.activeElement?.blur?.();
 }
 const cubeOfferOpen = () => $('cube-offer').style.display !== 'none';
@@ -3794,6 +3795,13 @@ function placeCommentary() {
   d.style.left = (c.right - a.left - d.offsetWidth - 14) + 'px';
   d.style.top = (c.top - a.top + 14) + 'px';
   placeBoardCube();
+  if ($('cube-offer').classList.contains('cube-modal')) centreOnBoard($('cube-offer'));
+}
+// Centre a pop-up on the board itself (the board isn't always in the middle of its area).
+function centreOnBoard(elx) {
+  const a = $('board-area').getBoundingClientRect(), r = $('board-canvas').getBoundingClientRect();
+  elx.style.left = (r.left - a.left + r.width / 2) + 'px';
+  elx.style.top = (r.top - a.top + r.height / 2) + 'px';
 }
 // The cube on the board, next to its owner's base and in their colour; centred: at the board's side.
 function placeBoardCube() {

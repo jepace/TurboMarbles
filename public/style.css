@@ -904,15 +904,6 @@ body.light .muted { color: var(--muted); }
 .league-table.sortable th[data-sort="desc"]::after { content: ' ▼'; font-size: 0.7em; }
 
 /* A double to answer: front and centre over the board. */
-#cube-offer.cube-modal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6;
-  display: flex; flex-direction: column; align-items: center; gap: 1rem; max-width: none; width: auto; min-width: 20rem;
-  padding: 1.4rem 1.8rem; border-radius: 16px; background: #0b1626f2; border: 2px solid #f0c040; box-shadow: 0 10px 40px #000c; }
-#cube-offer.cube-modal:not([style*="none"]) { display: flex !important; }
-#cube-offer.cube-modal #cube-offer-msg { font-size: 1.25rem; gap: 12px; max-width: 22rem; }
-#cube-offer.cube-modal #cube-offer-msg .cube-face { width: 44px; height: 44px; font-size: 1.4rem; }
-#cube-offer.cube-modal button { width: auto; min-width: 7rem; font-size: 1.2rem; }
-#cube-offer.cube-modal { flex-direction: row; flex-wrap: wrap; justify-content: center; }
-#cube-offer.cube-modal #cube-offer-msg { flex: 1 0 100%; }
 
 /* The cube on the board: beside its owner's base (in their colour), or at the side when centred. */
 #board-cube { position: absolute; z-index: 4; transform: translate(-50%, -50%); width: 46px; height: 46px; border-radius: 8px;
@@ -922,11 +913,20 @@ body.light .muted { color: var(--muted); }
 #board-cube.dead { opacity: 0.55; }
 body.kiosk #board-cube { width: 64px; height: 64px; font-size: 2rem; }
 /* The answer to a double: message across, the two buttons side by side. */
-#cube-offer.cube-modal { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0.8rem 1rem; }
-#cube-offer.cube-modal[style*="none"] { display: none !important; }
-#cube-offer.cube-modal #cube-offer-msg { grid-column: 1 / -1; }
 #btn-leave-after { width: 100%; }
 #btn-leave-after.on { border-color: #f0c040; color: #f0c040; }
 #cube-area #cube { display: none; }   /* the cube itself is on the board */
 body.streamview:not(.kiosk) .cm-line { font-size: 1em; } body.streamview:not(.kiosk) .cm-line.lvl3 { font-size: 1.08em; } body.streamview:not(.kiosk) .cm-line.lvl1 { font-size: 0.92em; }
 body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line .standings { font-size: var(--sv-font, 1rem); }
+
+/* A double to answer: a pop-up in the middle of the board. The message on top,
+   Drop and Take side by side under it. */
+#board-area #cube-offer.cube-modal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6;
+  display: grid !important; grid-template-columns: auto auto; grid-template-rows: auto auto; justify-content: center;
+  gap: 1rem 1rem; width: max-content; max-width: 90%; padding: 1.4rem 1.8rem; border-radius: 16px;
+  background: #0b1626f2; border: 2px solid #f0c040; box-shadow: 0 10px 40px #000c; }
+#board-area #cube-offer.cube-modal[style*="none"] { display: none !important; }
+#board-area #cube-offer.cube-modal #cube-offer-msg { grid-column: 1 / -1; grid-row: 1; max-width: 22rem; margin: 0 auto;
+  font-size: 1.25rem; gap: 12px; display: flex; align-items: center; justify-content: center; text-align: left; }
+#board-area #cube-offer.cube-modal #cube-offer-msg .cube-face { width: 44px; height: 44px; font-size: 1.4rem; }
+#board-area #cube-offer.cube-modal button { grid-row: 2; width: 8rem; min-height: 2.9rem; font-size: 1.2rem; font-weight: 700; }
