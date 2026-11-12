@@ -2456,6 +2456,7 @@ on('marbleBumped', ({ ownerIndex, marbleId, from }) => {
   {
     const by = gameState?.turnIndex, arm = playerArm(ownerIndex);
     const dist = from?.zone === 'track' ? squareNumber(arm, from.space) : null;
+    lastBumped = { color: gameState?.players?.[ownerIndex]?.color, dist };
     const rn = commentator.rollId();
     // The bump is announced before the attacker's move: look the attacker up once that has arrived.
     const where = from?.zone === 'center' ? 'hub' : from?.zone === 'track' && ALL_STARS.has(from.space) ? 'star' : null;
@@ -3596,9 +3597,10 @@ function standings(score) {
 // beat (the effect would clash with it); the bonk keeps its thud.
 function momentSound(sound, pi) {
   const color = gameState?.players?.[pi]?.color;
-  if (sound === 'bonk') { playBonk(); musicHit(color); }
+  if (sound === 'bonk') { playBonk(); musicHit(color, lastBumped?.color, lastBumped?.dist != null && lastBumped.dist <= 12); lastBumped = null; }
   else if (sound === 'chime') { if (!musicOn()) playHomeChime(); musicHome(color); }
 }
+let lastBumped = null;   // the marble the coming bonk sends home (music: its team's voice, heartbreak near home)
 let watchCardTimer = null;
 function showWatchCard(winnerIndex, result, score) {
   const g = gameState;

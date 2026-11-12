@@ -9,9 +9,9 @@
 //     the melody; close chasers answer in the gaps, louder as they close in; a
 //     change of lead cross-fades over a couple of bars.
 //   - Cues on the beat: 6 (rising run + a stuttered double beat; 6-6 bigger), 1 (bell),
-//     doubles (echo), out of base (pickup), onto the star circle (shimmer), into the hub
+//     out of base (pickup), onto the star circle (shimmer), into the hub
 //     (swirl down, the mix dips) and out (sweep up), a home slot climbed (tick), hits
-//     (sting; the victim's voice ducks), marbles home, a new leader (crash + its motif),
+//     (the hitter's voice climbs, the victim's falls; heartbreak near home), no aggros left (cadence), marbles home, a new leader (crash + its motif),
 //     the final lap (snare riser), and the winner's flourish.
 //
 // A look-ahead scheduler (the usual Web Audio pattern) queues 16th-note steps
@@ -320,12 +320,26 @@ function playCue({ kind, color, extra }, t, chordDeg) {
     case 'lap':     // the final lap begins: a snare riser into the key lift
       for (let i = 0; i < 8; i++) snare(t + i * sd * 0.5, 0.04 + 0.025 * i);
       break;
-    case 'double': note('marimba', degree(chordDeg, 4, 2), t, sd, 0.5); note('marimba', degree(chordDeg, 4, 2), t + sd * 2, sd, 0.3); break;
     case 'hit': {
-      // Dissonant sting, then the hitter's motif head.
-      for (const d of [0, 1, 3]) note('brass', degree(chordDeg, d, 1) + (d === 1 ? 1 : 0), t, sd * 2, 0.35);
-      const v = VOICES[color];
-      if (v) v.motif.slice(0, 3).forEach(([st, deg, len], i) => note(v.inst, degree(chordDeg, deg, v.oct), t + (2 + i * 2) * sd, len * sd, 0.7));
+      // Both teams' voices: the hitter's motif head climbs (triumph), then the
+      // victim's tune falls away, low and flattened. Near home it's heartbreak:
+      // a minor chord and a longer fall.
+      for (const d of [0, 1, 3]) note('brass', degree(chordDeg, d, 1) + (d === 1 ? 1 : 0), t, sd * 2, 0.3);
+      const v = VOICES[color], w = VOICES[extra?.victim], sad = extra?.heartbreak;
+      if (v) [0, 2, 4].forEach((d, i) => note(v.inst, degree(chordDeg, d, v.oct), t + (2 + i * 2) * sd, sd * 2, 0.7));
+      if (w) {
+        const fall = sad ? [7, 5, 4, 2, 1, 0] : [4, 2, 0];
+        fall.forEach((d, i) => note(w.inst, degree(chordDeg, d, w.oct - 1) - (i === fall.length - 1 ? 1 : 0), t + (8 + i * 2) * sd, sd * (sad ? 3 : 2), sad ? 0.6 : 0.45));
+      }
+      if (sad) {
+        for (const d of [0, 2, 4]) note('pad', degree(chordDeg + 5, d, 0) - (d === 2 ? 1 : 0), t + 8 * sd, sd * 16, 0.6);
+        note('drone', degree(0, 0, -1), t + 8 * sd, sd * 16, 0.5);
+      }
+      break;
+    }
+    case 'safe': {  // every team has a marble home: no aggros left, a relieved major cadence
+      [[4, 6, 8], [0, 2, 4]].forEach((ch, k) => ch.forEach(d => note('pad', degree(0, d, 1), t + k * 8 * sd, sd * 10, 0.55)));
+      note('bell', degree(0, 7, 1), t + 8 * sd, sd * 8, 0.4);
       break;
     }
     case 'home': {
@@ -396,6 +410,10 @@ export function musicUpdate(players) {
   const progress = Math.min(1, Math.max(0, (START - lead.pips) / (START - 20)));
   const close = second ? Math.max(0, 1 - (second.pips - lead.pips) / 60) : 0;
   S.target = Math.min(1, 0.12 + 0.6 * progress + 0.25 * close * progress);
+  // The end of aggros: the last team without a marble home gets one.
+  const noneHome = players.filter(p => p.home === 0).length;
+  if (S.noneHome > 0 && noneHome === 0 && musicOn()) queue.push({ kind: 'safe' });
+  S.noneHome = noneHome;
   const lap = lead.home >= 3 || lead.pips <= 40;
   if (lap && !S.finalLap && musicOn()) queue.push({ kind: 'lap' });
   S.finalLap = lap;
@@ -423,11 +441,10 @@ export function musicRoll(dice, color) {
   if (!musicOn() || !dice) return;
   if (dice.includes(6)) queue.push({ kind: 'six', color, extra: { double: dice[0] === 6 && dice[1] === 6 } });
   else if (dice.includes(1)) queue.push({ kind: 'one', color });
-  else if (dice[0] === dice[1]) queue.push({ kind: 'double', color });
 }
-export function musicHit(byColor, victimColor) {
+export function musicHit(byColor, victimColor, heartbreak) {
   if (victimColor) S.duck[victimColor] = 32;
-  if (musicOn()) queue.push({ kind: 'hit', color: byColor });
+  if (musicOn()) queue.push({ kind: 'hit', color: byColor, extra: { victim: victimColor, heartbreak } });
 }
 export function musicDuck(color) { if (color) S.duck[color] = 32; }
 export function musicHome(color) { if (musicOn()) queue.push({ kind: 'home', color }); }
@@ -449,7 +466,7 @@ export function musicWin(color) {
 }
 let winBlendTimer = null, pickedNext = false;
 export function musicReset() {
-  S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {};
+  S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {}; S.noneHome = 0;
   clearTimeout(winBlendTimer);
   if (!pickedNext) pickSong();   // already blending into it after the last win
   pickedNext = false;
