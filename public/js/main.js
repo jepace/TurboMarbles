@@ -2660,11 +2660,11 @@ function renderCube() {
   if (inLeague() && leagueTable) {
     $('score-line').style.display = 'block';
     $('kb-season').textContent = `Season · ${leagueMonthName(leagueMonth)}`;
-    $('score-line').replaceChildren(el('div', { class: 'standings' }, ...leagueTable.map((t, k) => el('div', { class: 'st-row', title: `${TEAMS[t.color]?.name}: ${t.wins} won of ${t.games} this month; this session ${t.sessionWins} of ${t.sessionGames}` },
+    $('score-line').replaceChildren(el('div', { class: 'standings' }, ...leagueTable.map((t, k) => el('div', { class: 'st-row', title: `${TEAMS[t.color]?.name}: ${t.wins} won of ${t.games} this month (${t.points >= 0 ? '+' : ''}${t.points} points); this session ${t.sessionWins} of ${t.sessionGames}` },
       el('span', { class: 'st-rank' }, String(k + 1)),
       el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
       el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
-      el('span', { class: 'st-pts' + (t.points > 0 ? ' plus' : t.points < 0 ? ' minus' : '') }, `${t.points > 0 ? '+' : t.points < 0 ? '−' : ''}${Math.abs(t.points)}`)))));
+      el('span', { class: 'st-pts' + (t.par > 0.05 ? ' plus' : t.par < -0.05 ? ' minus' : ''), title: 'Wins above par: fair across game sizes' }, `${t.par > 0.05 ? '+' : t.par < -0.05 ? '−' : ''}${Math.abs(t.par ?? 0).toFixed(1)}`)))));
   } else if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
   else $('score-line').textContent = line;
 }
@@ -4030,11 +4030,13 @@ function renderLeague() {
   if (!d) return;
   const teamCell = t => el('span', { class: 'lg-team' }, lgDot(t.color), `${t.emoji ?? ''} ${t.name}`);
   if (leagueTab === 'standings') {
-    const season = [...d.teams].sort((a, b) => (b.season.wins ?? 0) - (a.season.wins ?? 0) || (b.season.points ?? 0) - (a.season.points ?? 0));
+    const season = [...d.teams].sort((a, b) => (b.season.par ?? 0) - (a.season.par ?? 0) || (b.season.wins ?? 0) - (a.season.wins ?? 0));
+    const parTxt = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v ?? 0).toFixed(1)}`;
     const career = [...d.teams].sort((a, b) => (b.career.wins ?? 0) / Math.max(1, b.career.games ?? 0) - (a.career.wins ?? 0) / Math.max(1, a.career.games ?? 0));
     box.replaceChildren(
       el('h3', {}, `Season ${d.season}`),
-      lgTable(['#', 'Team', 'Played', 'Won', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
+      lgTable(['#', 'Team', 'Played', 'Won', 'Above par', 'Strength', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), parTxt(t.season.par), (t.strength ?? 1).toFixed(2), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
+      el('p', { class: 'muted', style: 'font-size:0.85rem' }, 'Above par: wins counted fairly across game sizes (a win is worth 1 − 1/n, a loss −1/n, with n teams in the game). Strength: how likely a team is to win against the field it faced (1.00 = average; 1.50 wins half again as often), fitted to every game this month.'),
       el('h3', {}, 'All time'),
       lgTable(['Team', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggro\'d', 'Sixes / roll', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
         career.map(t => { const c = t.career; return [teamCell(t), t.captain ?? '', String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–',

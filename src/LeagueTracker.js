@@ -195,7 +195,10 @@ export class LeagueTracker {
       store.leagueAdd('team', t.color, { distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), exits: sum('exits'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
-      store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks });
+      // Wins above par: a win is worth 1 − 1/n, a loss −1/n (n teams), so games of any size compare.
+      const par = (won ? 1 : 0) - 1 / n;
+      store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, par });
+      store.leagueAdd('team', t.color, { par });
       // How often each pair of teams has met this month (for fair line-ups).
       for (const o of Object.keys(g.teams)) if (o > t.color) store.leagueAdd('meets:' + mon, `${t.color}|${o}`, { games: 1 });
       // Session table.
@@ -249,6 +252,7 @@ export class LeagueTracker {
     if (lead && this.session.games >= 3) notes.push([1, { team: lead[0] }, ` lead the session with ${lead[1].wins} win${lead[1].wins === 1 ? '' : 's'} from ${this.session.games} games.`]);
 
     store.leagueLogGame({ players: n, winner: wColor, coach: null, summary: {
+      lineup: Object.keys(g.teams),
       turns, ms, bonks: g.bonks, margin, leadChanges: g.leadChanges, deficit: w.maxDeficit, wire, mvp: mvp ? `${mvp.color}:${mvp.id}` : null,
       teams: Object.values(g.teams).map(t => ({ color: t.color, points: pts[t.color] ?? 0, bonks: t.bonks, sixes: t.sixes, distance: t.distance })) } });
 
@@ -276,8 +280,8 @@ export class LeagueTracker {
       table: Object.keys(TEAMS).map(c => {
         const sea = store.leagueGet('season:' + mon, c), ses = this.session.teams[c];
         return { color: c, games: sea.games ?? 0, wins: sea.wins ?? 0, points: sea.points ?? 0,
-          sessionGames: ses?.games ?? 0, sessionWins: ses?.wins ?? 0, sessionPoints: ses?.points ?? 0 };
-      }).sort((a, b) => b.points - a.points || b.wins - a.wins || a.games - b.games),
+          par: sea.par ?? 0, sessionGames: ses?.games ?? 0, sessionWins: ses?.wins ?? 0, sessionPoints: ses?.points ?? 0 };
+      }).sort((a, b) => b.par - a.par || b.wins - a.wins || a.games - b.games),
     };
   }
   sendState(extra = {}) { const s = this.state(); if (s) this.send({ event: 'leagueState', ...s, ...extra }); }
@@ -321,12 +325,41 @@ function mvpWhy(m) {
 }
 
 // ---- The League page: all-time tables (public, read only) ----
+// Team strengths (the Luce model): a team's chance to win a game is its
+// strength over the total strength of the teams in that game, any game size.
+// Fitted to the given games ([{ lineup: [colours], winner }]) by the standard
+// MM iteration, with one pseudo-game per team against an average team so a
+// team without a win still gets a strength. Scaled so the average team is 1.
+export function luceStrengths(games, teams = Object.keys(TEAMS)) {
+  const s = Object.fromEntries(teams.map(c => [c, 1]));
+  const wins = Object.fromEntries(teams.map(c => [c, 0.5]));
+  for (const g of games) if (s[g.winner] != null) wins[g.winner]++;
+  for (let it = 0; it < 200; it++) {
+    const denom = Object.fromEntries(teams.map(c => [c, 1 / (s[c] + 1)]));   // the pseudo-game (half a win each way)
+    for (const g of games) {
+      const lu = g.lineup.filter(c => s[c] != null), tot = lu.reduce((a, c) => a + s[c], 0);
+      for (const c of lu) denom[c] += 1 / tot;
+    }
+    let logSum = 0;
+    for (const c of teams) { s[c] = wins[c] / denom[c]; logSum += Math.log(s[c]); }
+    const gm = Math.exp(logSum / teams.length);
+    for (const c of teams) s[c] /= gm;
+  }
+  return s;
+}
+// This month's games with a known line-up.
+function monthGames(mon) {
+  return store.leagueRecentGames(5000).filter(r => new Date(r.at).toISOString().slice(0, 7) === mon && Array.isArray(r.summary?.lineup))
+    .map(r => ({ lineup: r.summary.lineup, winner: r.winner }));
+}
+
 export function leagueOverview() {
   const mon = season();
+  const strength = luceStrengths(monthGames(mon));
   const teams = Object.keys(TEAMS).map(c => {
     const t = store.leagueGet('team', c), s = store.leagueGet('season:' + mon, c);
     const cap = captainOf(c);
-    return { color: c, name: teamName(c), emoji: TEAMS[c].emoji, captain: TEAMS[c].marbles[cap]?.name, career: t, season: s };
+    return { color: c, name: teamName(c), emoji: TEAMS[c].emoji, captain: TEAMS[c].marbles[cap]?.name, career: t, season: s, strength: strength[c] };
   });
   const marbles = store.leagueAll('marble').map(m => {
     const [color, id] = m.id.split(':');
