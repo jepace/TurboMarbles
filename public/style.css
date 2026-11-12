@@ -777,7 +777,7 @@ details.stream-builder summary { cursor: pointer; color: var(--muted); text-alig
 .wc-how { color: #ff9a8a; font-weight: 700; }
 .wc-head { margin-top: 0.4rem; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; }
 body.kiosk #score-line { color: inherit; font-weight: 600; }
-body.kiosk #score-line .standings { font-size: 1.35rem; }
+body.kiosk #score-line .standings { font-size: 1.6rem; }   /* same as the commentary */
 /* In-game audio: on/off + volume per channel */
 .audio-row { display: flex; align-items: center; gap: 8px; }
 .audio-row label { flex: 0 0 6.5em; }
