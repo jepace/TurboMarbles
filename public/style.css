@@ -757,7 +757,8 @@ body.streamview .player-row { padding: 0 0.3rem; gap: 6px; line-height: 1.25; }
 body.streamview .player-row .pips { font-size: inherit; color: inherit; }
 body.kiosk .player-row { font-size: 1.6rem; }
 body.kiosk #game-log { font-size: 1.3rem; }   /* the longest move line (≈36 characters) fits */
-body.streamview #game-log .log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.streamview #game-log .log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }   /* never squashed: the log scrolls */
+body.streamview #game-log { overflow-y: auto; min-height: 0; }
 body.streamview #commentary { overflow: hidden; }
 /* Stream: the dice sit in the board's top-right corner, next to the action. */
 /* The dice sit on the board's square, top-right corner (every game). */
