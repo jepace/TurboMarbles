@@ -2629,6 +2629,7 @@ function canIDouble() {
   return !!c && !c.crawford && !cubeDead(myPlayerIndex) && isMyTurn() && g.phase === 'IN_TURN' && !g.dice && !g.cubeOffer &&
     (c.owner == null || c.owner === myPlayerIndex);
 }
+const leagueMonthName = m => { const [y, mo] = String(m ?? '').split('-').map(Number); return y && mo ? new Date(y, mo - 1, 1).toLocaleString('en', { month: 'long' }) : 'this month'; };
 function renderCube() {
   const c = gameState?.cube;
   placeBoardCube();
@@ -2653,8 +2654,18 @@ function renderCube() {
   }
   const line = sessionLine(true);
   $('score-line').style.display = line || (watching && gameState?.score) ? 'block' : 'none';
-  // Watching a session: a leader list, best first. Else the one-line score.
-  if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
+  // League rooms: the teams change every game, so the table is the league's
+  // month (every team; the session's games as a hint). Other watched rooms: a
+  // leader list by seat. Else the one-line score.
+  if (inLeague() && leagueTable) {
+    $('score-line').style.display = 'block';
+    $('kb-season').textContent = `Season · ${leagueMonthName(leagueMonth)}`;
+    $('score-line').replaceChildren(el('div', { class: 'standings' }, ...leagueTable.map((t, k) => el('div', { class: 'st-row', title: `${TEAMS[t.color]?.name}: ${t.wins} won of ${t.games} this month; this session ${t.sessionWins} of ${t.sessionGames}` },
+      el('span', { class: 'st-rank' }, String(k + 1)),
+      el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
+      el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
+      el('span', { class: 'st-pts' + (t.points > 0 ? ' plus' : t.points < 0 ? ' minus' : '') }, `${t.points > 0 ? '+' : t.points < 0 ? '−' : ''}${Math.abs(t.points)}`)))));
+  } else if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
   else $('score-line').textContent = line;
 }
 
@@ -3689,7 +3700,12 @@ function showWatchCard(winnerIndex, result, score) {
     inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${TEAMS[leagueMvp[0]]?.marbles[leagueMvp[1]]?.name} (${TEAMS[leagueMvp[0]]?.short})`) : '',
     how ? el('div', { class: 'wc-how' }, how) : '',
     el('div', { class: 'wc-head' }, 'This game'), standings(pts),
-    score ? el('div', { class: 'wc-head' }, 'Session') : '', score ? standings(score) : '');
+    ...(inLeague() && leagueTable ? [el('div', { class: 'wc-head' }, 'This session'), el('div', { class: 'standings' },
+      ...leagueTable.filter(t => t.sessionGames).sort((a, b) => b.sessionPoints - a.sessionPoints).map((t, k) => el('div', { class: 'st-row' },
+        el('span', { class: 'st-rank' }, String(k + 1)), el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
+        el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
+        el('span', { class: 'st-pts' + (t.sessionPoints > 0 ? ' plus' : t.sessionPoints < 0 ? ' minus' : '') }, `${t.sessionPoints > 0 ? '+' : t.sessionPoints < 0 ? '−' : ''}${Math.abs(t.sessionPoints)}`))))]
+      : [score ? el('div', { class: 'wc-head' }, 'Session') : '', score ? standings(score) : '']));
   card.style.display = 'flex';
   clearTimeout(watchCardTimer);
   watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 10000);
@@ -3953,7 +3969,8 @@ let leagueMvp = null;
 let lastMover = {};   // seat → marble id of its last move (who did the bonking)
 on('marbleMoved', ({ playerIndex, marbleId }) => { lastMover[playerIndex] = marbleId; });
 on('leagueNote', ({ level, parts }) => commentator.league(parts, level));
-on('leagueState', st => { if (st.mvp !== undefined) leagueMvp = st.mvp; if (st.mvp === undefined && st.teams) leagueMvp = null; });
+on('leagueState', st => { if (st.mvp !== undefined) leagueMvp = st.mvp; if (st.mvp === undefined && st.teams) leagueMvp = null; if (st.table) { leagueTable = st.table; leagueMonth = st.season; renderCube(); } });
+let leagueTable = null, leagueMonth = null;
 
 
 // ---- The League page (public): /league.json ----

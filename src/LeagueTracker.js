@@ -270,6 +270,12 @@ export class LeagueTracker {
           streak: career.streak ?? 0 };
       }),
       sessionGames: this.session.games,
+      // The month's table, all six teams (the line-up changes every game).
+      table: Object.keys(TEAMS).map(c => {
+        const sea = store.leagueGet('season:' + mon, c), ses = this.session.teams[c];
+        return { color: c, games: sea.games ?? 0, wins: sea.wins ?? 0, points: sea.points ?? 0,
+          sessionGames: ses?.games ?? 0, sessionWins: ses?.wins ?? 0, sessionPoints: ses?.points ?? 0 };
+      }).sort((a, b) => b.points - a.points || b.wins - a.wins || a.games - b.games),
     };
   }
   sendState(extra = {}) { const s = this.state(); if (s) this.send({ event: 'leagueState', ...s, ...extra }); }
