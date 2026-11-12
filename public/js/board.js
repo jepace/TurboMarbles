@@ -118,7 +118,10 @@ function discTexture() {
   return c;
 }
 // Neon: strokes glow in their own colour.
-function glowOn(color, k = 1) { if (T.glow) { ctx.shadowColor = color; ctx.shadowBlur = W * 0.014 * T.glow * k; } }
+// Lite (stream page lite=1, no graphics card): no glow; blurred shadows are the costliest thing to draw.
+let lite = false;
+export function setLite(on) { lite = !!on; }
+function glowOn(color, k = 1) { if (T.glow && !lite) { ctx.shadowColor = color; ctx.shadowBlur = W * 0.014 * T.glow * k; } }
 function glowOff() { if (T.glow) { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; } }
 // Each viewer may see their own arm in a favourite colour: the colours turn
 // round the ring by `shift` arms, keeping their order (display only).

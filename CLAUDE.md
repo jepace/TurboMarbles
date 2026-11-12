@@ -149,8 +149,8 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   room with robots in every seat (`createRoom` watch) whose games run back to back (`watchNextGameMs`). A
   robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
 - Streaming: `/?watch=robots&players=6` is a kiosk page (no sign-in, no menus or buttons) that starts a
-  robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080. Options:
-  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `speed=slow|normal|fast` (robots-only rooms play at `room.pace`: 2.2× / 1.5× / 1× the
+  robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080, or headless on the server: `rc.d/turbomarbles-stream.sh` + `rc.d/turbomarbles_stream` (Xvfb + Chromium + ffmpeg to YouTube; DEPLOY.md). Options:
+  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `lite=1` (cheaper drawing for a machine without a graphics card: no glow, ≤30 redraws/s), `speed=slow|normal|fast` (robots-only rooms play at `room.pace`: 2.2× / 1.5× / 1× the
   normal robot delays). The Play page's
   "Stream it" fold-out builds the URL. Kiosk options are per URL, never saved to the browser's settings.
 - Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; on by default

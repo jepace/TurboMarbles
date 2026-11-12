@@ -5,7 +5,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
          hitTestMarble, highlightSpaces, highlightMarbleAt, getSpacePosition,
          setMarbleOverride, clearMarbleOverride,
          setAnimatingMarble, clearAnimatingMarble,
-         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels, THEMES, FINISHES, DEFAULT_PALETTE } from './board.js';
+         getBasePosition, clearAllMarbleOverrides, spaceAt, drawMoveArrows, setViewArm, setSquareLabels, setColorShift, setBoardLook, setSeatLabels, setLite, THEMES, FINISHES, DEFAULT_PALETTE } from './board.js';
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
@@ -3097,7 +3097,8 @@ function runNextAnimation() {
         x: startPos.x + (targetPos.x - startPos.x) * ease,
         y: startPos.y + (targetPos.y - startPos.y) * ease,
       });
-      drawBoard(gameState);
+      // Lite: at most 30 redraws a second (the stream is 30 fps anyway).
+      if (!LITE || t >= 1 || now - lastLiteDraw >= 33) { lastLiteDraw = now; drawBoard(gameState); }
       if (t < 1) {
         requestAnimationFrame(frame);
       } else {
@@ -3549,6 +3550,9 @@ $('sb-copy').addEventListener('click', async () => {
   catch { $('sb-url').select(); }
 });
 
+// lite=1 (stream page): cheaper drawing for a machine with no graphics card.
+const LITE = KIOSK && new URLSearchParams(location.search).get('lite') === '1';
+let lastLiteDraw = 0;
 function startKiosk() {
   const q = new URLSearchParams(location.search);
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
@@ -3571,6 +3575,7 @@ if (KIOSK) {
   const qp = q.get('palette');
   if (qp) { const preset = PALETTES.find(([k]) => k === qp); const hex = qp.split(',').map(h => '#' + h.replace(/^#/, '')).join(','); settings.palette = preset ? preset[2].join(',') : paletteOf(hex) ? hex : undefined; }
   applyBoardLook();
+  setLite(LITE);
   settings.feedback = false;
   applySquareNumbers();
   document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');

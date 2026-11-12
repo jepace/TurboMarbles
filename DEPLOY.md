@@ -378,3 +378,28 @@ HSTS tells browsers to refuse plain HTTP for your domain for two years. Do not e
 | Check open connections | `sockstat -4 -l` |
 | Check pf state table | `pfctl -ss` |
 | List active rooms (debug) | check Node logs — each `createRoom` is logged |
+
+## Streaming to YouTube from the headless server (no OBS)
+
+`rc.d/turbomarbles-stream.sh` runs a virtual screen (Xvfb), a null audio sink (PulseAudio),
+Chromium on the stream page and ffmpeg to YouTube; `rc.d/turbomarbles_stream` runs it as a
+service (restarted if it exits). Run it on the host, not in the game's jail.
+
+```sh
+pkg install ffmpeg xorg-vfbserver chromium pulseaudio
+ffmpeg -hide_banner -encoders | grep libx264     # must be there
+ffmpeg -hide_banner -devices  | grep pulse       # must be there (else build multimedia/ffmpeg with PULSEAUDIO)
+pw useradd streamer -m -s /usr/sbin/nologin
+install -m 555 rc.d/turbomarbles_stream    /usr/local/etc/rc.d/turbomarbles_stream
+install -m 555 rc.d/turbomarbles-stream.sh /usr/local/libexec/turbomarbles-stream.sh
+echo 'YOUR-STREAM-KEY' > /usr/local/etc/turbomarbles-stream.key     # YouTube Studio → Go live → Stream key
+chown streamer /usr/local/etc/turbomarbles-stream.key && chmod 400 /usr/local/etc/turbomarbles-stream.key
+sysrc turbomarbles_stream_enable=YES
+service turbomarbles_stream start
+tail -f /var/log/turbomarbles-stream.log
+```
+
+Defaults: 1280x720 at 30 fps, 2500k video; the page is laid out at 1920x1080 and drawn at 720p, with
+`lite=1` (no neon glow, at most 30 redraws a second). For 1080p: `sysrc turbomarbles_stream_size=1920x1080
+turbomarbles_stream_vbitrate=4500k`. If ffmpeg can't keep up (the log warns, the stream stutters):
+`sysrc turbomarbles_stream_preset=ultrafast`. Other page options go in `turbomarbles_stream_page`.
