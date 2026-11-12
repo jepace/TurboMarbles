@@ -15,8 +15,9 @@ HOST=127.0.0.1          # bind to loopback only; put nginx/caddy in front for TL
 ORIGIN=https://example.com  # enables WebSocket origin checking (reject other origins)
 PORT=8080               # default (server.js's own fallback when PORT is unset)
 PUBLIC_URL=https://example.com  # links in emails (password reset, email confirmation); else ORIGIN
-MAIL_FROM=noreply@example.com   # sender; mail goes through /usr/sbin/sendmail (SENDMAIL=path to override);
-                                # without sendmail the links are written to the server log
+MAIL_FROM=noreply@example.com   # sender (with Resend: on a domain verified there)
+RESEND_API_KEY=re_…             # or RESEND_API_KEY_FILE=path: account emails go through Resend (resend.com);
+                                # else /usr/sbin/sendmail (SENDMAIL=path); else the links are written to the server log
 STREAM_URL=…                                    # optional fallback for the stream link (normally set on the Admin page → Stream)
 ```
 
@@ -47,7 +48,7 @@ node test/integration.mjs # integration tests (requires server running)
 - `src/RobotRollout.js`, `src/RobotThinker.js`, `src/robotThinkWorker.js` — late-game robot thinking: rollouts of its options in one background worker; `think()` always settles by the deadline (`config.robotThinkMs`, default 1500; 0 = off) and the robot falls back to its normal move. It only overrides the normal move when a rollout winner is clearly better.
 - `src/Evaluator.js` + `src/evaluator-weights.json` — instant position evaluator (softmax over players: race, base, home, danger, to-move; exact duel tables when they apply; `evaluate1` = 1-ply over the next roll). Fitted by `tools/train-evaluator.mjs` (gen / fit). Used for the instant analysis pass and to pick which options get played out.
 - `src/Store.js` — SQLite (built-in `node:sqlite`, Node 22.13+; disabled cleanly if missing): players, device keys (only hashes stored), link codes, finished games (roll records + analysis, gzipped), per-seat stats. `DATA_DIR` (rc.d: `/var/db/turbomarbles`; default `data/`).
-- `src/Accounts.js` — account WebSocket actions (register/login/logout/identify/setPassword/setEmail/verifyEmail/forgotPassword/resetPassword/rename/signOutOthers/deleteAccount/profile/history/openGame, social), rate-limited per IP and per account. Name + password (salted scrypt in `Store.js`, constant-time); each login creates a device session key (kept in the browser; only its hash is stored; logout revokes it). Optional email, confirmed by link, for password resets (`src/Mailer.js`, sendmail). Accounts from before passwords are asked to choose one. Names are unique; guests can't use a registered name.
+- `src/Accounts.js` — account WebSocket actions (register/login/logout/identify/setPassword/setEmail/verifyEmail/forgotPassword/resetPassword/rename/signOutOthers/deleteAccount/profile/history/openGame, social), rate-limited per IP and per account. Name + password (salted scrypt in `Store.js`, constant-time); each login creates a device session key (kept in the browser; only its hash is stored; logout revokes it). Optional email, confirmed by link, for password resets (`src/Mailer.js`: Resend if a key is set, else sendmail). Accounts from before passwords are asked to choose one. Names are unique; guests can't use a registered name.
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.

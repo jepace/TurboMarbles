@@ -403,3 +403,19 @@ Defaults: 1280x720 at 30 fps, 2500k video; the page is laid out at 1920x1080 and
 `lite=1` (no neon glow, at most 30 redraws a second). For 1080p: `sysrc turbomarbles_stream_size=1920x1080
 turbomarbles_stream_vbitrate=4500k`. If ffmpeg can't keep up (the log warns, the stream stutters):
 `sysrc turbomarbles_stream_preset=ultrafast`. Other page options go in `turbomarbles_stream_page`.
+
+## Account emails through Resend
+
+Password resets and email confirmations go through [Resend](https://resend.com) when the server has a key
+(else sendmail, else the links are only written to the server log).
+
+1. In Resend, verify the domain you send from (DNS records), and create an API key with "Sending access".
+2. In the jail:
+```sh
+echo 're_YOUR_KEY' > /usr/local/etc/turbomarbles-resend.key
+chown marbles /usr/local/etc/turbomarbles-resend.key && chmod 400 /usr/local/etc/turbomarbles-resend.key
+sysrc turbomarbles_mail_from=noreply@marbles.pacehouse.com      # an address on the verified domain
+install -m 555 rc.d/turbomarbles /usr/local/etc/rc.d/turbomarbles   # the updated service script
+service turbomarbles restart
+```
+Failures are logged as `[mail] resend failed <status> <reason>` in /var/log/turbomarbles.log.
