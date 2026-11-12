@@ -3681,7 +3681,7 @@ function showWatchCard(winnerIndex, result, score) {
   const pts = g.players.map((_, i) => i === winnerIndex ? losers.reduce((t, l) => t + l.points, 0) : -(losers.find(l => l.pi === i)?.points ?? 0));
   // Aggros and baggros, by loser (3+ players: some losers may have one, some not).
   const big = losers.filter(l => (l.mult ?? (result?.baggro ? 3 : result?.aggro ? 2 : 1)) >= 2)
-    .map(l => `${g.players[l.pi].name}: ${(l.mult ?? (result?.baggro ? 3 : 2)) === 3 ? 'baggro' : 'aggro'}`);
+    .map(l => `${(l.mult ?? (result?.baggro ? 3 : 2)) === 3 ? 'baggro' : 'aggro'} over ${inLeague() ? teamLabel(l.pi) : g.players[l.pi].name}`);
   const how = result?.dropped ? 'double dropped' : big.length ? big.join(' · ') + '!' : null;
   const card = $('watch-card');
   card.replaceChildren(
@@ -4004,7 +4004,7 @@ function renderLeague() {
       el('h3', {}, `Season ${d.season}`),
       lgTable(['#', 'Team', 'Played', 'Won', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
       el('h3', {}, 'All time'),
-      lgTable(['Team', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggros taken', 'Sixes / roll', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+      lgTable(['Team', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggro\'d', 'Sixes / roll', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
         career.map(t => { const c = t.career; return [teamCell(t), t.captain ?? '', String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–',
           (c.distance ?? 0).toLocaleString(), String(c.exits ?? 0), String(c.starSpaces ?? 0), c.hubWaits ? `${Math.round(100 * (c.hubExits ?? 0) / c.hubWaits)}%` : '–', String(c.goArounds ?? 0), String(c.hubHits ?? 0), String(c.circleHits ?? 0)]; })),
       d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',

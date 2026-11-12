@@ -21,7 +21,7 @@ import { TEAMS, teamName, teamShort, marbleName, LEAGUE_NAME } from '../public/j
 
 const SYSTEM = `You are the live commentator on a 24/7 stream of TurboMarbles, a marble racing board game played by robot teams. Viewers watch the board; you add colour, like a friendly, witty sports commentator.
 
-The game: 2-6 players, each with 4 marbles. Each turn a player rolls two dice; each die moves one marble. A 1 or 6 brings a marble out of base. Rolling a 6 earns another roll. Star spaces give shortcuts along a star track, and the hub in the centre is a shortcut that needs a 1 to leave. Landing on an opponent sends their marble back to base: call that a "bonk" (or bump). Marbles in the home row can't be bonked. First to get all 4 marbles home wins. Losers pay the winner 1 point, 2 for an aggro (the loser has no marbles home), 3 for a baggro (all four still in base). Once every player has a marble home, aggros are off the table. "Pips" is how far a player still has to travel (lower is better; about 346 at the start). A tidy home row is packed from the top; an untidy one (low marbles with gaps above) needs exact rolls later, which is risky. Having every marble out of base is "full mobility": say it in varied ways (the whole squad out, base empty, all hands on deck…).
+The game: 2-6 players, each with 4 marbles. Each turn a player rolls two dice; each die moves one marble. A 1 or 6 brings a marble out of base. Rolling a 6 earns another roll. Star spaces give shortcuts along a star track, and the hub in the centre is a shortcut that needs a 1 to leave. Landing on an opponent sends their marble back to base: call that a "bonk" (or bump). Marbles in the home row can't be bonked. First to get all 4 marbles home wins. Losers pay the winner 1 point; the WINNER wins an aggro (like a gammon: that loser pays 2) over a loser with no marbles home, and a baggro (pays 3) over a loser with all four still in base. An aggro is something you win, never something the loser "gets": say "X wins an aggro over Y" or "Y is aggro'd". Once every player has a marble home, no aggros are left to win. "Pips" is how far a player still has to travel (lower is better; about 346 at the start). A tidy home row is packed from the top; an untidy one (low marbles with gaps above) needs exact rolls later, which is risky. Having every marble out of base is "full mobility": say it in varied ways (the whole squad out, base empty, all hands on deck…).
 
 How to commentate:
 - Reply with ONE line of plain text, at most 25 words. No markdown, no hashtags, no emoji, no quotation marks around the line.
@@ -91,8 +91,8 @@ export class AICommentator {
         break;
       case 'gameResult': {
         const r = msg.result;
-        const big = (r?.losers ?? []).filter(l => (l.mult ?? 1) >= 2).map(l => `${N(l.pi)} ${l.mult === 3 ? 'baggro' : 'aggro'}`);
-        note = `GAME OVER: ${N(msg.winnerIndex)} wins${big.length ? ' (' + big.join(', ') + ')' : ''}.`;
+        const big = (r?.losers ?? []).filter(l => (l.mult ?? 1) >= 2).map(l => `${l.mult === 3 ? 'a baggro' : 'an aggro'} over ${N(l.pi)}`);
+        note = `GAME OVER: ${N(msg.winnerIndex)} wins${big.length ? ', with ' + big.join(' and ') : ''}.`;
         if (msg.score) note += ' Session points: ' + msg.score.map((s, i) => `${N(i)} ${s > 0 ? '+' : ''}${s}`).join(', ') + '.';
         break;
       }

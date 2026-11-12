@@ -203,10 +203,10 @@ export class LeagueTracker {
       if (won && (before.lossStreak ?? 0) >= 5) notes.push([2, { team: t.color }, ` end a ${before.lossStreak}-game drought!`]);
       if (!won && (before.streak ?? 0) >= 3) notes.push([2, 'That ends the ', { team: t.color }, `' ${before.streak}-game winning streak.`]);
       if (big === 2) (aggroed ??= []).push(t.color);
-      if (big === 3) notes.push([2, { team: t.color }, ' suffer a baggro: all four still in base!']);
+      if (big === 3) notes.push([2, { team: wColor }, ' win a baggro over ', { team: t.color }, ': they never left base!']);
     }
-    if (aggroed?.length === 1) notes.push([1, { team: aggroed[0] }, pick([' take an aggro: nothing home at the end.', ' are aggro\'d: not one marble home.'])]);
-    else if (aggroed?.length > 1) notes.push([1, 'Aggros all round: ', ...aggroed.flatMap((c, i) => [i ? (i === aggroed.length - 1 ? ' and ' : ', ') : '', { team: c }]), ' finish with nothing home.']);
+    if (aggroed?.length === 1) notes.push([1, { team: wColor }, pick([' win an aggro over ', ' take an aggro off ']), { team: aggroed[0] }, ': not one marble home.']);
+    else if (aggroed?.length > 1) notes.push([1, { team: wColor }, ' win aggros over ', ...aggroed.flatMap((c, i) => [i ? (i === aggroed.length - 1 ? ' and ' : ', ') : '', { team: c }]), ': nothing home.']);
     for (const m of Object.values(g.marbles)) {
       store.leagueAdd('marble', `${m.color}:${m.id}`, { distance: m.distance, starSpaces: m.starSpaces, hubTurns: m.hubTurns, hubExits: m.hubExits, hubPassThrough: m.hubPassThrough, goArounds: m.goArounds, hubHits: m.hubHits, circleHits: m.circleHits, games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
     }

@@ -47,8 +47,8 @@ export function createCommentator(onLine) {
     const now = Date.now();
     if (now - explained[term] < 120000 || (explained[term] && Math.random() > 0.35)) return '';
     explained[term] = now;
-    return term === 'aggro' ? pick([' (An aggro: losing with no marbles home costs double.)', ' (That\'s an aggro: lose with nothing home and you pay twice.)'])
-      : pick([' (A baggro: losing with all four still in base costs triple!)', ' (Baggro = all four still in base at the end: triple the loss.)']);
+    return term === 'aggro' ? pick([' (An aggro: win while a rival has no marbles home, and they pay double.)', ' (That\'s an aggro: beat a team with nothing home and it pays twice.)'])
+      : pick([' (A baggro: win while a rival still has all four in base, and they pay triple!)', ' (Baggro = beating a team that never left base: triple points.)']);
   };
   // Home debt: exact rolls still needed to settle the home row (0 = tidy: filled from the top).
   const debt = slots => [...slots].sort((a, b) => b - a).reduce((d, slot, i) => d + (4 - i - slot), 0);
@@ -202,7 +202,7 @@ export function createCommentator(onLine) {
       if (list.length > 1 && list.every(s => s.home >= 1) && !said.has('noAggro')) {
         said.add('noAggro');
         return say(2, pick(['Everyone has a marble home: aggros are off the table.', 'That\'s every player on the board at home. No aggros this game.',
-          'All players have one home now, so nobody can lose an aggro.']));
+          'Everyone has one home now, so no aggros left to win.']));
       }
       // Full mobility: every marble out of base (and not all home yet).
       let mobilityCall = null;
@@ -216,8 +216,8 @@ export function createCommentator(onLine) {
       else if (mobilityCall != null && Math.random() < 0.15 && mobilityOk()) return say(1, P(mobilityCall), pick(REGAINED));
       // Danger of an aggro / baggro for a trailing player.
       for (const s of order.slice(1)) {
-        if (s.base === 4 && progress > 0.5 && !said.has('baggro:' + s.i)) { said.add('baggro:' + s.i); return say(2, P(s.i), pick([' still has all four in base… baggro alert!', ' hasn\'t left base yet. This could be a baggro!', ': four marbles, zero progress. Baggro watch.']), explain('baggro')); }
-        if (s.home === 0 && lead.home >= 3 && !said.has('aggro:' + s.i)) { said.add('aggro:' + s.i); return say(2, P(s.i), pick([' has nothing home yet. Aggro danger!', ' needs to get one home, fast, or it\'s an aggro.', ' still has an empty home row…']), explain('aggro')); }
+        if (s.base === 4 && progress > 0.5 && !said.has('baggro:' + s.i)) { said.add('baggro:' + s.i); return say(2, P(s.i), pick([' still has all four in base… baggro alert!', ' hasn\'t left base yet. The leader could win a baggro!', ': four marbles, zero progress. Baggro watch.']), explain('baggro')); }
+        if (s.home === 0 && lead.home >= 3 && !said.has('aggro:' + s.i)) { said.add('aggro:' + s.i); return say(2, P(s.i), pick([' has nothing home yet. Aggro danger!', ' needs to get one home, fast, or the winner takes an aggro.', ' still has an empty home row… an aggro is on.']), explain('aggro')); }
       }
       // A tight race late on.
       if (second && progress > 0.6 && second.pips - lead.pips <= 6 && !said.has('tight')) { said.add('tight'); return say(2, pick(['It\'s neck and neck between ', 'Too close to call: ', 'What a race! ']), P(lead.i), ' and ', P(second.i), '.'); }
@@ -232,7 +232,8 @@ export function createCommentator(onLine) {
       const tail = result?.dropped ? ' The double was dropped.'
         : null;
       // Who took an aggro / baggro: as name tokens, so team names get plural verbs.
-      const bigParts = big.length ? [...big.flatMap(l => [' ', P(l.pi), ` take${league ? '' : 's'} ${l.mult === 3 ? 'a baggro' : 'an aggro'}.`]), explain(big.some(l => l.mult === 3) ? 'baggro' : 'aggro')] : [];
+      // The winner wins the aggro / baggro (like a gammon) over each loser who had nothing home.
+      const bigParts = big.length ? [...big.flatMap(l => [' ', P(pi), ` win${league ? '' : 's'} ${l.mult === 3 ? 'a baggro' : 'an aggro'} over `, P(l.pi), '.']), explain(big.some(l => l.mult === 3) ? 'baggro' : 'aggro')] : [];
       // Bonk stats for the game.
       const top = Object.entries(bonks.by).sort((a, b) => b[1] - a[1])[0];
       const bonkNote = bonks.total >= 8 ? ` A bruising one: ${bonks.total} bonks${top ? `, ${players[top[0]]?.name} with ${top[1]}` : ''}.`
