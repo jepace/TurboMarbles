@@ -3774,7 +3774,10 @@ function placeCommentary() {
   box.style.display = want ? 'flex' : 'none';
   box.style.width = beside ? (stream ? room : Math.min(room, 460)) + 'px' : '';
   // Text scales with the column (the stream page has its own large sizes).
-  box.style.fontSize = beside && stream && !KIOSK ? `${Math.max(0.75, Math.min(1.25, room / 300))}rem` : '';
+  // One text size for the commentary, the season table and the game's rows (the stream page has its own).
+  const svFont = `${Math.max(0.8, Math.min(1.25, room / 300))}rem`;
+  box.style.fontSize = beside && stream && !KIOSK ? svFont : '';
+  document.body.style.setProperty('--sv-font', svFont);
   // The logo and address: as wide as the column, on top; the commentary stops below.
   const brand = $('kiosk-brand');
   brand.classList.toggle('fits', beside && stream);

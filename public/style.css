@@ -752,18 +752,19 @@ body.streamview #turn-banner, body.streamview #game-chat-input { display: none !
 body.streamview #sidebar { width: max(240px, calc((100vw - 100vh) / 2)); box-sizing: border-box; }
 body.streamview #board-area { justify-content: flex-end; }
 /* Stream: the game's rows look like the season's (same size, same spacing). */
-body.kiosk #player-list { gap: 2px; }
-body.kiosk .player-row { font-size: 1.6rem; padding: 0 0.3rem; gap: 6px; line-height: 1.25; }
-body.kiosk .player-row .pips { font-size: inherit; color: inherit; }
+body.streamview #player-list { gap: 2px; }
+body.streamview .player-row { padding: 0 0.3rem; gap: 6px; line-height: 1.25; }
+body.streamview .player-row .pips { font-size: inherit; color: inherit; }
+body.kiosk .player-row { font-size: 1.6rem; }
 body.kiosk #game-log { font-size: 1.3rem; }   /* the longest move line (≈36 characters) fits */
-body.kiosk #game-log .log-entry { white-space: nowrap; }
-body.kiosk #commentary { overflow: hidden; }
+body.streamview #game-log .log-entry { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.streamview #commentary { overflow: hidden; }
 /* Stream: the dice sit in the board's top-right corner, next to the action. */
 /* The dice sit on the board's square, top-right corner (every game). */
 #board-area > #dice-area { position: absolute; z-index: 4; gap: 0.6rem; flex-wrap: nowrap; }
 #board-area > #dice-area .die { width: 60px; height: 60px; font-size: 2rem; }
 body.kiosk #board-area > #dice-area .die { width: 84px; height: 84px; font-size: 2.8rem; border-radius: 14px; }
-body.kiosk #game-log { flex: 1 1 auto; }
+body.streamview #game-log { flex: 1 1 auto; }
 body.kiosk-nolog #game-log { display: none !important; }
 body.kiosk-nolist #player-list { display: none !important; }
 .stream-builder { margin-top: 1.2rem; border-top: 1px solid #ffffff14; padding-top: 0.8rem; }
@@ -928,3 +929,4 @@ body.kiosk #board-cube { width: 64px; height: 64px; font-size: 2rem; }
 #btn-leave-after.on { border-color: #f0c040; color: #f0c040; }
 #cube-area #cube { display: none; }   /* the cube itself is on the board */
 body.streamview:not(.kiosk) .cm-line { font-size: 1em; } body.streamview:not(.kiosk) .cm-line.lvl3 { font-size: 1.08em; } body.streamview:not(.kiosk) .cm-line.lvl1 { font-size: 0.92em; }
+body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line .standings { font-size: var(--sv-font, 1rem); }
