@@ -157,7 +157,7 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   on the stream page, `music=0` turns it off). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
   win): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
   motif + instrument per colour with the leader's in front. Ten song bases (`SONGS`: key, scales, chord loops, tempo,
-  beat, bass, chord style, swing, echo, motif twist); each game picks one at random. Console: `__music()`,
+  beat, bass, chord style, swing, echo, motif twist); each game picks one at random, and the DJ blends into it (8 bars: tempo glide + filter sweep, starting 6 s after a win). The win is a flourish of the winner's motif in the song's style. With music on, the music plays bonk/home moments in key (no home chime; the bonk keeps its thud). Console: `__music()`,
   `__musicSong(i)`, `__musicSet({...})`.
 - Commentary: `public/js/commentary.js` turns game events into paced text lines (hits with revenge / near-home
   heartbreak, double hits, 6-6 and three-sixes runs, hub trips, marbles home with tidy/untidy home rows (home debt),

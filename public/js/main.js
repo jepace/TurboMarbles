@@ -10,7 +10,7 @@ import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squ
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS, LEAGUE_NAME } from './league.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName } from './music.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2432,8 +2432,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
     enqueueTween({ playerIndex, marbleId, fromPos, waypoints, sound });
   } else {
     // No animatable path (e.g. exiting base): just play the sound and render.
-    if (sound === 'bonk') { playBonk(); musicHit(gameState?.players?.[playerIndex]?.color); }
-    else if (sound === 'chime') { playHomeChime(); musicHome(gameState?.players?.[playerIndex]?.color); }
+    momentSound(sound, playerIndex);
     drawBoard(gameState);
   }
 
@@ -3072,8 +3071,7 @@ function runNextAnimation() {
     clearAnimatingMarble();
     runningMarble = null;
     lastAnimEnd = { playerIndex, marbleId };
-    if (sound === 'bonk') { playBonk(); musicHit(gameState?.players?.[playerIndex]?.color); }
-    else if (sound === 'chime') { playHomeChime(); musicHome(gameState?.players?.[playerIndex]?.color); }
+    momentSound(sound, playerIndex);
     // Re-pin anything still waiting — including this marble, if it has another
     // move queued — before drawing, so nothing shows at its final position early.
     pinQueuedMarbles();
@@ -3592,6 +3590,13 @@ function standings(score) {
     el('span', { class: 'st-pts' + (x.pts > 0 ? ' plus' : x.pts < 0 ? ' minus' : '') }, `${x.pts > 0 ? '+' : x.pts < 0 ? '−' : ''}${Math.abs(x.pts)}`))));
 }
 // "Embers win!" over the board for 10 s: this game's points, then the session.
+// Bonk / home: with music on, the music plays the moment in the song's key and
+// beat (the effect would clash with it); the bonk keeps its thud.
+function momentSound(sound, pi) {
+  const color = gameState?.players?.[pi]?.color;
+  if (sound === 'bonk') { playBonk(); musicHit(color); }
+  else if (sound === 'chime') { if (!musicOn()) playHomeChime(); musicHome(color); }
+}
 let watchCardTimer = null;
 function showWatchCard(winnerIndex, result, score) {
   const g = gameState;

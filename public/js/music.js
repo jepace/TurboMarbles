@@ -14,7 +14,7 @@
 // A look-ahead scheduler (the usual Web Audio pattern) queues 16th-note steps
 // slightly ahead of time, so timing stays tight even when the page is busy.
 
-let ctx = null, master = null, bus = null, comp = null;
+let ctx = null, master = null, bus = null, comp = null, tone = null;
 let running = false, timer = null;
 let enabled = false, muted = false, volume = 0.7;
 
@@ -100,7 +100,7 @@ function ensure() {
   bus = ctx.createGain();
   bus.gain.value = 0.9;
   // A gentle roll-off of the very top: warm, never shrill.
-  const tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 5500; tone.Q.value = 0.5;
+  tone = ctx.createBiquadFilter(); tone.type = 'lowpass'; tone.frequency.value = 5500; tone.Q.value = 0.5;
   bus.connect(comp); comp.connect(tone); tone.connect(master); master.connect(ctx.destination);
   // A short feedback delay for space.
   const d = ctx.createDelay(1), fb = ctx.createGain(), wet = ctx.createGain();
@@ -182,7 +182,17 @@ function degree(rootDeg, deg, oct = 0) {
 // ---- Scheduler ---------------------------------------------------------------
 
 let step = 0, nextTime = 0;
-const bpm = () => song.bpm[0] + (song.bpm[1] - song.bpm[0]) * S.intensity;
+const songBpm = x => x.bpm[0] + (x.bpm[1] - x.bpm[0]) * S.intensity;
+// Between games the DJ blends: over 8 bars the tempo glides to the next song's
+// and a filter sweeps down; the new song comes in on the middle bar line and
+// the filter opens again.
+let blend = null;           // { from, to, n: steps done }
+const BLEND = 128;
+const bpm = () => {
+  if (!blend) return songBpm(song);
+  const f = Math.min(1, blend.n / BLEND), e = f * f * (3 - 2 * f);
+  return songBpm(blend.from) + (songBpm(blend.to) - songBpm(blend.from)) * e;
+};
 const stepDur = () => 60 / bpm() / 4;
 
 function tick() {
@@ -199,6 +209,13 @@ function playStep(n, t) {
     const tgt = (S.targets[c] ?? 0) * (S.duck[c] > 0 ? 0.15 : 1);
     S.weights[c] = (S.weights[c] ?? 0) + (tgt - (S.weights[c] ?? 0)) * 0.03;
     if (S.duck[c] > 0) S.duck[c]--;
+  }
+  if (blend) {
+    blend.n++;
+    const f = blend.n / BLEND;
+    if (tone) tone.frequency.setTargetAtTime(5500 * Math.max(0.12, Math.abs(1 - 2 * f)) ** 1.5 + 300, t, 0.1);
+    if (song !== blend.to && f >= 0.5 && s16 === 0) setSong(blend.to);
+    if (f >= 1) { blend = null; if (tone) tone.frequency.setTargetAtTime(5500, t, 0.3); }
   }
   // Key change for the final lap and the mood, on a bar line.
   if (s16 === 0) { keyShift = S.finalLap ? 2 : 0; mood(); }
@@ -273,7 +290,6 @@ function playCue({ kind, color, extra }, t, chordDeg) {
     case 'hit': {
       // Dissonant sting, then the hitter's motif head.
       for (const d of [0, 1, 3]) note('brass', degree(chordDeg, d, 1) + (d === 1 ? 1 : 0), t, sd * 2, 0.35);
-      kick(t, 0.6); noise(t, 0.25, 0.08, 800);
       const v = VOICES[color];
       if (v) v.motif.slice(0, 3).forEach(([st, deg, len], i) => note(v.inst, degree(chordDeg, deg, v.oct), t + (2 + i * 2) * sd, len * sd, 0.7));
       break;
@@ -284,11 +300,26 @@ function playCue({ kind, color, extra }, t, chordDeg) {
       break;
     }
     case 'win': {
-      const v = VOICES[color];
-      const inst = v?.inst ?? 'brass';
-      [0, 2, 4, 7, 4, 7, 9, 11].forEach((d, i) => note(inst, degree(0, d, (v?.oct ?? 1)), t + i * sd * 2, sd * 3, 0.85));
-      for (const d of [0, 2, 4]) note('pad', degree(0, d, 1), t + 16 * sd, sd * 24, 0.8);
-      kick(t, 0.7);
+      // The winner's flourish, in the song's style: a snare roll into the
+      // winner's motif up an octave over two bars of the song's chords (their
+      // instrument, doubled by brass), then the home chord held out.
+      const v = VOICES[color], inst = song.chip ? 'pluck' : v?.inst ?? 'brass';
+      for (let i = 0; i < 8; i++) snare(t + i * sd, 0.08 + 0.03 * i);
+      const t0 = t + 8 * sd, pr = prog();
+      if (v) for (const [st, deg, len] of v.motif) {
+        const ch = pr[Math.floor(st / 16) % 4];
+        note(inst, degree(ch, deg + song.shift, v.oct + 1), t0 + st * sd, len * sd, 0.9);
+        if (st % 4 === 0) note('brass', degree(ch, deg + song.shift, v.oct), t0 + st * sd, len * sd, 0.3);
+      }
+      for (let b = 0; b < 2; b++) {
+        kick(t0 + b * 16 * sd, 0.6);
+        for (const d of [0, 2, 4]) note('pad', degree(pr[b], d, 1), t0 + b * 16 * sd, 16 * sd, 0.45);
+      }
+      const tEnd = t0 + 32 * sd;
+      kick(tEnd, 0.8); noise(tEnd, 1.2, 0.09, 3000);
+      for (const d of [0, 2, 4, 7]) note(inst, degree(0, d, (v?.oct ?? 1)), tEnd, sd * 24, 0.55);
+      for (const d of [0, 2, 4]) note('pad', degree(0, d, 1), tEnd, sd * 32, 0.8);
+      note('bass', degree(0, 0, -1), tEnd, sd * 16, 0.9);
       break;
     }
   }
@@ -363,21 +394,34 @@ export function musicWin(color) {
   queue.length = 0;
   queue.push({ kind: 'win', color });
   S.target = 0.15;  // calm again for the next game
+  // Once the flourish is over, the DJ starts blending into the next game's song.
+  clearTimeout(winBlendTimer);
+  winBlendTimer = setTimeout(() => { pickSong(); pickedNext = true; }, 6000);
 }
+let winBlendTimer = null, pickedNext = false;
 export function musicReset() {
-  S.intensity = S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {}; minor = false;
-  pickSong();
+  S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {};
+  clearTimeout(winBlendTimer);
+  if (!pickedNext) pickSong();   // already blending into it after the last win
+  pickedNext = false;
 }
 // A new song for the new game (any but the last one). The next bar starts it.
 export function pickSong(i) {
-  const others = SONGS.filter(x => x !== song);
-  song = SONGS[i] ?? others[Math.floor(Math.random() * others.length)];
+  const cur = blend?.to ?? song;
+  const others = SONGS.filter(x => x !== cur);
+  const next = SONGS[i] ?? others[Math.floor(Math.random() * others.length)];
+  // Playing: blend into it; otherwise just switch.
+  if (running && musicOn() && i == null) blend = { from: song, to: next, n: 0 };
+  else { blend = null; setSong(next); }
+}
+function setSong(next) {
+  song = next; minor = false;
   if (ctx && delayNode) {
     delayNode.delayTime.setTargetAtTime(song.delay[0], ctx.currentTime, 0.2);
     delayFb.gain.setTargetAtTime(song.delay[1], ctx.currentTime, 0.2);
   }
 }
-export const songName = () => song.name;
+export const songName = () => (blend?.to ?? song).name;
 
 // Browsers start audio only after a click or key press; resume then.
 for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => { if (ctx?.state === 'suspended') ctx.resume(); });
