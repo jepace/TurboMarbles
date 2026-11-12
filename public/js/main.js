@@ -3687,16 +3687,22 @@ const commentator = createCommentator((parts, level) => {
       return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(color)] ?? '#888'}` }), text ?? '?');
     })()));
   box.append(line);
-  while (box.children.length > (KIOSK ? 5 : COMMENT_MAX)) box.firstChild.remove();
+  while (box.children.length > (KIOSK ? 5 : box.classList.contains('in-sidebar') ? 3 : COMMENT_MAX)) box.firstChild.remove();
   [...box.children].forEach((c, i, all) => { c.style.opacity = String(Math.max(0.25, 1 - (all.length - 1 - i) * 0.14)); });
 });
 function placeCommentary() {
   const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
   if (!box || !area || !cv) return;
   const room = KIOSK ? area.clientWidth - cv.clientWidth - 24 : (area.clientWidth - cv.clientWidth) / 2 - 28;
-  const on = (KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : commentaryOn()) && room >= 180;
-  box.style.display = on ? 'flex' : 'none';
-  if (on) box.style.width = (KIOSK ? room : Math.min(room, 460)) + 'px';
+  const want = KIOSK ? new URLSearchParams(location.search).get('commentary') !== '0' : commentaryOn();
+  // No room beside the board (a smaller screen): the feed goes in the sidebar,
+  // above the move log, newest lines only.
+  const beside = KIOSK || room >= 180;
+  const home = beside ? area : $('sidebar');
+  if (box.parentElement !== home) { if (beside) area.append(box); else $('sidebar').insertBefore(box, $('game-log')); }
+  box.classList.toggle('in-sidebar', !beside);
+  box.style.display = want ? 'flex' : 'none';
+  box.style.width = beside ? (KIOSK ? room : Math.min(room, 460)) + 'px' : '';
   if (!KIOSK) return;
   // Stream: the logo has the top of the left space to itself (as wide as the
   // commentary); the commentary stops below it. The dice sit on the board's
