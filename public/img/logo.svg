@@ -20,7 +20,7 @@
   <circle cx="100" cy="81" r="3.5" fill="#fff" opacity="0.8"/>
   <!-- wordmark -->
   <g font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif" font-weight="900" font-style="italic">
-    <text x="142" y="68" font-size="48" letter-spacing="-1"><tspan fill="url(#gold)">TURBO</tspan><tspan fill="#ffffff" dx="6">MARBLES</tspan></text>
-    <text x="146" y="98" font-size="17" fill="#9fb3d1" font-style="normal" font-weight="700" letter-spacing="5">THE MARBLE RACING GAME</text>
+    <text x="142" y="68" font-size="48" letter-spacing="-1" textLength="404" lengthAdjust="spacingAndGlyphs"><tspan fill="url(#gold)">TURBO</tspan><tspan fill="#ffffff"> MARBLES</tspan></text>
+    <text x="146" y="98" font-size="17" fill="#9fb3d1" font-style="normal" font-weight="700" letter-spacing="5" textLength="380" lengthAdjust="spacingAndGlyphs">THE MARBLE RACING GAME</text>
   </g>
 </svg>
