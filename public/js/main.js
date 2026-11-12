@@ -1938,7 +1938,7 @@ function selectRoll(idx, opt = null) {
     const verdict = a.severity === 'ok'
       ? (a.loss > 0 ? `✓ −${eqOf(a.loss)}${a.estimate ? '' : ` ± ${eqOf(1.96 * a.se)}`}` : '✓ Best')
       : `${SEV_LABEL[a.severity]}: −${eqOf(a.loss)}${a.estimate ? ' (estimate)' : ` ± ${eqOf(1.96 * a.se)}`}`;
-    kids.push(el('div', { class: 'muted' }, `${verdict} · ${r.options} plays`,
+    kids.push(el('div', { class: 'muted' }, `${verdict} · ${r.options} possible plays`,
       help(a.estimate ? 'From the instant evaluator; go deeper to play it out.'
         : `Equity lost against the best play, with its 95% noise range; a loss inside the noise counts as correct. The best few plays, yours and the coach's were played out.`)));
     const lvl = a.level ?? 0;
