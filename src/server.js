@@ -1,3 +1,4 @@
+import './loadConfig.js';   // first: settings file → environment
 import { setting } from './SiteSettings.js';
 import { YouTubeChat } from './YouTubeChat.js';
 import { leagueOverview } from './LeagueTracker.js';

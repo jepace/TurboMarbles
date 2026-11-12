@@ -379,11 +379,31 @@ HSTS tells browsers to refuse plain HTTP for your domain for two years. Do not e
 | Check pf state table | `pfctl -ss` |
 | List active rooms (debug) | check Node logs — each `createRoom` is logged |
 
+## Settings file
+
+The server reads `/usr/local/etc/turbomarbles.conf` in the jail (KEY=value lines; owner marbles, mode 600).
+deploy.sh creates it from `rc.d/turbomarbles.conf.sample` the first time (never overwrites it) and keeps the
+sample next to it. It holds the port, origin, data directory, site address, mail sender and the Resend key.
+rc.conf only needs `turbomarbles_enable=YES` (older `turbomarbles_port`/`_host`/`_origin`/`_trust_proxy`/`_stream_url`
+lines still work and win over the file). After editing: `service turbomarbles restart`.
+
+## Account emails through Resend
+
+Password resets and email confirmations go through [Resend](https://resend.com) when the settings file has a
+key (else sendmail, else the links are only written to the server log).
+
+1. In Resend, verify the domain you send from (DNS records) and create an API key with sending access.
+2. In the jail's `/usr/local/etc/turbomarbles.conf`: `RESEND_API_KEY=re_…` and
+   `MAIL_FROM=noreply@marbles.pacehouse.com` (an address on the verified domain); `service turbomarbles restart`.
+
+Failures are logged as `[mail] resend failed <status> <reason>` in /var/log/turbomarbles.log.
+
 ## Streaming to YouTube from the headless server (no OBS)
 
-`rc.d/turbomarbles-stream.sh` runs a virtual screen (Xvfb), a null audio sink (PulseAudio),
-Chromium on the stream page and ffmpeg to YouTube; `rc.d/turbomarbles_stream` runs it as a
-service (restarted if it exits). Run it on the host, not in the game's jail.
+`rc.d/turbomarbles-stream.sh` runs a virtual screen (Xvfb), a null audio sink (PulseAudio), Chromium on the
+stream page and ffmpeg to YouTube; `rc.d/turbomarbles_stream` runs it as a service (restarted if it exits).
+Run it on the host, not in the game's jail. Its settings, including the stream key, are in
+`/usr/local/etc/turbomarbles-stream.conf`.
 
 ```sh
 pkg install ffmpeg xorg-vfbserver chromium pulseaudio
@@ -392,30 +412,12 @@ ffmpeg -hide_banner -devices  | grep pulse       # must be there (else build mul
 pw useradd streamer -m -s /usr/sbin/nologin
 install -m 555 rc.d/turbomarbles_stream    /usr/local/etc/rc.d/turbomarbles_stream
 install -m 555 rc.d/turbomarbles-stream.sh /usr/local/libexec/turbomarbles-stream.sh
-echo 'YOUR-STREAM-KEY' > /usr/local/etc/turbomarbles-stream.key     # YouTube Studio → Go live → Stream key
-chown streamer /usr/local/etc/turbomarbles-stream.key && chmod 400 /usr/local/etc/turbomarbles-stream.key
+install -m 600 -o streamer rc.d/turbomarbles-stream.conf.sample /usr/local/etc/turbomarbles-stream.conf
+vi /usr/local/etc/turbomarbles-stream.conf       # STREAM_KEY= (YouTube Studio → Go live → Stream key)
 sysrc turbomarbles_stream_enable=YES
 service turbomarbles_stream start
 tail -f /var/log/turbomarbles-stream.log
 ```
 
-Defaults: 1280x720 at 30 fps, 2500k video; the page is laid out at 1920x1080 and drawn at 720p, with
-`lite=1` (no neon glow, at most 30 redraws a second). For 1080p: `sysrc turbomarbles_stream_size=1920x1080
-turbomarbles_stream_vbitrate=4500k`. If ffmpeg can't keep up (the log warns, the stream stutters):
-`sysrc turbomarbles_stream_preset=ultrafast`. Other page options go in `turbomarbles_stream_page`.
-
-## Account emails through Resend
-
-Password resets and email confirmations go through [Resend](https://resend.com) when the server has a key
-(else sendmail, else the links are only written to the server log).
-
-1. In Resend, verify the domain you send from (DNS records), and create an API key with "Sending access".
-2. In the jail:
-```sh
-echo 're_YOUR_KEY' > /usr/local/etc/turbomarbles-resend.key
-chown marbles /usr/local/etc/turbomarbles-resend.key && chmod 400 /usr/local/etc/turbomarbles-resend.key
-sysrc turbomarbles_mail_from=noreply@marbles.pacehouse.com      # an address on the verified domain
-install -m 555 rc.d/turbomarbles /usr/local/etc/rc.d/turbomarbles   # the updated service script
-service turbomarbles restart
-```
-Failures are logged as `[mail] resend failed <status> <reason>` in /var/log/turbomarbles.log.
+Defaults: 1280x720 at 30 fps, 2500k video, the page laid out at 1920x1080 and drawn at 720p with `lite=1`.
+For 1080p: `STREAM_SIZE=1920x1080` and `STREAM_VBITRATE=4500k`. If ffmpeg can't keep up: `STREAM_PRESET=ultrafast`.

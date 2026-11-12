@@ -8,7 +8,13 @@
 #
 #   turbomarbles_enable="YES"
 #
-# Optional overrides (defaults match the production setup behind nginx):
+# Settings live in /usr/local/etc/turbomarbles.conf (KEY=value; see
+# turbomarbles.conf.sample — deploy.sh creates it from the sample if missing).
+# rc.conf only needs the line above; these remain for the service itself:
+#
+#   turbomarbles_config="/usr/local/etc/turbomarbles.conf"
+#
+# Older rc.conf overrides (still honoured; they win over the file):
 #
 #   turbomarbles_port="8080"          # nginx proxy_pass target port
 #   turbomarbles_host="127.0.0.1"     # in a classic jail this binds the jail's IP
@@ -40,27 +46,25 @@ rcvar="${name}_enable"
 load_rc_config "${name}"
 
 : ${turbomarbles_enable:="NO"}
-: ${turbomarbles_port:="8080"}
-: ${turbomarbles_host:="127.0.0.1"}
-: ${turbomarbles_origin="https://marbles.pacehouse.com"}
-: ${turbomarbles_trust_proxy="1"}
+: ${turbomarbles_config:="/usr/local/etc/turbomarbles.conf"}
 : ${turbomarbles_user:="marbles"}
 : ${turbomarbles_dir:="/var/www/marbles"}
 : ${turbomarbles_log:="/var/log/turbomarbles.log"}
 : ${turbomarbles_piddir:="/var/run/turbomarbles"}
 : ${turbomarbles_pidfile:="${turbomarbles_piddir}/turbomarbles.pid"}
 : ${turbomarbles_datadir:="/var/db/turbomarbles"}   # players, games, stats (SQLite)
-: ${turbomarbles_stream_url=""}
-: ${turbomarbles_mail_from=""}    # sender for account emails, e.g. noreply@marbles.pacehouse.com (a domain verified in Resend)
-: ${turbomarbles_resend_keyfile="/usr/local/etc/turbomarbles-resend.key"}   # Resend API key (re_…): owner marbles, mode 400 (the server reads it; never on a command line); no file = sendmail   # live stream link shown in the game, e.g. https://www.youtube.com/@yourchannel/live
 
 pidfile="${turbomarbles_pidfile}"
 command="/usr/sbin/daemon"
+# Only settings given in rc.conf go on the command line; the rest come from the config file.
+turbomarbles_env="CONFIG_FILE=${turbomarbles_config}"
+[ -n "${turbomarbles_port+x}" ] && turbomarbles_env="${turbomarbles_env} PORT=${turbomarbles_port}"
+[ -n "${turbomarbles_host+x}" ] && turbomarbles_env="${turbomarbles_env} HOST=${turbomarbles_host}"
+[ -n "${turbomarbles_origin+x}" ] && turbomarbles_env="${turbomarbles_env} ORIGIN=${turbomarbles_origin}"
+[ -n "${turbomarbles_trust_proxy+x}" ] && turbomarbles_env="${turbomarbles_env} TRUST_PROXY=${turbomarbles_trust_proxy}"
+[ -n "${turbomarbles_stream_url+x}" ] && turbomarbles_env="${turbomarbles_env} STREAM_URL=${turbomarbles_stream_url}"
 command_args="-f -r -R 5 -H -P ${turbomarbles_pidfile} -o ${turbomarbles_log} \
-    /usr/bin/env PORT=${turbomarbles_port} HOST=${turbomarbles_host} \
-    ORIGIN=${turbomarbles_origin} TRUST_PROXY=${turbomarbles_trust_proxy} \
-    DATA_DIR=${turbomarbles_datadir} STREAM_URL=${turbomarbles_stream_url} \
-    MAIL_FROM=${turbomarbles_mail_from} RESEND_API_KEY_FILE=${turbomarbles_resend_keyfile} \
+    /usr/bin/env ${turbomarbles_env} DATA_DIR=${turbomarbles_datadir} \
     /usr/local/bin/node ${turbomarbles_dir}/src/server.js"
 
 start_precmd="turbomarbles_prestart"
@@ -69,6 +73,7 @@ turbomarbles_prestart()
 {
     install -d -o "${turbomarbles_user}" -m 755 "${turbomarbles_piddir}"
     install -d -o "${turbomarbles_user}" -m 700 "${turbomarbles_datadir}"
+    [ -e "${turbomarbles_config}" ] && chown "${turbomarbles_user}" "${turbomarbles_config}" && chmod 600 "${turbomarbles_config}"
     touch "${turbomarbles_log}"
     chown "${turbomarbles_user}" "${turbomarbles_log}"
     chmod 640 "${turbomarbles_log}"

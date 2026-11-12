@@ -73,6 +73,15 @@ sudo install -m 755 "${SRC}/rc.d/turbomarbles" "${JAIL_ROOT}/usr/local/etc/rc.d/
 sudo install -m 644 "${SRC}/rc.d/turbomarbles.newsyslog.conf" \
     "${JAIL_ROOT}/etc/newsyslog.conf.d/turbomarbles.conf"
 
+# Settings file: the sample is kept next to it for reference; the real file is
+# created from it only if missing (never overwritten — it holds keys).
+sudo install -m 644 "${SRC}/rc.d/turbomarbles.conf.sample" "${JAIL_ROOT}/usr/local/etc/turbomarbles.conf.sample"
+if [ ! -e "${JAIL_ROOT}/usr/local/etc/turbomarbles.conf" ]; then
+    sudo install -m 600 "${SRC}/rc.d/turbomarbles.conf.sample" "${JAIL_ROOT}/usr/local/etc/turbomarbles.conf"
+    bastille cmd marbles chown marbles /usr/local/etc/turbomarbles.conf
+    echo "Created /usr/local/etc/turbomarbles.conf in the jail — edit it (keys, mail) and restart the service."
+fi
+
 # Start the service if it is enabled in the jail's rc.conf; otherwise
 # remind the operator to enable it.
 if [ "${ENABLED}" = yes ]; then

@@ -9,19 +9,14 @@
 #
 #   install -m 555 rc.d/turbomarbles_stream /usr/local/etc/rc.d/turbomarbles_stream
 #   install -m 555 rc.d/turbomarbles-stream.sh /usr/local/libexec/turbomarbles-stream.sh
+#   install -m 600 rc.d/turbomarbles-stream.conf.sample /usr/local/etc/turbomarbles-stream.conf
 #   pw useradd streamer -m -s /usr/sbin/nologin          # an unprivileged account for the browser
-#   echo 'YOUR-STREAM-KEY' > /usr/local/etc/turbomarbles-stream.key
-#   chown streamer /usr/local/etc/turbomarbles-stream.key; chmod 400 /usr/local/etc/turbomarbles-stream.key
+#   chown streamer /usr/local/etc/turbomarbles-stream.conf   # then put the stream key in it
 #   sysrc turbomarbles_stream_enable=YES
 #   service turbomarbles_stream start
 #
-# Options (rc.conf):
-#   turbomarbles_stream_user="streamer"
-#   turbomarbles_stream_page="https://marbles.pacehouse.com/?watch=robots&players=6&lite=1"
-#   turbomarbles_stream_size="1280x720"      # 1920x1080 with turbomarbles_stream_vbitrate="4500k"
-#   turbomarbles_stream_vbitrate="2500k"
-#   turbomarbles_stream_preset="veryfast"
-#   turbomarbles_stream_log="/var/log/turbomarbles-stream.log"
+# Settings (page, size, bitrate, key…) are in /usr/local/etc/turbomarbles-stream.conf.
+# rc.conf: turbomarbles_stream_user (default streamer), turbomarbles_stream_config, turbomarbles_stream_log.
 
 . /etc/rc.subr
 
@@ -31,11 +26,7 @@ load_rc_config "${name}"
 
 : ${turbomarbles_stream_enable:="NO"}
 : ${turbomarbles_stream_user:="streamer"}
-: ${turbomarbles_stream_page:="https://marbles.pacehouse.com/?watch=robots&players=6&lite=1"}
-: ${turbomarbles_stream_size:="1280x720"}
-: ${turbomarbles_stream_vbitrate:="2500k"}
-: ${turbomarbles_stream_preset:="veryfast"}
-: ${turbomarbles_stream_keyfile:="/usr/local/etc/turbomarbles-stream.key"}
+: ${turbomarbles_stream_config:="/usr/local/etc/turbomarbles-stream.conf"}
 : ${turbomarbles_stream_script:="/usr/local/libexec/turbomarbles-stream.sh"}
 : ${turbomarbles_stream_log:="/var/log/turbomarbles-stream.log"}
 : ${turbomarbles_stream_piddir:="/var/run/turbomarbles_stream"}
@@ -44,10 +35,7 @@ pidfile="${turbomarbles_stream_piddir}/stream.pid"
 command="/usr/sbin/daemon"
 # -r: restart the script 10 s after it exits (browser crash, screen gone).
 command_args="-f -r -R 10 -H -P ${pidfile} -o ${turbomarbles_stream_log} \
-    /usr/bin/env PATH=/usr/local/bin:/usr/bin:/bin \
-    STREAM_PAGE=\"${turbomarbles_stream_page}\" STREAM_SIZE=${turbomarbles_stream_size} \
-    STREAM_VBITRATE=${turbomarbles_stream_vbitrate} STREAM_PRESET=${turbomarbles_stream_preset} \
-    STREAM_KEY_FILE=${turbomarbles_stream_keyfile} \
+    /usr/bin/env PATH=/usr/local/bin:/usr/bin:/bin STREAM_CONFIG=${turbomarbles_stream_config} \
     /bin/sh ${turbomarbles_stream_script}"
 
 start_precmd="turbomarbles_stream_prestart"
@@ -56,6 +44,7 @@ turbomarbles_stream_prestart()
     install -d -o "${turbomarbles_stream_user}" -m 755 "${turbomarbles_stream_piddir}"
     touch "${turbomarbles_stream_log}"
     chown "${turbomarbles_stream_user}" "${turbomarbles_stream_log}"
+    [ -e "${turbomarbles_stream_config}" ] && chown "${turbomarbles_stream_user}" "${turbomarbles_stream_config}" && chmod 600 "${turbomarbles_stream_config}"
 }
 
 run_rc_command "$1"

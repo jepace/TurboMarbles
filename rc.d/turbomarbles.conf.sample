@@ -1,0 +1,24 @@
+# /usr/local/etc/turbomarbles.conf — TurboMarbles server settings (read by the server at start).
+# Owner marbles, mode 600: it holds keys. After a change: service turbomarbles restart
+# One KEY=value per line. A variable set in the service's environment wins over this file.
+
+# Where the server listens (nginx proxies to it).
+PORT=8080
+HOST=127.0.0.1
+# Only WebSocket connections from this page are accepted ("" = any origin).
+ORIGIN=https://marbles.pacehouse.com
+# Behind nginx: take the client's IP from X-Forwarded-For ("" when not behind a proxy).
+TRUST_PROXY=1
+# Players, games, stats (SQLite).
+DATA_DIR=/var/db/turbomarbles
+# The site's address for links in emails (else ORIGIN).
+PUBLIC_URL=https://marbles.pacehouse.com
+
+# Account emails (password resets, email confirmation).
+# Resend (resend.com): an API key with sending access; MAIL_FROM on a domain verified there.
+# Without a key: /usr/sbin/sendmail (SENDMAIL=path), else the links only go to the server log.
+MAIL_FROM=noreply@marbles.pacehouse.com
+RESEND_API_KEY=
+
+# Fallback live-stream link (normally set on the Admin page → Stream).
+STREAM_URL=

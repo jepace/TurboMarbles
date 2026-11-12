@@ -7,7 +7,9 @@
 # script if it exits); run it by hand to test. Needs:
 #   pkg install ffmpeg xorg-vfbserver chromium pulseaudio
 #
-# Settings (environment, all optional except the key file):
+# Settings: /usr/local/etc/turbomarbles-stream.conf (STREAM_CONFIG=path), a shell
+# file of KEY=value lines (see turbomarbles-stream.conf.sample); the environment wins.
+#   STREAM_KEY    the YouTube stream key (or STREAM_KEY_FILE: a file holding it)
 #   STREAM_PAGE   the page to show (default: the 6-team league, lite drawing)
 #   STREAM_KEY_FILE  file holding the YouTube stream key (default /usr/local/etc/turbomarbles-stream.key)
 #   STREAM_RTMP   ingest URL (default rtmp://a.rtmp.youtube.com/live2)
@@ -18,6 +20,15 @@
 #   CHROME        Chromium binary (default: chrome, else chromium)
 
 set -u
+CONF="${STREAM_CONFIG:-/usr/local/etc/turbomarbles-stream.conf}"
+if [ -r "$CONF" ]; then
+  # Read KEY=value lines without letting the file override what the environment set.
+  while IFS='=' read -r k v; do
+    case "$k" in ''|\#*) continue ;; esac
+    v="${v%\"}"; v="${v#\"}"; v="${v%\'}"; v="${v#\'}"
+    eval "[ -n \"\${$k+x}\" ]" || export "$k=$v"
+  done < "$CONF"
+fi
 PAGE="${STREAM_PAGE:-https://marbles.pacehouse.com/?watch=robots&players=6&lite=1}"
 KEY_FILE="${STREAM_KEY_FILE:-/usr/local/etc/turbomarbles-stream.key}"
 RTMP="${STREAM_RTMP:-rtmp://a.rtmp.youtube.com/live2}"
@@ -28,8 +39,9 @@ PRESET="${STREAM_PRESET:-veryfast}"
 CHROME="${CHROME:-$(command -v chrome || command -v chromium)}"
 DISP=":${STREAM_DISPLAY:-99}"
 
-[ -r "$KEY_FILE" ] || { echo "stream: no key file $KEY_FILE" >&2; exit 1; }
-KEY="$(tr -d ' \n\r' < "$KEY_FILE")"
+KEY="${STREAM_KEY:-}"
+if [ -z "$KEY" ] && [ -r "$KEY_FILE" ]; then KEY="$(tr -d ' \n\r' < "$KEY_FILE")"; fi
+[ -n "$KEY" ] || { echo "stream: no stream key (STREAM_KEY in $CONF, or $KEY_FILE)" >&2; exit 1; }
 W="${SIZE%x*}"; H="${SIZE#*x}"
 # Lay the page out at 1920x1080 and draw it at the output size.
 SCALE="$(echo "scale=4; $W / 1920" | bc)"

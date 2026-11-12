@@ -9,7 +9,8 @@ npm start          # production
 npm run dev        # nodemon watch mode
 ```
 
-For internet-facing deployment, set these environment variables:
+For internet-facing deployment, set these (environment, or KEY=value lines in /usr/local/etc/turbomarbles.conf —
+`CONFIG_FILE=path`; read first by `src/loadConfig.js`; the environment wins):
 ```
 HOST=127.0.0.1          # bind to loopback only; put nginx/caddy in front for TLS
 ORIGIN=https://example.com  # enables WebSocket origin checking (reject other origins)
