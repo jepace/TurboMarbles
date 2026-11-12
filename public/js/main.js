@@ -2582,7 +2582,7 @@ function showGameOver(winnerIndex) {
   $('btn-rematch').textContent = 'Rematch';
   $('rematch-msg').style.display = 'none';
   // The game-over window waits for the winning move's animation.
-  afterAnimations(() => musicWin(gameState?.players?.[winnerIndex]?.color));
+  afterAnimations(() => musicWin(gameState?.players?.[winnerIndex]?.color, !!gameState?.watch));
   if (!watching) afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
   $('cube-offer').style.display = 'none';
   renderCube();

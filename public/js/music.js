@@ -464,19 +464,23 @@ export function musicMove(color, from, to, isStar) {
     : from.zone === 'home' && to.zone === 'home' ? 'tidy' : to.zone === 'track' && isStar(to) && !isStar(from) ? 'star' : null;
   if (kind) queue.push({ kind, color, extra: { slot: to.slot } });
 }
-export function musicWin(color) {
+// nonStop: robot watch rooms, where the next game follows by itself; the DJ
+// blends into its song. Otherwise the music fades away to nothing after the
+// flourish (and comes back with the next game).
+export function musicWin(color, nonStop = false) {
   if (!musicOn()) return;
   queue.length = 0;
   queue.push({ kind: 'win', color });
   S.target = 0.15;  // calm again for the next game
-  // Once the flourish is over, the DJ starts blending into the next game's song.
   clearTimeout(winBlendTimer);
-  winBlendTimer = setTimeout(() => { pickSong(); pickedNext = true; }, 6000);
+  if (nonStop) winBlendTimer = setTimeout(() => { pickSong(); pickedNext = true; }, 6000);
+  else winBlendTimer = setTimeout(() => { if (ctx && bus) { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setTargetAtTime(0, ctx.currentTime, 2.5); } }, 6000);
 }
 let winBlendTimer = null, pickedNext = false;
 export function musicReset() {
   S.target = 0.15; S.dark = 0; S.finalLap = false; S.duck = {}; S.noneHome = 0;
   clearTimeout(winBlendTimer);
+  if (ctx && bus) { bus.gain.cancelScheduledValues(ctx.currentTime); bus.gain.setTargetAtTime(0.9, ctx.currentTime, 0.5); }   // back after a fade-out
   if (!pickedNext) pickSong();   // already blending into it after the last win
   pickedNext = false;
 }
