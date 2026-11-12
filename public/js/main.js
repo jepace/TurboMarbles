@@ -10,7 +10,7 @@ import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squ
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS, LEAGUE_NAME } from './league.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove } from './music.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2305,6 +2305,7 @@ on('gameStarted', ({ gameState: gs }) => {
 on('rolled', ({ playerIndex, dice, moves, combos, envy }) => {
   if (envy) commentator.envy(envy, playerIndex, dice);
   musicRoll(dice, gameState?.players?.[playerIndex]?.color);
+  if (moves && !Object.values(moves).some(m => m?.length)) musicStuck(gameState?.players?.[playerIndex]?.color);
   commentator.roll(playerIndex, dice);
   gameState.dice = dice;
   gameState.diceUsed = [false, false];

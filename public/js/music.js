@@ -10,7 +10,7 @@
 //     change of lead cross-fades over a couple of bars.
 //   - Cues on the beat: 6 (rising run + a stuttered double beat; 6-6 bigger), 1 (bell),
 //     out of base (pickup), onto the star circle (shimmer), into the hub
-//     (swirl down, the mix dips) and out (sweep up), a home slot climbed (tick), hits
+//     (swirl down, the mix dips) and out (sweep up), a home slot climbed (tick), no move with a roll (deflating wah-wah), hits
 //     (the hitter's voice climbs, the victim's falls; heartbreak near home), no aggros left (cadence), marbles home, a new leader (crash + its motif),
 //     the final lap (snare riser), and the winner's flourish.
 //
@@ -338,6 +338,12 @@ function playCue({ kind, color, extra }, t, chordDeg) {
       }
       break;
     }
+    case 'stuck': { // no move with that roll: a deflating "wah-wah-wah-waaah" in the team's voice
+      const v = VOICES[color], inst = v?.inst === 'marimba' || v?.inst === 'glass' ? 'brass' : v?.inst ?? 'brass';
+      [[0, 2], [2, 1], [4, 0]].forEach(([st, d]) => note(inst, degree(chordDeg, d, (v?.oct ?? 1) - 1) , t + st * sd, sd * 1.6, 0.45));
+      note(inst, degree(chordDeg, 0, (v?.oct ?? 1) - 1) - 1, t + 6 * sd, sd * 6, 0.5);
+      break;
+    }
     case 'safe': {  // every team has a marble home: no aggros left, a relieved major cadence
       [[4, 6, 8], [0, 2, 4]].forEach((ch, k) => ch.forEach(d => note('pad', degree(0, d, 1), t + k * 8 * sd, sd * 10, 0.55)));
       note('bell', degree(0, 7, 1), t + 8 * sd, sd * 8, 0.4);
@@ -443,6 +449,8 @@ export function musicRoll(dice, color) {
   if (dice.includes(6)) queue.push({ kind: 'six', color, extra: { double: dice[0] === 6 && dice[1] === 6 } });
   else if (dice.includes(1)) queue.push({ kind: 'one', color });
 }
+// A roll with no move at all.
+export function musicStuck(color) { if (musicOn()) queue.push({ kind: 'stuck', color }); }
 export function musicHit(byColor, victimColor, heartbreak) {
   if (victimColor) S.duck[victimColor] = 32;
   if (musicOn()) queue.push({ kind: 'hit', color: byColor, extra: { victim: victimColor, heartbreak } });
