@@ -10,7 +10,7 @@ import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squ
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS, LEAGUE_NAME } from './league.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck } from './music.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2622,10 +2622,12 @@ function canIDouble() {
 }
 function renderCube() {
   const c = gameState?.cube;
-  $('cube-area').style.display = c ? 'flex' : 'none';
+  placeBoardCube();
+  // The cube is on the board; the sidebar line only says what the cube can't show.
+  const dead = !!c && c.owner != null && cubeDead(c.owner);
+  $('cube-area').style.display = c && (c.crawford || dead) ? 'flex' : 'none';
   if (c) {
     $('cube').textContent = String(c.value);
-    const dead = c.owner != null && cubeDead(c.owner);
     $('cube-owner').textContent = c.crawford ? 'Crawford game — no doubling'
       : cubeOwnerText(c) + (dead ? ' · dead' : '');
     const bd = $('btn-double');
@@ -2720,6 +2722,7 @@ document.addEventListener('keydown', e => {
 
 on('doubleOffered', ({ playerIndex, value }) => {
   gameState.cubeOffer = { from: playerIndex, to: 1 - playerIndex, value };
+  musicCube('double', gameState.players[playerIndex]?.color);
   gameState.phase = 'CUBE_OFFERED';
   log(`${playerName(playerIndex)} doubles to ${value}`, gameState.players[playerIndex]?.color);
   $('btn-roll').disabled = true;
@@ -2734,6 +2737,7 @@ on('doubleOffered', ({ playerIndex, value }) => {
   renderCube();
 });
 on('doubleTaken', ({ playerIndex, value, owner }) => {
+  musicCube('take', gameState?.players?.[playerIndex]?.color);
   gameState.cube = { ...gameState.cube, value, owner };
   gameState.cubeOffer = null;
   gameState.phase = 'IN_TURN';
@@ -3271,7 +3275,10 @@ function renderLobbySlots(slots) {
 
 function renderSidebar() {
   if (!gameState) return;
-  if (KIOSK) $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
+  document.body.classList.toggle('streamview', KIOSK || watching);
+  $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
+  $('kb-season').style.display = KIOSK || (watching && gameState.score && !gameState.match) ? '' : 'none';
+  $('btn-leave-after').style.display = watching && !KIOSK ? '' : 'none';
   const list = $('player-list');
   list.innerHTML = '';
   for (const p of gameState.players) {
@@ -3612,7 +3619,6 @@ if (KIOSK) {
   document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');
   document.body.classList.toggle('kiosk-nolist', q.get('players_list') === '0');
   $('kb-url').textContent = location.host;
-  $('board-area').append($('dice-area'));
   startKiosk();
 }
 
@@ -3637,6 +3643,12 @@ function momentSound(sound, pi) {
   else if (sound === 'chime') { if (!musicOn()) playHomeChime(); musicHome(color); }
 }
 let lastBumped = null;   // the marble the coming bonk sends home (music: its team's voice, heartbreak near home)
+let leaveAfter = false;
+$('btn-leave-after').addEventListener('click', () => {
+  leaveAfter = !leaveAfter;
+  $('btn-leave-after').classList.toggle('on', leaveAfter);
+  $('btn-leave-after').textContent = leaveAfter ? 'Leaving after this game ✓' : 'Leave after this game';
+});
 let watchCardTimer = null;
 function showWatchCard(winnerIndex, result, score) {
   const g = gameState;
@@ -3658,6 +3670,8 @@ function showWatchCard(winnerIndex, result, score) {
   card.style.display = 'flex';
   clearTimeout(watchCardTimer);
   watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 10000);
+  // "Leave after this game": the result card, then out.
+  if (leaveAfter && !KIOSK) setTimeout(() => { if (leaveAfter) { leaveAfter = false; $('btn-leave-after').classList.remove('on'); $('btn-leave-after').textContent = 'Leave after this game'; $('btn-quit').click(); } }, 8000);
 }
 
 
@@ -3733,17 +3747,41 @@ function placeCommentary() {
   box.classList.toggle('in-sidebar', !beside);
   box.style.display = want ? 'flex' : 'none';
   box.style.width = beside ? (KIOSK ? room : Math.min(room, 460)) + 'px' : '';
-  if (!KIOSK) return;
-  // Stream: the logo has the top of the left space to itself (as wide as the
-  // commentary); the commentary stops below it. The dice sit on the board's
-  // square, in its top-right corner.
+  // Watching (and the stream page): the logo and address have the top of the
+  // left space to themselves, when there's room; the commentary stops below.
   const brand = $('kiosk-brand');
-  brand.style.width = Math.max(180, room - 12) + 'px';
-  box.style.maxHeight = Math.max(0, area.clientHeight - brand.offsetTop - brand.offsetHeight - 40) + 'px';
+  brand.classList.toggle('fits', room >= 180);
+  brand.style.width = Math.max(180, (KIOSK ? room : Math.min(room, 460)) - 12) + 'px';
+  box.style.maxHeight = beside && brand.offsetHeight ? Math.max(0, area.clientHeight - brand.offsetTop - brand.offsetHeight - 40) + 'px' : '';
+  // The dice: on the board's square, in its top-right corner. The cube: by its owner.
   const a = area.getBoundingClientRect(), c = cv.getBoundingClientRect(), d = $('dice-area');
   d.style.left = (c.right - a.left - d.offsetWidth - 14) + 'px';
   d.style.top = (c.top - a.top + 14) + 'px';
+  placeBoardCube();
 }
+// The cube on the board, next to its owner's base and in their colour; centred: at the board's side.
+function placeBoardCube() {
+  const bc = $('board-cube'), c = gameState?.cube, cv = $('board-canvas');
+  if (!bc) return;
+  if (!c || !cv.width || !$('screen-game').classList.contains('active')) { bc.style.display = 'none'; return; }
+  const a = $('board-area').getBoundingClientRect(), r = cv.getBoundingClientRect(), k = r.width / cv.width;
+  let x, y;
+  if (c.owner != null) {
+    const b3 = getBasePosition(c.owner, 3), b2 = getBasePosition(c.owner, 2);
+    if (b3 && b2) { x = b3.x + (b3.x - b2.x) * 1.6; y = b3.y + (b3.y - b2.y) * 1.6; }
+  }
+  if (x == null) { x = cv.width * 0.06; y = cv.height / 2; }
+  bc.style.left = (r.left - a.left + x * k) + 'px';
+  bc.style.top = (r.top - a.top + y * k) + 'px';
+  bc.textContent = String(c.value);
+  const col = c.owner != null ? COLOR_MAP[dc(gameState.players[c.owner]?.color)] : null;
+  bc.style.setProperty('--cube-color', col ?? '#c8920a');
+  bc.classList.toggle('dead', c.owner != null && cubeDead(c.owner));
+  bc.title = c.owner != null ? `Cube at ${c.value}: ${playerName(c.owner)} owns it` : `Cube at ${c.value}, centred`;
+  bc.style.display = 'flex';
+}
+$('kb-url').textContent = location.host;
+$('board-area').append($('dice-area'));   // the dice sit on the board (every game)
 new ResizeObserver(placeCommentary).observe($('board-area'));
 new ResizeObserver(placeCommentary).observe($('board-canvas'));
 $('kiosk-brand').querySelector('img').addEventListener('load', placeCommentary);

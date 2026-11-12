@@ -10,7 +10,7 @@
 //     change of lead cross-fades over a couple of bars.
 //   - Cues on the beat: 6 (rising run + a stuttered double beat; 6-6 bigger), 1 (bell),
 //     out of base (pickup), onto the star circle (shimmer), into the hub
-//     (swirl down, the mix dips) and out (sweep up), a home slot climbed (tick), no move with a roll (deflating wah-wah), hits
+//     (swirl down, the mix dips) and out (sweep up), a home slot climbed (tick), the cube turned (timpani + brass) and taken, no move with a roll (deflating wah-wah), hits
 //     (the hitter's voice climbs, the victim's falls; heartbreak near home), no aggros left (cadence), marbles home, a new leader (crash + its motif),
 //     the final lap (snare riser), and the winner's flourish.
 //
@@ -344,6 +344,23 @@ function playCue({ kind, color, extra }, t, chordDeg) {
       note(inst, degree(chordDeg, 0, (v?.oct ?? 1) - 1) - 1, t + 6 * sd, sd * 6, 0.5);
       break;
     }
+    case 'double': { // the cube is turned: a timpani roll swelling into a brass chord, the doubler's tune on top
+      for (let i = 0; i < 12; i++) kick(t + i * sd * 0.5, 0.15 + 0.05 * i);
+      noise(t + 6 * sd, 1.6, 0.1, 2500);
+      for (const d of [0, 2, 4, 7]) note('brass', degree(chordDeg, d, 0) - (d === 2 ? 1 : 0), t + 6 * sd, sd * 10, 0.5);
+      note('drone', degree(chordDeg, 0, -1), t + 6 * sd, sd * 16, 0.7);
+      const v = VOICES[color];
+      if (v) v.motif.slice(0, 3).forEach(([st, deg, len], i) => note('brass', degree(chordDeg, deg + song.shift, v.oct), t + (8 + i * 2) * sd, len * sd, 0.6));
+      S.target = Math.min(1, S.target + 0.15);
+      break;
+    }
+    case 'take': { // taken: the answer, a bold major chord in the taker's voice
+      const v = VOICES[color];
+      kick(t, 0.7); noise(t, 0.8, 0.06, 3000);
+      for (const d of [0, 2, 4]) note(v?.inst === 'marimba' || v?.inst === 'glass' ? 'brass' : v?.inst ?? 'brass', degree(0, d, (v?.oct ?? 1)), t, sd * 8, 0.55);
+      note('bass', degree(0, 0, -1), t, sd * 8, 0.8);
+      break;
+    }
     case 'safe': {  // every team has a marble home: no aggros left, a relieved major cadence
       [[4, 6, 8], [0, 2, 4]].forEach((ch, k) => ch.forEach(d => note('pad', degree(0, d, 1), t + k * 8 * sd, sd * 10, 0.55)));
       note('bell', degree(0, 7, 1), t + 8 * sd, sd * 8, 0.4);
@@ -449,6 +466,8 @@ export function musicRoll(dice, color) {
   if (dice.includes(6)) queue.push({ kind: 'six', color, extra: { double: dice[0] === 6 && dice[1] === 6 } });
   else if (dice.includes(1)) queue.push({ kind: 'one', color });
 }
+// The cube: turned (drama), taken (a bold answer). A drop ends the game: the win flourish.
+export function musicCube(kind, color) { if (musicOn()) queue.push({ kind, color }); }
 // A roll with no move at all.
 export function musicStuck(color) { if (musicOn()) queue.push({ kind: 'stuck', color }); }
 export function musicHit(byColor, victimColor, heartbreak) {
