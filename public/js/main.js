@@ -3154,6 +3154,18 @@ function drainAnimations() {
   if (gameState) drawBoard(gameState);
 }
 document.addEventListener('visibilitychange', drainAnimations);
+// Ctrl/⌘-A with the pointer over (or focus in) the move log selects just the log.
+let overLog = false;
+$('game-log').addEventListener('mouseenter', () => { overLog = true; });
+$('game-log').addEventListener('mouseleave', () => { overLog = false; });
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'a') return;
+  const log = $('game-log');
+  if (!(overLog || log.contains(document.activeElement) || log.contains(getSelection()?.anchorNode))) return;
+  e.preventDefault();
+  const r = document.createRange(); r.selectNodeContents(log);
+  const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+});
 function afterAnimations(fn) {
   if (!animationRunning && animationQueue.length === 0) fn();
   else afterAnimWaiters.push(fn);
