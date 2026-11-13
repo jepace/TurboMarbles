@@ -10,7 +10,7 @@ import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squ
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
 import { TEAMS, LEAGUE_NAME, captainOf } from './league.js';
-import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube, setMusicActive } from './music.js';
+import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube, setMusicActive, musicRecordStart, musicRecordStop } from './music.js';
 
 // ---- State ----
 let myPlayerIndex = null;
@@ -2351,6 +2351,7 @@ on('gameStarted', ({ gameState: gs }) => {
   setTimeout(() => commentator.start(gs.players.map(p => ({ name: gs.league && TEAMS[p.color] ? TEAMS[p.color].short : p.name, color: p.color })), settings.music || KIOSK ? songName() : null, gs.league), 0);
   clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
   musicReset();
+  if (RECORD_KEY) setTimeout(() => musicRecordStart(), 200);   // after the song switch
   applyWatch(gs);
   gameState = gs;
   if (gs.diceCommit) setTimeout(() => log(`🎲 ${KIOSK ? `Dice fixed · ${gs.diceCommit.slice(0, 8)}` : `Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`}`, null, 'log-dice'), 0);
@@ -2662,6 +2663,11 @@ function showGameOver(winnerIndex) {
   $('rematch-msg').style.display = 'none';
   // The game-over window waits for the winning move's animation.
   afterAnimations(() => musicWin(gameState?.players?.[winnerIndex]?.color, !!gameState?.watch));
+  // Stream page recording: the game through its fanfare, then upload.
+  if (RECORD_KEY) { const gameNo = gameState?.gameNo; setTimeout(() => musicRecordStop().then(r => {
+    if (!r?.blob?.size) return;
+    fetch(`/music-upload?key=${encodeURIComponent(RECORD_KEY)}&song=${encodeURIComponent(r.song)}&game=${gameNo ?? 0}`, { method: 'POST', headers: { 'Content-Type': r.blob.type }, body: r.blob }).catch(() => {});
+  }), 9000); }
   if (!watching) afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
   $('cube-offer').style.display = 'none';
   renderCube();
@@ -3690,6 +3696,8 @@ $('sb-copy').addEventListener('click', async () => {
 });
 
 // lite=1 (stream page): cheaper drawing for a machine with no graphics card.
+// record=<key> (stream page): each game's music is recorded and kept on the server.
+const RECORD_KEY = KIOSK ? new URLSearchParams(location.search).get('record') : null;
 const LITE = KIOSK && new URLSearchParams(location.search).get('lite') === '1';
 let lastLiteDraw = 0;
 function startKiosk() {

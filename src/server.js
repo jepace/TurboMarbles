@@ -4,6 +4,7 @@ import { YouTubeChat } from './YouTubeChat.js';
 import { leagueOverview } from './LeagueTracker.js';
 import { usage as aiUsage, aiReady } from './AICommentator.js';
 import express from 'express';
+import { recordKeyOk, saveRecording } from './MusicArchive.js';
 import helmet from 'helmet';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
@@ -87,6 +88,13 @@ app.use(helmet());
 // Page code must never be stale after a deploy: browsers revalidate every time
 // (a quick 304 when unchanged).
 // Site settings the page needs: the live stream link (STREAM_URL), if any.
+// The stream page uploads each game's music (?record=<RECORD_KEY> on its URL).
+app.post('/music-upload', express.raw({ type: () => true, limit: '80mb' }), async (req, res) => {
+  if (!recordKeyOk(req.query.key)) return res.status(403).end();
+  if (!req.body?.length) return res.status(400).end();
+  try { const path = await saveRecording(req.body, { song: req.query.song, game: req.query.game, mime: req.headers['content-type'] ?? '' }); console.log('[music] saved', path); res.json({ ok: true }); }
+  catch (err) { console.error('[music] save failed', err); res.status(500).end(); }
+});
 app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null }));
 app.get('/league.json', (req, res) => res.json(leagueOverview()));
 

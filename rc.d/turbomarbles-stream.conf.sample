@@ -5,6 +5,7 @@
 STREAM_KEY=
 # The page to stream (stream page options: players, speed, theme, music, commentary…).
 STREAM_PAGE=https://marbles.pacehouse.com/?watch=robots&players=6&lite=1
+# To keep each game's music as MP3 on the server, add &record=<RECORD_KEY from turbomarbles.conf>.
 # 1280x720 + 2500k, or 1920x1080 + 4500k.
 STREAM_SIZE=1280x720
 STREAM_VBITRATE=2500k

@@ -19,6 +19,7 @@ PUBLIC_URL=https://example.com  # links in emails (password reset, email confirm
 MAIL_FROM=noreply@example.com   # sender (with Resend: on a domain verified there)
 RESEND_API_KEY=re_…             # or RESEND_API_KEY_FILE=path: account emails go through Resend (resend.com);
                                 # else /usr/sbin/sendmail (SENDMAIL=path); else the links are written to the server log
+RECORD_KEY=…            # stream page &record=<key> uploads each game's music (kept as MP3, 2 per song)
 STREAM_URL=…                                    # optional fallback for the stream link (normally set on the Admin page → Stream)
 ```
 
@@ -163,7 +164,8 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   on the stream page, `music=0` turns it off). Fed by updatePips (pips, marbles home/in base) and moments (rolls of 6/1/doubles, hits, home,
   win, out of base, star circle, hub in/out, home tidy, new leader, final lap, no aggros left, no move with a roll, the cube turned and taken; hits voice both teams, heartbreak near home): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
   motif + instrument per colour with the leader's in front. Ten song bases (`SONGS`: key, scales, chord loops, tempo,
-  beat, bass, chord style, swing, echo, motif twist); each game picks one at random, and the DJ blends into it (8 bars: tempo glide + filter sweep, starting 6 s after a win, in robot watch rooms; other games fade away to nothing after the flourish). The win is a flourish of the winner's motif in the song's style. With music on, the music plays bonk/home moments in key (no home chime; the bonk keeps its thud). Console: `__music()`,
+  beat, bass, chord style, swing, echo, motif twist); each game picks one at random, and the DJ blends into it (8 bars: tempo glide + filter sweep, starting 6 s after a win, in robot watch rooms; other games fade away to nothing after the flourish). The win is a flourish of the winner's motif in the song's style. With music on, the music plays bonk/home moments in key (no home chime; the bonk keeps its thud). Music archive: `?record=<RECORD_KEY>` on the stream page records each game's music (MediaRecorder) and POSTs it to
+  `/music-upload`; `src/MusicArchive.js` keeps MP3s (ffmpeg) in `DATA_DIR/music/<song>/`, newest 2 per song. Console: `__music()`,
   `__musicSong(i)`, `__musicSet({...})`.
 - Commentary: `public/js/commentary.js` turns game events into paced text lines (hits with revenge / near-home
   heartbreak, double hits, 6-6 and three-sixes runs, hub trips, marbles home with tidy/untidy home rows (home debt),

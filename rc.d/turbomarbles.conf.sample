@@ -26,3 +26,8 @@ RESEND_API_KEY=
 
 # Fallback live-stream link (normally set on the Admin page → Stream).
 STREAM_URL=
+
+# Music archive: the stream page records each game's music and uploads it here when its URL
+# has record=<this key> (e.g. STREAM_PAGE=…&record=<key> in turbomarbles-stream.conf). Kept as MP3
+# (ffmpeg; pkg install ffmpeg in the jail), newest 2 per song, in DATA_DIR/music/<song>/. Empty = off.
+RECORD_KEY=

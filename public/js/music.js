@@ -554,6 +554,28 @@ window.__musicRecord = ms => new Promise(res => {
   rec.onstop = () => { master.disconnect(dest); const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(new Blob(parts, { type: rec.mimeType })); };
   rec.start(); setTimeout(() => rec.stop(), ms);
 });
+// Recording a whole game's music (the stream page's ?record=…): start, then
+// stop() resolves to a Blob.
+let recorder = null;
+export function musicRecordStart() {
+  if (!ctx || recorder || typeof MediaRecorder === 'undefined') return false;
+  const dest = ctx.createMediaStreamDestination();
+  master.connect(dest);
+  const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported?.(t));
+  const rec = new MediaRecorder(dest.stream, type ? { mimeType: type, audioBitsPerSecond: 128000 } : undefined), parts = [];
+  rec.ondataavailable = e => { if (e.data.size) parts.push(e.data); };
+  recorder = { rec, parts, dest, song: (blend?.to ?? song).name };
+  rec.start(10000);
+  return true;
+}
+export function musicRecordStop() {
+  const r = recorder; recorder = null;
+  if (!r) return Promise.resolve(null);
+  return new Promise(res => {
+    r.rec.onstop = () => { try { master.disconnect(r.dest); } catch {} res({ blob: new Blob(r.parts, { type: r.rec.mimeType }), song: r.song }); };
+    r.rec.stop();
+  });
+}
 // Console helpers for trying the songs: __musicSong(0–9), __musicSet({ target: 0.6 }).
 window.__musicSong = i => { pickSong(i); return song.name; };
 window.__musicSet = o => Object.assign(S, o);
