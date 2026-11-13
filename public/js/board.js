@@ -234,9 +234,15 @@ export function clearAllMarbleOverrides() {
   animatingMarble = null;
 }
 
+// Which base hole each marble sits in: by the player's baseOrder (marble ids,
+// first out first), the leader in the hole beside the start square, then
+// outwards; without one, marble id = hole.
+const RANK_HOLE = [1, 2, 0, 3];
+let baseHoleOf = [];   // [playerIndex][marbleId] → hole
+function baseHole(playerIndex, marbleId) { return baseHoleOf[playerIndex]?.[marbleId] ?? marbleId; }
 export function getBasePosition(playerIndex, marbleId) {
   const ai = playerToArm[playerIndex] ?? playerIndex;
-  return basePos[ai]?.[marbleId] ?? null;
+  return basePos[ai]?.[baseHole(playerIndex, marbleId)] ?? null;
 }
 
 export function setAnimatingMarble(playerIndex, marbleId) {
@@ -437,6 +443,11 @@ export function drawBoard(gameState, opts = {}) {
   // Each player's seat: their own arm (any arm; colours are separate), else the usual seats.
   const usual = ARM_MAP[n] ?? Array.from({ length: n }, (_, i) => i);
   playerToArm = Array.from({ length: n }, (_, i) => (Number.isInteger(gameState?.players?.[i]?.arm) ? gameState.players[i].arm : usual[i]));
+  baseHoleOf = Array.from({ length: n }, (_, i) => {
+    const order = gameState?.players?.[i]?.baseOrder;
+    if (!Array.isArray(order) || order.length !== MARBLES_PER_PLAYER) return null;
+    const m = []; order.forEach((id, rank) => { m[id] = RANK_HOLE[rank]; }); return m;
+  });
 
   ctx.clearRect(0, 0, W, W);
   drawBackground();
@@ -995,7 +1006,7 @@ function marblePosition(marble, playerIndex) {
   const ai       = playerToArm[playerIndex] ?? playerIndex;
   const override = marbleOverrides[playerIndex]?.[marble.id];
   if (override)                return override;
-  if (marble.zone === 'base')  return basePos[ai]?.[marble.id];
+  if (marble.zone === 'base')  return basePos[ai]?.[baseHole(playerIndex, marble.id)];
   if (marble.zone === 'track') return trackPos[marble.space];
   if (marble.zone === 'home')  return homePos[ai]?.[marble.slot];
   if (marble.zone === 'center') return centerPos;

@@ -287,6 +287,15 @@ export class LeagueTracker {
   sendState(extra = {}) { const s = this.state(); if (s) this.send({ event: 'leagueState', ...s, ...extra }); }
 }
 
+// A team's marbles in base, first out first: the marble in best form leads
+// (career: marble of the game ×5, first home ×3, homes, bonks ×0.5, per game).
+export function baseOrder(color) {
+  return [0, 1, 2, 3].map(id => {
+    const m = store.leagueGet('marble', `${color}:${id}`), g = Math.max(1, m.games ?? 0);
+    return { id, form: ((m.mvps ?? 0) * 5 + (m.firstHomes ?? 0) * 3 + (m.homes ?? 0) + (m.bonks ?? 0) * 0.5) / g + Math.random() * 1e-6 };
+  }).sort((a, b) => b.form - a.form).map(x => x.id);
+}
+
 // The next line-up of n teams, for a fair season: the teams that have played
 // the fewest games this month go first, and among them the pairs that have met
 // least (ties at random). Six teams: everyone plays.

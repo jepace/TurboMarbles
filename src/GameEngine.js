@@ -445,7 +445,9 @@ export function allLegalMoves(state, playerIndex) {
     if (state.diceUsed[dieIdx]) continue;
     const moves = [];
     const player = state.players[playerIndex];
-    for (let m = 0; m < MARBLES_PER_PLAYER; m++) {
+    // In the player's base order when there is one (league teams: the marble
+    // in form leads out; equal moves keep the first), else by id.
+    for (const m of player.baseOrder ?? [0, 1, 2, 3]) {
       moves.push(...legalMovesForDie(state, playerIndex, dieIdx, m));
     }
     result[dieIdx] = moves;

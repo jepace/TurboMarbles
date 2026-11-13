@@ -17,7 +17,7 @@ import { isDuel } from './DuelTable.js';
 import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
-import { LeagueTracker, pickLineup } from './LeagueTracker.js';
+import { LeagueTracker, pickLineup, baseOrder } from './LeagueTracker.js';
 import { TEAMS } from '../public/js/league.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
@@ -352,6 +352,8 @@ function beginGame(room, players) {
   if (crawford) m.crawfordUsed = true;
   room.game = createGame(players, room.slots.map(s => s.armIndex), config.initialTurnIndex,
     { cube: room.cube, crawford, away: m ? m.score.map(x => m.length - x) : null });
+  // League: each team's marbles line up in base by form (the star leads out).
+  if (room.league) for (const p of room.game.players) if (TEAMS[p.color]) p.baseOrder = baseOrder(p.color);
   // What a game's ending is worth, for the analysis: the score at the start
   // of this game (and whether the Crawford game is used up afterwards).
   Object.defineProperty(room.game, '_valueCtx', { value: {
@@ -1609,6 +1611,7 @@ function publicState(room) {
       name: room.slots[i].name,
       color: room.slots[i].color ?? p.config.color,   // the player's colour (league: the team), not tied to the seat
       arm: armOfPlayer(p),                             // the seat on the board (0–5)
+      baseOrder: p.baseOrder ?? null,                  // league: marbles in base, first out first
       isRobot: room.slots[i].isRobot,
       marbles: p.marbles,
     })),
