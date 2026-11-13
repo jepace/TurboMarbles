@@ -18,7 +18,7 @@ import { Worker } from 'worker_threads';
 import { moveFeedback, describeRoll, allPlays } from './Analysis.js';
 import { AICommentator } from './AICommentator.js';
 import { LeagueTracker, pickLineup, baseOrder } from './LeagueTracker.js';
-import { TEAMS } from '../public/js/league.js';
+import { TEAMS, ROBOT_COLOR_NAMES } from '../public/js/league.js';
 import { pipCount, countdown, PLAYER_CONFIG as PCFG } from '../public/js/constants.js';
 const armOfPlayer = p => PCFG.findIndex(c => c.color === p.config.color);
 import { evaluate1 } from './Evaluator.js';
@@ -220,7 +220,7 @@ export function joinRoom(ws, code, playerName) {
 }
 
 // Robots are "Robot", "Robot 2"… (every robot plays the same, tuned way).
-export const ROBOT_NAMES = ['Robot'];
+export const ROBOT_NAMES = ['Robot', ...Object.values(ROBOT_COLOR_NAMES).flat()];
 
 // What beginGame needs from the seats.
 const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot }));
@@ -246,7 +246,9 @@ export function addRobot(ws, roomId) {
   if (!slot) return { error: 'No empty slots' };
 
   const taken = new Set(room.slots.map(s => s.name?.toLowerCase()).filter(Boolean));
-  let name = 'Robot';
+  // A name that goes with its colour (Cobalt, Coral, Jade…), not taken in the room.
+  const pool = (ROBOT_COLOR_NAMES[slot.color] ?? []).filter(n => !taken.has(n.toLowerCase()));
+  let name = pool.length ? pool[Math.floor(Math.random() * pool.length)] : 'Robot';
   for (let k = 2; taken.has(name.toLowerCase()); k++) name = `Robot ${k}`;
   slot.isRobot = true;
   slot.name = name;

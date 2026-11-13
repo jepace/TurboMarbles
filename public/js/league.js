@@ -75,3 +75,20 @@ export const LEAGUE_NAME = 'The Grand Marble Circuit';
 
 // A team's captain (one of its four marbles).
 export const captainOf = color => TEAMS[color]?.marbles.findIndex(m => m.captain) ?? -1;
+
+// Surnames: each league marble gets one, fixed (picked from the list by a hash of
+// its team and number, so it never changes). Tags only, no personality.
+export const SURNAMES = ['Abbott', 'Abernathy', 'Achebe', 'Adair', 'Albrecht', 'Alcott', 'Almeida', 'Amador', 'Ambrose', 'Andersen', 'Archer', 'Arden', 'Arkwright', 'Ashby', 'Atwood', 'Avery', 'Bancroft', 'Barlow', 'Barnaby', 'Barrett', 'Baxter', 'Beckett', 'Bellamy', 'Benning', 'Bishop', 'Blackwood', 'Blake', 'Bolton', 'Bowman', 'Bramble', 'Brennan', 'Brightwater', 'Brooks', 'Buckley', 'Burrows', 'Calloway', 'Cameron', 'Carrow', 'Carver', 'Castillo', 'Chandler', 'Chen', 'Clarke', 'Cobb', 'Colby', 'Conrad', 'Corbin', 'Crane', 'Crawley', 'Cromwell', 'Crosby', 'Dalton', 'Darcy', 'Delacroix', 'Dempsey', 'Devereux', 'Dixon', 'Donovan', 'Dorsey', 'Draper', 'Drummond', 'Dunbar', 'Eastwood', 'Ellery', 'Ellison', 'Emerson', 'Everett', 'Fairbanks', 'Falkner', 'Farrow', 'Fenwick', 'Finch', 'Fitzgerald', 'Fletcher', 'Flynn', 'Forsythe', 'Foxworth', 'Fulton', 'Gaines', 'Gallagher', 'Garrison', 'Gentry', 'Gideon', 'Goodwin', 'Graves', 'Greenleaf', 'Gresham', 'Griffin', 'Hadley', 'Hale', 'Halloway', 'Hargrove', 'Harlow', 'Harper', 'Hartley', 'Hastings', 'Hawthorne', 'Hayward', 'Hedges', 'Holloway', 'Huxley', 'Ingram', 'Irving', 'Ives', 'Jarvis', 'Jennings', 'Jensen', 'Kagame', 'Kaplan', 'Keating', 'Kendrick', 'Kessler', 'Kingsley', 'Kirby', 'Knox', 'Lachance', 'Langley', 'Larkin', 'Lennox', 'Lockhart', 'Lowell', 'Lyle', 'Maddox', 'Malone', 'Marlowe', 'Maxwell', 'McAllister', 'Mercer', 'Merriweather', 'Moreau', 'Morrow', 'Murdoch', 'Nakamura', 'Nash', 'Newbury', 'Norwood', 'Oakley', 'Okafor', 'Oldham', 'Osei', 'Pemberton', 'Penrose', 'Perry', 'Pickett', 'Pike', 'Prescott', 'Quill', 'Quinlan', 'Radcliffe', 'Ramsey', 'Ravenscroft', 'Redfern', 'Reyes', 'Rhodes', 'Ridley', 'Rook', 'Rowntree', 'Sallow', 'Sanderson', 'Santos', 'Sawyer', 'Saxon', 'Shackleton', 'Sinclair', 'Slade', 'Sorensen', 'Spencer', 'Stanhope', 'Sterling', 'Stroud', 'Sutton', 'Tanaka', 'Tate', 'Thornbury', 'Thorne', 'Tillman', 'Townsend', 'Trask', 'Tremaine', 'Underwood', 'Vance', 'Varga', 'Vaughn', 'Wainwright', 'Walsh', 'Warrick', 'Webb', 'Wexley', 'Whitaker', 'Whitmore', 'Wilde', 'Winslow', 'Wolfe', 'Woodward', 'Wren', 'Yardley', 'Yates', 'Zeller', 'Ziegler'];
+const hash = str => { let h = 2166136261; for (const ch of str) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; };
+export const marbleSurname = (color, id) => SURNAMES[hash(`${color}:${id}`) % SURNAMES.length];
+export const marbleFullName = (color, id) => `${marbleName(color, id)} ${marbleSurname(color, id)}`;
+
+// Robots outside the league: a name that goes with their colour.
+export const ROBOT_COLOR_NAMES = {
+  blue:   ['Cobalt', 'Azure', 'Sky', 'Navy', 'Sapphire', 'Indigo', 'Cerulean', 'Denim', 'Marine', 'Bluebell'],
+  pink:   ['Rosie', 'Fuchsia', 'Magenta', 'Coral', 'Blush', 'Petal', 'Flamingo', 'Cerise', 'Peony', 'Raspberry'],
+  orange: ['Tango', 'Amber', 'Ginger', 'Saffron', 'Pumpkin', 'Rusty', 'Copper', 'Marmalade', 'Apricot', 'Sunset'],
+  yellow: ['Goldie', 'Lemon', 'Sunny', 'Canary', 'Butter', 'Honey', 'Mustard', 'Daisy', 'Topaz', 'Dandelion'],
+  green:  ['Jade', 'Basil', 'Olive', 'Fern', 'Moss', 'Emerald', 'Lime', 'Sage', 'Clover', 'Kiwi'],
+  white:  ['Frost', 'Pearl', 'Ivory', 'Snowy', 'Chalk', 'Ghost', 'Cotton', 'Blanche', 'Opal', 'Alabaster'],
+};

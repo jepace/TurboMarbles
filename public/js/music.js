@@ -540,7 +540,13 @@ function setSong(next) {
 export const songName = () => (blend?.to ?? song).name;
 
 // Browsers start audio only after a click or key press; resume then.
-for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => { if (ctx?.state === 'suspended') ctx.resume(); });
+// iOS / iPadOS suspends or "interrupts" audio when you switch apps: start it
+// again on coming back and on the next touch.
+const wake = () => { if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {}); };
+for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, wake, { passive: true });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+window.addEventListener('pageshow', wake);
+window.addEventListener('focus', wake);
 // For checking from the console: what the music is doing.
 window.__music = () => ({ song: song.name, state: ctx?.state, time: ctx?.currentTime, step, bpm: Math.round(bpm()), intensity: +S.intensity.toFixed(2), dark: S.dark, finalLap: S.finalLap, leader: S.leader,
   weights: Object.fromEntries(Object.entries(S.weights).map(([k, v]) => [k, +v.toFixed(2)])) });

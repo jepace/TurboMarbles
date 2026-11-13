@@ -9,7 +9,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
-import { TEAMS, LEAGUE_NAME, captainOf } from './league.js';
+import { TEAMS, LEAGUE_NAME, captainOf, marbleFullName } from './league.js';
 import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube, setMusicActive, musicRecordStart, musicRecordStop } from './music.js';
 
 // ---- State ----
@@ -38,7 +38,7 @@ let pendingFeedback = null; // { text, cls } — robot comparison for my roll, l
 // ---- Player options (remembered in this browser) ----
 // Move feedback: after committing a roll, show how the robot would have played it.
 // Post-game analysis: offer the "Analyze Game" button when a game ends.
-const settings = { feedback: true, analysis: true, numbers: true, sfx: true, music: false, musicVol: 0.7, sfxVol: 0.8, commentary: null };   // commentary null = off when playing, on when watching
+const settings = { feedback: true, analysis: true, numbers: true, sfx: false, music: true, musicVol: 0.7, sfxVol: 0.8, commentary: null };   // commentary null = on (the default)
 try {
   const saved = JSON.parse(localStorage.getItem('tm.settings') ?? '{}');
   if (typeof saved.feedback === 'boolean') settings.feedback = saved.feedback;
@@ -980,7 +980,7 @@ function marbleCard(hit) {
   const st = marbleStats?.[`${color}:${hit.id}`] ?? {};
   const stat = (v, k) => el('div', { class: 'mc-stat' }, el('b', {}, String(v ?? 0)), el('span', {}, k));
   return [
-    el('div', { class: 'mc-name' }, dot, info.name, info.captain ? el('span', { class: 'mc-cap' }, ' ©') : ''),
+    el('div', { class: 'mc-name' }, dot, marbleFullName(color, hit.id), info.captain ? el('span', { class: 'mc-cap' }, ' ©') : ''),
     el('div', { class: 'mc-team' }, `${TEAMS[color].emoji} ${TEAMS[color].name} · ${info.trait}`),
     el('div', { class: 'mc-bio' }, info.bio),
     el('div', { class: 'mc-cheer' }, `“${info.cheer}”`),
@@ -3393,7 +3393,7 @@ function renderSidebar() {
   for (const p of gameState.players) {
     const row = document.createElement('div');
     row.dataset.team = p.color; row.dataset.card = 'game';
-    row.className = 'player-row' + (p.index === gameState.turnIndex ? ' active-turn' : '');
+    row.className = 'player-row' + (p.index === gameState.turnIndex ? ' active-turn' : '') + (p.index === gameState.turnIndex && p.index === myPlayerIndex && !watching ? ' my-turn' : '');
     const dot = document.createElement('span');
     dot.className = 'player-dot';
     dot.style.background = COLOR_MAP[dc(p.color)] ?? '#888';
@@ -3774,7 +3774,7 @@ function showWatchCard(winnerIndex, result, score) {
   const card = $('watch-card');
   card.replaceChildren(
     el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), inLeague() ? `${TEAMS[w.color]?.name ?? w.name} win!` : `${w.name} wins!`),
-    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${TEAMS[leagueMvp[0]]?.marbles[leagueMvp[1]]?.name} (${TEAMS[leagueMvp[0]]?.short})`) : '',
+    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${marbleFullName(leagueMvp[0], leagueMvp[1])} (${TEAMS[leagueMvp[0]]?.short})`) : '',
     how ? el('div', { class: 'wc-how' }, how) : '',
     el('div', { class: 'wc-head' }, 'This game'), standings(pts),
     ...(inLeague() && leagueTable ? [el('div', { class: 'wc-head' }, 'This session'), el('div', { class: 'standings' },
@@ -3938,7 +3938,7 @@ new ResizeObserver(placeCommentary).observe($('board-area'));
 new ResizeObserver(placeCommentary).observe($('board-canvas'));
 $('kiosk-brand').querySelector('img').addEventListener('load', placeCommentary);
 // Players: off unless they turn it on; watchers: on unless they turned it off.
-const commentaryOn = () => settings.commentary ?? watching;
+const commentaryOn = () => settings.commentary ?? true;
 $('btn-gear').addEventListener('click', () => { $('opt-commentary').checked = commentaryOn(); });
 $('opt-commentary').addEventListener('change', e => { settings.commentary = e.target.checked; saveSettings(); placeCommentary(); });
 

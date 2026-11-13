@@ -747,7 +747,7 @@ body.streamview #kiosk-brand.fits { display: flex; flex-direction: column; gap: 
 body.streamview .kb-head { display: block; font-size: 1.15rem; font-weight: 800; color: #f0c040; margin-top: 0.2rem; }
 body.kiosk .kb-head { font-size: 1.6rem; font-weight: 800; color: #f0c040; margin-top: 0.3rem; }
 /* One game view for everyone; only the right column's controls depend on the role: watchers never act. */
-body.streamview:not(.playing) #turn-banner, body.streamview:not(.playing) #game-chat-input, body.streamview:not(.playing) #action-slot { display: none !important; }
+body.streamview #turn-banner, body.streamview:not(.playing) #game-chat-input, body.streamview:not(.playing) #action-slot { display: none !important; }
 /* Stream: three columns, the board centred as a square with equal columns either side. */
 /* Watching and the stream page: equal columns either side of the square board. */
 body.streamview #sidebar { width: max(240px, calc((100vw - 100vh) / 2)); box-sizing: border-box; }
@@ -947,3 +947,6 @@ body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line
 .mc-where { margin-top: 6px; font-size: 0.8rem; color: #9fb0c8; }
 #team-card { position: fixed; z-index: 30; width: 17rem; pointer-events: none; padding: 0.7rem 0.9rem; border-radius: 10px; background: rgba(10, 18, 40, 0.96); border: 1px solid #c8920a; color: #fff; font-size: 0.85rem; line-height: 1.35; box-shadow: 0 6px 24px #000a; }
 #team-card .mc-where { margin-top: 8px; color: #f0c040; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+/* My turn: my row in the game list pulses (instead of a 'Your turn' line). */
+.player-row.my-turn { animation: my-turn 1.1s ease-in-out infinite; }
+@keyframes my-turn { 50% { border-color: #f0c040; box-shadow: 0 0 0 3px #f0c04066; background: #f0c04022; } }
