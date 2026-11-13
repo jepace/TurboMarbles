@@ -9,7 +9,7 @@ import { init as initBoard, drawBoard, resize as resizeBoard,
 import { ARM_MAP, ARM_COLORS, PLAYER_CONFIG, spaceName, pipCount, countdown, squareNumber, armOf, ALL_STARS } from './constants.js';
 import { playBonk, playClick, playHomeChime, setMuted, setSfxVolume } from './sounds.js';
 import { createCommentator } from './commentary.js';
-import { TEAMS, LEAGUE_NAME } from './league.js';
+import { TEAMS, LEAGUE_NAME, captainOf } from './league.js';
 import { setMusic, setMusicMuted, setMusicVolume, musicUpdate, musicRoll, musicHit, musicDuck, musicHome, musicWin, musicReset, songName, musicOn, musicMove, musicStuck, musicCube, setMusicActive } from './music.js';
 
 // ---- State ----
@@ -962,11 +962,11 @@ function marbleAt(x, y) {
   return null;
 }
 // League marbles' careers, for their cards (refreshed at most once a minute).
-let marbleStats = null, marbleStatsAt = 0;
+let marbleStats = null, marbleStatsAt = 0, leagueTeams = null;
 function loadMarbleStats() {
   if (Date.now() - marbleStatsAt < 60000) return;
   marbleStatsAt = Date.now();
-  fetch('/league.json').then(r => r.json()).then(d => { marbleStats = Object.fromEntries(d.marbles.map(m => [`${m.color}:${m.mid}`, m])); }).catch(() => {});
+  fetch('/league.json').then(r => r.json()).then(d => { marbleStats = Object.fromEntries(d.marbles.map(m => [`${m.color}:${m.mid}`, m])); leagueTeams = Object.fromEntries(d.teams.map(t => [t.color, t])); }).catch(() => {});
 }
 // A marble's card: in the league, its player card (team, trait, bio, career);
 // elsewhere, whose it is and where it stands.
@@ -1498,7 +1498,7 @@ const help = tip => {
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(props)) {
-    if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else e[k] = v;
+    if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v; else if (k.startsWith('data-')) e.setAttribute(k, v); else e[k] = v;
   }
   for (const c of kids) e.append(c);
   return e;
@@ -2714,7 +2714,7 @@ function renderCube() {
   if (inLeague() && leagueTable) {
     $('score-line').style.display = 'block';
     $('kb-season').textContent = `Season · ${leagueMonthName(leagueMonth)}`;
-    $('score-line').replaceChildren(el('div', { class: 'standings' }, ...leagueTable.map((t, k) => el('div', { class: 'st-row', title: `${TEAMS[t.color]?.name}: ${t.wins} won of ${t.games} this month (${t.points >= 0 ? '+' : ''}${t.points} points); this session ${t.sessionWins} of ${t.sessionGames}` },
+    $('score-line').replaceChildren(el('div', { class: 'standings' }, ...leagueTable.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
       el('span', { class: 'st-rank' }, String(k + 1)),
       el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
       el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
@@ -3384,6 +3384,7 @@ function renderSidebar() {
   list.innerHTML = '';
   for (const p of gameState.players) {
     const row = document.createElement('div');
+    row.dataset.team = p.color; row.dataset.card = 'game';
     row.className = 'player-row' + (p.index === gameState.turnIndex ? ' active-turn' : '');
     const dot = document.createElement('span');
     dot.className = 'player-dot';
@@ -4035,7 +4036,45 @@ let leagueMvp = null;
 let lastMover = {};   // seat → marble id of its last move (who did the bonking)
 on('marbleMoved', ({ playerIndex, marbleId }) => { lastMover[playerIndex] = marbleId; });
 on('leagueNote', ({ level, parts }) => commentator.league(parts, level));
-on('leagueState', st => { if (st.mvp !== undefined) leagueMvp = st.mvp; if (st.mvp === undefined && st.teams) leagueMvp = null; if (st.table) { leagueTable = st.table; leagueMonth = st.season; renderCube(); } });
+on('leagueState', st => { if (st.mvp !== undefined) leagueMvp = st.mvp; if (st.mvp === undefined && st.teams) leagueMvp = null; if (st.table) { leagueTable = st.table; leagueMonth = st.season; renderCube(); } if (st.game) leagueGame = st.game; });
+let leagueGame = null;
+// Team cards: hover a team in the season table (its month and career) or in
+// the game's list (this game so far). League rooms only.
+const teamCardEl = el('div', { id: 'team-card', style: 'display:none' });
+document.body.append(teamCardEl);
+function teamCard(color, kind) {
+  const t = TEAMS[color]; if (!t) return null;
+  const cap = t.marbles[captainOf(color)]?.name;
+  const stat = (v, k) => el('div', { class: 'mc-stat' }, el('b', {}, String(v ?? 0)), el('span', {}, k));
+  const head = [el('div', { class: 'mc-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(color)] ?? '#888'}` }), `${t.emoji} ${t.name}`),
+    el('div', { class: 'mc-team' }, `Captain ${cap}`)];
+  if (kind === 'game') {
+    const g = leagueGame?.[color] ?? {};
+    return [...head, el('div', { class: 'mc-where' }, 'This game'),
+      el('div', { class: 'mc-stats' }, stat(g.homes, 'home'), stat(g.distance, 'spaces'), stat(g.bonks, 'bonks'), stat(g.bonked, 'bonked'),
+        stat(g.rolls, 'rolls'), stat(g.sixes, 'sixes'), stat(g.doubles, 'doubles'), stat(g.hubTrips, 'hub trips'),
+        stat(g.exits, 'left base'), stat(g.starSpaces, 'star hops'), stat(g.hubTurns, 'hub waits'), stat(g.maxDeficit, 'most behind'))];
+  }
+  loadMarbleStats();
+  const s = leagueTable?.find(x => x.color === color) ?? {}, c = leagueTeams?.[color]?.career ?? {};
+  const pct = (a, b) => (b ? `${Math.round(100 * a / b)}%` : '–');
+  return [...head, el('div', { class: 'mc-where' }, `Season · ${leagueMonthName(leagueMonth)}`),
+    el('div', { class: 'mc-stats' }, stat(s.games, 'games'), stat(s.wins, 'wins'), stat(`${(s.par ?? 0) >= 0 ? '+' : '−'}${Math.abs(s.par ?? 0).toFixed(1)}`, 'above par'), stat(s.points, 'points')),
+    el('div', { class: 'mc-where' }, 'Career'),
+    el('div', { class: 'mc-stats' }, stat(c.games, 'games'), stat(c.wins, 'wins'), stat(pct(c.wins ?? 0, c.games ?? 0), 'win %'), stat(c.bestStreak, 'best streak'),
+      stat(c.bonks, 'bonks'), stat(c.bonked, 'bonked'), stat(c.comebacks, 'comebacks'), stat((c.distance ?? 0).toLocaleString(), 'spaces'))];
+}
+document.addEventListener('mouseover', e => {
+  const row = e.target.closest?.('[data-card][data-team]');
+  if (!row || !inLeague()) { teamCardEl.style.display = 'none'; return; }
+  const kids = teamCard(row.dataset.team, row.dataset.card);
+  if (!kids) return;
+  teamCardEl.replaceChildren(...kids);
+  teamCardEl.style.display = 'block';
+  const r = row.getBoundingClientRect();
+  teamCardEl.style.left = `${Math.max(8, r.left - teamCardEl.offsetWidth - 10)}px`;
+  teamCardEl.style.top = `${Math.min(innerHeight - teamCardEl.offsetHeight - 8, Math.max(8, r.top - 10))}px`;
+});
 let leagueTable = null, leagueMonth = null;
 
 

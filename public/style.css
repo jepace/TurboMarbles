@@ -944,3 +944,5 @@ body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line
 .mc-stat b { display: block; font-size: 1rem; }
 .mc-stat span { font-size: 0.68rem; color: #9fb0c8; text-transform: uppercase; letter-spacing: 0.3px; }
 .mc-where { margin-top: 6px; font-size: 0.8rem; color: #9fb0c8; }
+#team-card { position: fixed; z-index: 30; width: 17rem; pointer-events: none; padding: 0.7rem 0.9rem; border-radius: 10px; background: rgba(10, 18, 40, 0.96); border: 1px solid #c8920a; color: #fff; font-size: 0.85rem; line-height: 1.35; box-shadow: 0 6px 24px #000a; }
+#team-card .mc-where { margin-top: 8px; color: #f0c040; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }

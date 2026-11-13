@@ -117,6 +117,7 @@ export class LeagueTracker {
         return this.standings();
       }
       case 'gameResult': return this.finish(msg);
+      case 'turnChanged': return this.sendState();   // the live game numbers for the teams' cards
     }
   }
 
@@ -276,6 +277,12 @@ export class LeagueTracker {
           streak: career.streak ?? 0 };
       }),
       sessionGames: this.session.games,
+      // This game so far, per team (for the team cards).
+      game: this.g ? Object.fromEntries(Object.values(this.g.teams).map(t => {
+        const ms = Object.values(this.g.marbles).filter(m => m.color === t.color), sum = k => ms.reduce((a, m) => a + (m[k] ?? 0), 0);
+        return [t.color, { rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, bonks: t.bonks, bonked: t.bonked, distance: t.distance,
+          starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubTurns: t.hubTurns, exits: sum('exits'), homes: ms.filter(m => m.homeOrder).length, maxDeficit: t.maxDeficit }];
+      })) : null,
       // The month's table, all six teams (the line-up changes every game).
       table: Object.keys(TEAMS).map(c => {
         const sea = store.leagueGet('season:' + mon, c), ses = this.session.teams[c];
