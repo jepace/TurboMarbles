@@ -180,10 +180,12 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   wire-to-wire, comeback deficit, finish margin, length, spaces travelled = the die each move used, star-circle hops, times in the hub, hub escapes /
   rolls waiting there (in-and-out on one roll is a pass-through), home-line crossings (going round again), hits in the
   hub and on stars), then writes careers (team / marble), streaks,
-  rivalries, the month's season table, all-time records (announced after 20 league games) and a game log to the Store
+  rivalries, the month's season table (ranked by wins above par; Luce strengths on the League page), all-time records (announced after 20 league games) and a game log to the Store
   (`league_stats`, `league_records`, `league_games`; in memory without a DB). It sends `leagueNote` (parts with
   team / marble tokens) and `leagueState`. Page: team names (emoji + short name) in league rooms, plural verb
-  agreement for team names in commentary (`leagueGrammar`), the 🏟 League page (`/league.json`). Test: `node test/league.mjs`.
+  agreement for team names in commentary (`leagueGrammar`), the 🏟 League page (`/league.json`). Robot league games are
+  stored too (`games.league = 1`, open to anyone, pruned after 90 days) with the instant (evaluator) analysis run in idle
+  time; the League page's Recent games open them in the replay. Line-ups favour the teams with fewest games this month. Test: `node test/league.mjs`.
 - Admin → Stream (settings in the DB: `src/SiteSettings.js`, meta table `set.*`; API keys never sent to clients): the
   stream link (`/site.json`), the AI commentator and the YouTube chat reader. AI commentator: `src/AICommentator.js`, one
   per robot watch room, calls only while on + watched + something happened, at most every `aiEverySec`, capped by

@@ -117,6 +117,7 @@ function migrate() {
   if (!pcols.has('prefs')) db.exec('ALTER TABLE players ADD COLUMN prefs TEXT');
   const gcols = new Set(db.prepare('PRAGMA table_info(games)').all().map(c => c.name));
   if (!gcols.has('dice_seed')) db.exec('ALTER TABLE games ADD COLUMN dice_seed TEXT');   // revealed after the game
+  if (!gcols.has('league')) db.exec('ALTER TABLE games ADD COLUMN league INTEGER NOT NULL DEFAULT 0');   // robot league game (anyone may open it)
   if (!pcols.has('is_admin')) db.exec('ALTER TABLE players ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0');
   if (!pcols.has('banned_at')) db.exec('ALTER TABLE players ADD COLUMN banned_at INTEGER');
   if (!pcols.has('ban_reason')) db.exec('ALTER TABLE players ADD COLUMN ban_reason TEXT');
@@ -645,13 +646,13 @@ export function unreadCounts(me) {
 
 // Store a finished game. seats: [{ playerId|null, name, color, isRobot, won,
 // points, aggro, doubles, takes, drops }]; rolls: the roll records.
-export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, seats, rolls, diceSeed = null }) {
+export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, seats, rolls, diceSeed = null, league = false }) {
   if (!db) return null;
   const vsRobot = seats.some(s => s.isRobot) ? 1 : 0;
   db.exec('BEGIN');
   try {
-    db.prepare('INSERT INTO games (id, ended_at, n_players, vs_robot, cube, winner_seat, rolls_gz, dice_seed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, endedAt, seats.length, vsRobot, cube ? 1 : 0, winnerSeat ?? null, rolls ? gzipSync(JSON.stringify(rolls)) : null, diceSeed);
+    db.prepare('INSERT INTO games (id, ended_at, n_players, vs_robot, cube, winner_seat, rolls_gz, dice_seed, league) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, endedAt, seats.length, vsRobot, cube ? 1 : 0, winnerSeat ?? null, rolls ? gzipSync(JSON.stringify(rolls)) : null, diceSeed, league ? 1 : 0);
     const ins = db.prepare(`INSERT INTO seats (game_id, seat, player_id, name, color, arm, is_robot, won, points, aggro, doubles, takes, drops)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
     seats.forEach((s, i) => ins.run(id, i, s.playerId ?? null, s.name, s.color, Number.isInteger(s.arm) ? s.arm : null, s.isRobot ? 1 : 0, s.won ? 1 : 0,
@@ -670,9 +671,10 @@ export function recordGame({ id = newId(), endedAt = now(), cube, winnerSeat, se
 // for the idle-time background analysis. Skips ids in `skip`.
 export function nextUnanalysed(skip = new Set()) {
   if (!db) return null;
-  const rows = db.prepare('SELECT id FROM games WHERE report_gz IS NULL AND rolls_gz IS NOT NULL ORDER BY ended_at DESC LIMIT 20').all();
+  // People's games first; robot league games after them.
+  const rows = db.prepare('SELECT id, league FROM games WHERE report_gz IS NULL AND rolls_gz IS NOT NULL ORDER BY league, ended_at DESC LIMIT 20').all();
   const row = rows.find(r => !skip.has(r.id));
-  return row ? getGame(row.id) : null;
+  return row ? { ...getGame(row.id), league: !!row.league } : null;
 }
 export function saveAnalysis(gameId, report, perSeat) {
   if (!db || !gameId) return;
@@ -763,6 +765,21 @@ export function playerGames(playerId, { limit = 50, before = Infinity, players =
 }
 
 // May this player see this game? (They played in it.)
+// A robot league game: anyone may open it.
+export function isLeagueGame(gameId) {
+  if (!db) return false;
+  return !!db.prepare('SELECT 1 FROM games WHERE id = ? AND league = 1').get(gameId);
+}
+// League games older than `days` go (their summaries stay in the league tables).
+export function pruneLeagueGames(days = 90) {
+  if (!db) return 0;
+  const cut = now() - days * 86400000;
+  const ids = db.prepare('SELECT id FROM games WHERE league = 1 AND ended_at < ?').all(cut).map(r => r.id);
+  const delS = db.prepare('DELETE FROM seats WHERE game_id = ?'), delG = db.prepare('DELETE FROM games WHERE id = ?');
+  db.exec('BEGIN');
+  try { for (const id of ids) { delS.run(id); delG.run(id); } db.exec('COMMIT'); } catch (e) { db.exec('ROLLBACK'); throw e; }
+  return ids.length;
+}
 export function playedIn(playerId, gameId) {
   if (!db) return false;
   return !!db.prepare('SELECT 1 FROM seats WHERE game_id = ? AND player_id = ?').get(gameId, playerId);

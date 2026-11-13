@@ -8,7 +8,7 @@ import {
 } from './GameEngine.js';
 import { exactEstimate, shouldDouble, shouldTake } from './CubeDecision.js';
 import { matchCube, emg } from './MatchEquity.js';
-import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked, applyRatingBonus, nextUnanalysed } from './Store.js';
+import { recordGame, saveAnalysis, storeEnabled, rateGame, isBlocked, applyRatingBonus, nextUnanalysed, pruneLeagueGames } from './Store.js';
 import { analyzeCube } from './CubeAnalysis.js';
 import { pickNextRobotMove } from './RobotPlayer.js';
 import { think } from './RobotThinker.js';
@@ -442,7 +442,7 @@ function finishGame(room) {
   // A rated game is analysed at once (quick level) for the played-better bonus.
   if (rec.ratingPairs?.length) setImmediate(() => { if (rooms.has(room.id)) handleAnalyzeGame(null, room.id, rec.n); });
   const dice = game._dice ? { commit: game._dice.commit, seed: game._dice.seed } : null;
-  broadcast(room, { event: 'gameResult', game: rec.n, ratings, dice, winnerIndex: game.winner, result: r,
+  broadcast(room, { event: 'gameResult', game: rec.n, ratings, dice, winnerIndex: game.winner, result: r, storedId: rec.storedGameId ?? null,
     score: !m ? room.score.slice() : null, wins: room.wins.slice(), gamesPlayed: room.gamesPlayed,
     match: m ? structuredClone(m) : null });
 }
@@ -451,8 +451,9 @@ function finishGame(room) {
 
 // Store the finished game if a signed-in player took part. Games against
 // robots are flagged by the store (robot seats with no account).
+// Robot league games are kept too (90 days), for review on the League page.
 function storeFinishedGame(room, r) {
-  if (!storeEnabled() || !room.slots.some(s => s.accountId)) return;
+  if (!storeEnabled() || !(room.slots.some(s => s.accountId) || room.league)) return;
   const { game } = room;
   try {
     finishRollRecord(game);
@@ -468,7 +469,7 @@ function storeFinishedGame(room, r) {
           doubles: c.doubles, takes: c.takes, drops: c.drops,
         };
       });
-    room.storedGameId = recordGame({ cube: !!game.cube, winnerSeat: game.winner, rolls: game._rolls ?? [], seats, diceSeed: game._dice?.seed ?? null });
+    room.storedGameId = recordGame({ cube: !!game.cube, winnerSeat: game.winner, rolls: game._rolls ?? [], seats, diceSeed: game._dice?.seed ?? null, league: !!room.league && !room.slots.some(s => s.accountId) });
     // Rated only between accounts with no robot seat (a quitter's seat still counts as theirs).
     room._ratings = rateGame(seats, game.winner, room.storedGameId);
   } catch (err) {
@@ -1651,7 +1652,9 @@ export function backgroundAnalysisTick() {
   const report = storedGameReport({ ...g, report: null });
   if (!decisions.length) { saveAnalysis(g.id, report, seatAnalysis(report)); return true; }
   backgroundBusy = true;
-  const level = 1, opts = config.analysisLevels[level];
+  // Robot league games get the instant pass (the evaluator, 1 ply: cheap; it
+  // marks where it disagrees with the robot). People's games are played out.
+  const level = g.league ? 0 : 1, opts = config.analysisLevels[level];
   const worker = new Worker(new URL('./analysisWorker.js', import.meta.url), {
     workerData: { decisions, options: { ...opts, level }, cube: [], luck: rolls.map((r, idx) => ({ idx, before: r.before, pi: r.pi })).filter(x => x.before) },
   });
@@ -1670,6 +1673,8 @@ export function backgroundAnalysisTick() {
   return true;
 }
 if (process.env.NODE_ENV !== 'test') setInterval(backgroundAnalysisTick, 60_000).unref();
+// Daily: robot league games older than 90 days go.
+if (process.env.NODE_ENV !== 'test') setInterval(() => { try { const n = pruneLeagueGames(90); if (n) console.log(`[store] pruned ${n} league games`); } catch (err) { console.error('[store] prune failed', err); } }, 86_400_000).unref();
 
 // ---------- In-game chat ----------
 // Short messages to everyone in the room (lobby, game, after the game).

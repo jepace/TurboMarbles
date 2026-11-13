@@ -361,8 +361,9 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       return send(ws, { event: 'inviteSent', to: msg.to });
     }
     case 'openGame': {
-      if (!needMe()) return;
-      if (typeof msg.id !== 'string' || msg.id.length > 40 || !store.playedIn(me.id, msg.id)) return err('NOT_FOUND', 'Game not found.');
+      if (typeof msg.id !== 'string' || msg.id.length > 40) return err('NOT_FOUND', 'Game not found.');
+      // Robot league games are open to anyone; others only to their players.
+      if (!store.isLeagueGame(msg.id)) { if (!needMe()) return; if (!store.playedIn(me.id, msg.id)) return err('NOT_FOUND', 'Game not found.'); }
       const g = store.getGame(msg.id);
       if (!g) return err('NOT_FOUND', 'Game not found.');
       return onOpenGame(ws, g);

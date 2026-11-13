@@ -252,7 +252,7 @@ export class LeagueTracker {
     if (lead && this.session.games >= 3) notes.push([1, { team: lead[0] }, ` lead the session with ${lead[1].wins} win${lead[1].wins === 1 ? '' : 's'} from ${this.session.games} games.`]);
 
     store.leagueLogGame({ players: n, winner: wColor, coach: null, summary: {
-      lineup: Object.keys(g.teams),
+      lineup: Object.keys(g.teams), gameId: msg.storedId ?? null,
       turns, ms, bonks: g.bonks, margin, leadChanges: g.leadChanges, deficit: w.maxDeficit, wire, mvp: mvp ? `${mvp.color}:${mvp.id}` : null,
       teams: Object.values(g.teams).map(t => ({ color: t.color, points: pts[t.color] ?? 0, bonks: t.bonks, sixes: t.sixes, distance: t.distance })) } });
 
@@ -376,5 +376,5 @@ export function leagueOverview() {
     return { ...m, color, mid: +id, name: info?.name, trait: info?.trait, bio: info?.bio, captain: !!info?.captain, team: teamName(color) };
   });
   const rivals = store.leagueAll('rival').sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0)).slice(0, 8);
-  return { league: LEAGUE_NAME, season: mon, teams, marbles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(15) };
+  return { league: LEAGUE_NAME, season: mon, teams, marbles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(50) };
 }

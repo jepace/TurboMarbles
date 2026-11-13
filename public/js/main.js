@@ -4118,9 +4118,11 @@ function renderLeague() {
     const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
     box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', lgDate(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
   } else {
-    box.replaceChildren(d.recent.length ? lgTable(['When', 'Players', 'Winner', 'Bonks', 'Rolls', 'Margin', '⭐'], d.recent.map(g => {
+    // Each game opens in the replay + analysis (kept 90 days).
+    const replay = id => { if (!id) return ''; const b = el('button', { class: 'secondary small-btn', title: 'Replay and analysis' }, '▶ Replay'); b.addEventListener('click', () => { connect(); send({ action: 'openGame', id }); }); return b; };
+    box.replaceChildren(d.recent.length ? lgTable(['When', 'Players', 'Winner', 'Bonks', 'Rolls', 'Margin', '⭐', ''], d.recent.map(g => {
       const s = g.summary ?? {}, [mc, mi] = (s.mvp ?? '').split(':');
-      return [lgDate(g.at), String(g.players), el('span', {}, lgDot(g.winner), TEAMS[g.winner]?.name ?? g.winner), String(s.bonks ?? 0), String(s.turns ?? 0), s.margin ? `${s.margin} pips` : '–', mc ? (TEAMS[mc]?.marbles[+mi]?.name ?? '') : ''];
+      return [lgDate(g.at), String(g.players), el('span', {}, lgDot(g.winner), TEAMS[g.winner]?.name ?? g.winner), String(s.bonks ?? 0), String(s.turns ?? 0), s.margin ? `${s.margin} pips` : '–', mc ? (TEAMS[mc]?.marbles[+mi]?.name ?? '') : '', replay(s.gameId)];
     })) : el('p', { class: 'muted' }, 'No games yet.'));
   }
 }
