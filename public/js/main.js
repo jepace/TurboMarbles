@@ -952,22 +952,76 @@ function describeSquare(hit) {
   }
   return [mine, [players.length ? 'for you' : '', ...others, what].filter(Boolean).join(' · ')];
 }
+// The marble under the pointer (canvas pixels), if any.
+function marbleAt(x, y) {
+  const cv = $('board-canvas'), r = cv.width * 0.024;
+  for (const p of gameState?.players ?? []) for (const m of p.marbles) {
+    const pos = m.zone === 'base' ? getBasePosition(p.index, m.id) : getSpacePosition(zoneToSpace(m, p.index));
+    if (pos && Math.hypot(pos.x - x, pos.y - y) <= r) return { pi: p.index, id: m.id, m };
+  }
+  return null;
+}
+// League marbles' careers, for their cards (refreshed at most once a minute).
+let marbleStats = null, marbleStatsAt = 0;
+function loadMarbleStats() {
+  if (Date.now() - marbleStatsAt < 60000) return;
+  marbleStatsAt = Date.now();
+  fetch('/league.json').then(r => r.json()).then(d => { marbleStats = Object.fromEntries(d.marbles.map(m => [`${m.color}:${m.mid}`, m])); }).catch(() => {});
+}
+// A marble's card: in the league, its player card (team, trait, bio, career);
+// elsewhere, whose it is and where it stands.
+function marbleCard(hit) {
+  const p = gameState.players[hit.pi], color = p.color, info = TEAMS[color]?.marbles[hit.id];
+  const where = hit.m.zone === 'base' ? 'in base' : hit.m.zone === 'home' ? `home (h${hit.m.slot})` : hit.m.zone === 'center' ? 'in the hub'
+    : `${squareNumber(armOfP(p), hit.m.space)} from home`;
+  const dot = el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(color)] ?? '#888'}` });
+  if (!inLeague() || !info) return [el('div', { class: 'mc-name' }, dot, `${p.name} · marble ${hit.id + 1}`), el('div', { class: 'mc-where' }, where)];
+  loadMarbleStats();
+  const st = marbleStats?.[`${color}:${hit.id}`] ?? {};
+  const stat = (v, k) => el('div', { class: 'mc-stat' }, el('b', {}, String(v ?? 0)), el('span', {}, k));
+  return [
+    el('div', { class: 'mc-name' }, dot, info.name, info.captain ? el('span', { class: 'mc-cap' }, ' ©') : ''),
+    el('div', { class: 'mc-team' }, `${TEAMS[color].emoji} ${TEAMS[color].name} · ${info.trait}`),
+    el('div', { class: 'mc-bio' }, info.bio),
+    el('div', { class: 'mc-cheer' }, `“${info.cheer}”`),
+    el('div', { class: 'mc-stats' }, stat(st.games, 'games'), stat(st.homes, 'home'), stat(st.firstHomes, 'first home'), stat(st.mvps, 'MVP'),
+      stat(st.bonks, 'bonks'), stat(st.bonked, 'bonked'), stat(st.hubTrips, 'hub trips'), stat((st.distance ?? 0).toLocaleString(), 'spaces')),
+    el('div', { class: 'mc-where' }, `Now: ${where}`),
+  ];
+}
+let pinnedCard = null;
+function showTip(e, kids, card) {
+  const tip = $('board-tip'), area = $('board-area').getBoundingClientRect();
+  tip.replaceChildren(...kids);
+  tip.classList.toggle('card', !!card);
+  tip.style.display = 'block';
+  // Keep it on screen: flip left / up near the edges.
+  const x = e.clientX - area.left + 14, y = e.clientY - area.top + 14;
+  tip.style.left = `${Math.min(x, area.width - tip.offsetWidth - 8)}px`;
+  tip.style.top = `${Math.min(y, area.height - tip.offsetHeight - 8)}px`;
+}
 $('board-canvas').addEventListener('mousemove', e => {
+  if (pinnedCard) return;
   const canvas = e.currentTarget, tip = $('board-tip');
   const rect = canvas.getBoundingClientRect();
-  const hit = spaceAt((e.clientX - rect.left) * canvas.width / rect.width,
-                      (e.clientY - rect.top) * canvas.height / rect.height);
+  const x = (e.clientX - rect.left) * canvas.width / rect.width, y = (e.clientY - rect.top) * canvas.height / rect.height;
+  const mh = marbleAt(x, y);
+  if (mh) { showTip(e, marbleCard(mh), true); return; }
+  const hit = spaceAt(x, y);
   if (!hit) { tip.style.display = 'none'; return; }
   const [name, what] = describeSquare(hit);
-  tip.replaceChildren();
   const b = document.createElement('b'); b.textContent = name;
-  tip.append(b, what);
-  const area = $('board-area').getBoundingClientRect();
-  tip.style.left = `${e.clientX - area.left + 14}px`;
-  tip.style.top  = `${e.clientY - area.top + 14}px`;
-  tip.style.display = 'block';
+  showTip(e, [b, what], false);
 });
-$('board-canvas').addEventListener('mouseleave', () => { $('board-tip').style.display = 'none'; });
+// Watching (or a touch screen): a click on a marble pins its card; another click closes it.
+$('board-canvas').addEventListener('click', e => {
+  if (!watching) return;
+  const canvas = e.currentTarget, rect = canvas.getBoundingClientRect();
+  const mh = marbleAt((e.clientX - rect.left) * canvas.width / rect.width, (e.clientY - rect.top) * canvas.height / rect.height);
+  if (pinnedCard || !mh) { pinnedCard = null; $('board-tip').style.display = 'none'; return; }
+  pinnedCard = mh; showTip(e, marbleCard(mh), true);
+});
+$('board-canvas').addEventListener('mouseleave', () => { if (!pinnedCard) $('board-tip').style.display = 'none'; });
 
 // ---- Socket events ----
 
@@ -3499,7 +3553,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 // Text is scanned as it appears; each name of a player in the current game or
 // the open analysis gets its colour dot. Places that already draw one (player
 // list, lobby, a log line's leading dot) are left alone.
-const NAME_SKIP = '#commentary, #player-list, #lobby-slots, .aph, .gc-name, .standings, #watch-card, .live-games, select, option, input, textarea, .pname, canvas';
+const NAME_SKIP = '#board-tip, #commentary, #player-list, #lobby-slots, .aph, .gc-name, .standings, #watch-card, .live-games, select, option, input, textarea, .pname, canvas';
 function nameColors() {
   const m = new Map();
   for (const p of [...(analysisReport?.players ?? []), ...(gameState?.players ?? [])])

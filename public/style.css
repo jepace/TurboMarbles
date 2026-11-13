@@ -932,3 +932,15 @@ body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line
 #board-area #cube-offer.cube-modal #cube-offer-msg .cube-face { width: 44px; height: 44px; font-size: 1.4rem; }
 #board-area #cube-offer.cube-modal button { grid-row: 2; width: 100%; min-width: 5rem; max-width: 8rem; min-height: 2.9rem; font-size: 1.2rem; font-weight: 700; }
 @keyframes cube-call { 50% { box-shadow: 0 0 0 6px #f0c04066, 0 10px 40px #000c; } }
+
+/* A marble's player card (hover; click to pin when watching). */
+#board-tip.card { white-space: normal; width: 17rem; padding: 0.7rem 0.9rem; border-radius: 10px; font-size: 0.85rem; line-height: 1.35; box-shadow: 0 6px 24px #000a; }
+.mc-name { font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 6px; }
+.mc-cap { color: #f0c040; font-size: 0.9rem; }
+.mc-team { color: #f0c040; font-weight: 600; margin-top: 2px; }
+.mc-bio { margin-top: 6px; color: #dfe6f2; }
+.mc-cheer { margin-top: 4px; font-style: italic; color: #b8c4d8; }
+.mc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 4px; margin-top: 8px; text-align: center; }
+.mc-stat b { display: block; font-size: 1rem; }
+.mc-stat span { font-size: 0.68rem; color: #9fb0c8; text-transform: uppercase; letter-spacing: 0.3px; }
+.mc-where { margin-top: 6px; font-size: 0.8rem; color: #9fb0c8; }
