@@ -3382,7 +3382,9 @@ function renderLobbySlots(slots) {
 
 function renderSidebar() {
   if (!gameState) return;
-  if (document.body.classList.toggle('streamview', KIOSK || watching) !== document.body.dataset.sv) { document.body.dataset.sv = document.body.classList.contains('streamview'); setTimeout(placeCommentary, 0); }
+  // The same game view for players, watchers and the stream page; `playing` keeps the player's controls.
+  document.body.classList.toggle('playing', !KIOSK && !watching && !viewingStored);
+  if (document.body.classList.toggle('streamview', true) !== document.body.dataset.sv) { document.body.dataset.sv = document.body.classList.contains('streamview'); setTimeout(placeCommentary, 0); }
   $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
   $('kb-season').style.display = KIOSK || (watching && gameState.score && !gameState.match) ? '' : 'none';
   $('btn-leave-after').style.display = watching && !KIOSK ? '' : 'none';

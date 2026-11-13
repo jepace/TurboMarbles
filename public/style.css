@@ -746,7 +746,8 @@ body.streamview #kiosk-brand.fits { display: flex; flex-direction: column; gap: 
 #kb-url { font-size: 1.5rem; font-weight: 700; color: #e8eef8; letter-spacing: 0.5px; padding-left: 8px; }
 body.streamview .kb-head { display: block; font-size: 1.15rem; font-weight: 800; color: #f0c040; margin-top: 0.2rem; }
 body.kiosk .kb-head { font-size: 1.6rem; font-weight: 800; color: #f0c040; margin-top: 0.3rem; }
-body.streamview #turn-banner, body.streamview #game-chat-input, body.streamview #action-slot { display: none !important; }   /* watchers never act: no empty space kept for buttons */
+/* One game view for everyone; only the right column's controls depend on the role: watchers never act. */
+body.streamview:not(.playing) #turn-banner, body.streamview:not(.playing) #game-chat-input, body.streamview:not(.playing) #action-slot { display: none !important; }
 /* Stream: three columns, the board centred as a square with equal columns either side. */
 /* Watching and the stream page: equal columns either side of the square board. */
 body.streamview #sidebar { width: max(240px, calc((100vw - 100vh) / 2)); box-sizing: border-box; }
