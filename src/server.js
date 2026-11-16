@@ -114,7 +114,10 @@ app.get('/music/:song/:file', (req, res) => {
 app.get('/podcast.xml', (req, res) => {
   const base = (process.env.PUBLIC_URL || process.env.ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
   const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const items = listRecordings().map(r => {
+  // No recordings yet: no feed (podcast apps reject a feed with no episodes).
+  const recs = listRecordings();
+  if (!recs.length) return res.status(404).type('text/plain').send('No episodes yet: the stream has not recorded any music.');
+  const items = recs.map(r => {
     const when = new Date(r.at), game = r.file.match(/_game(\d+)/)?.[1];
     const url = `${base}/music/${r.song}/${r.file}`;
     return `  <item>
