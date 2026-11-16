@@ -168,7 +168,8 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   win, out of base, star circle, hub in/out, home tidy, new leader, final lap, no aggros left, no move with a roll, the cube turned and taken; hits voice both teams, heartbreak near home): tempo and layers follow the race, minor harmony for aggro/baggro risk, a key lift for the final lap, one
   motif + instrument per colour with the leader's in front. Ten song bases (`SONGS`: key, scales, chord loops, tempo,
   beat, bass, chord style, swing, echo, motif twist); each game picks one at random, and the DJ blends into it (8 bars: tempo glide + filter sweep, starting 6 s after a win, in robot watch rooms; other games fade away to nothing after the flourish). The win is a flourish of the winner's motif in the song's style. With music on, the music plays bonk/home moments in key (no home chime; the bonk keeps its thud). Music archive: `?record=<RECORD_KEY>` on the stream page records each game's music (MediaRecorder) and POSTs it to
-  `/music-upload`; `src/MusicArchive.js` keeps MP3s (ffmpeg) in `DATA_DIR/music/<song>/`, newest 2 per song. Console: `__music()`,
+  `/music-upload`; `src/MusicArchive.js` keeps MP3s (ffmpeg) in `DATA_DIR/music/<song>/`, newest 2 per song; served as a podcast:
+  `/podcast.xml` (RSS + iTunes tags, cover `img/podcast.jpg`) with the files at `/music/<song>/<file>.mp3`. Console: `__music()`,
   `__musicSong(i)`, `__musicSet({...})`.
 - Commentary: `public/js/commentary.js` turns game events into paced text lines (hits with revenge / near-home
   heartbreak, double hits, 6-6 and three-sixes runs, hub trips, marbles home with tidy/untidy home rows (home debt),

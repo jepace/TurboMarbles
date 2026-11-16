@@ -45,3 +45,24 @@ function prune(dir) {
   const files = readdirSync(dir).filter(f => /\.(mp3|webm|ogg)$/.test(f)).sort().reverse();
   for (const f of files.slice(KEEP)) { try { unlinkSync(join(dir, f)); } catch {} }
 }
+
+// Every kept recording, newest first: [{ song, file, size, at }] (for the podcast feed).
+import { statSync } from 'fs';
+const SONG_TITLE = slugName => slugName.split('-').map(w => w[0]?.toUpperCase() + w.slice(1)).join(' ');
+export function listRecordings() {
+  const root = musicDir(); const out = [];
+  if (!existsSync(root)) return out;
+  for (const song of readdirSync(root)) {
+    let files; try { files = readdirSync(join(root, song)); } catch { continue; }
+    for (const file of files) if (/\.mp3$/.test(file)) {
+      const st = statSync(join(root, song, file));
+      out.push({ song, title: SONG_TITLE(song), file, size: st.size, at: st.mtimeMs });
+    }
+  }
+  return out.sort((a, b) => b.at - a.at);
+}
+export const recordingPath = (song, file) => {
+  if (!/^[a-z0-9-]{1,40}$/.test(song) || !/^[\w-]+\.mp3$/.test(file)) return null;   // no path tricks
+  const p = join(musicDir(), song, file);
+  return existsSync(p) ? p : null;
+};

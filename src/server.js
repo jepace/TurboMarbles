@@ -4,7 +4,7 @@ import { YouTubeChat } from './YouTubeChat.js';
 import { leagueOverview } from './LeagueTracker.js';
 import { usage as aiUsage, aiReady } from './AICommentator.js';
 import express from 'express';
-import { recordKeyOk, saveRecording } from './MusicArchive.js';
+import { recordKeyOk, saveRecording, listRecordings, recordingPath } from './MusicArchive.js';
 import helmet from 'helmet';
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
@@ -105,6 +105,41 @@ app.post('/stream-break', (req, res) => {
   res.json({ ok: true, until: streamBreakUntil });
 });
 app.get('/stream-state.json', (req, res) => res.json({ break: Date.now() < streamBreakUntil, until: streamBreakUntil }));
+// The music as a podcast: /podcast.xml (RSS with iTunes tags) over the kept recordings.
+app.get('/music/:song/:file', (req, res) => {
+  const p = recordingPath(req.params.song, req.params.file);
+  if (!p) return res.status(404).end();
+  res.type('audio/mpeg').sendFile(p);
+});
+app.get('/podcast.xml', (req, res) => {
+  const base = (process.env.PUBLIC_URL || process.env.ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const items = listRecordings().map(r => {
+    const when = new Date(r.at), game = r.file.match(/_game(\d+)/)?.[1];
+    const url = `${base}/music/${r.song}/${r.file}`;
+    return `  <item>
+    <title>${esc(`${r.title} — ${when.toISOString().slice(0, 10)}${game ? `, game ${game}` : ''}`)}</title>
+    <description>${esc(`The ${r.title} theme, as it played live through one TurboMarbles robot league game: every bonk, hub trip and race to home shaped it.`)}</description>
+    <enclosure url="${esc(url)}" length="${r.size}" type="audio/mpeg"/>
+    <guid isPermaLink="false">${esc(`${r.song}/${r.file}`)}</guid>
+    <pubDate>${when.toUTCString()}</pubDate>
+  </item>`;
+  }).join('\n');
+  res.type('application/rss+xml').send(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+<channel>
+  <title>TurboMarbles: The Music</title>
+  <link>${esc(base)}</link>
+  <language>en</language>
+  <description>Live, adaptive music from TurboMarbles robot league games: each track is one whole game's soundtrack, made on the fly by the race.</description>
+  <itunes:author>TurboMarbles</itunes:author>
+  <itunes:image href="${esc(base)}/img/podcast.jpg"/>
+  <itunes:category text="Music"/>
+  <itunes:explicit>false</itunes:explicit>
+${items}
+</channel>
+</rss>`);
+});
 app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null }));
 app.get('/league.json', (req, res) => res.json(leagueOverview()));
 
