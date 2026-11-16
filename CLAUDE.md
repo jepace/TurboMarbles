@@ -157,7 +157,10 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
 - Streaming: `/?watch=robots&players=6` is a kiosk page (no sign-in, no menus or buttons) that starts a
   robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080, or headless on the server: `rc.d/turbomarbles-stream.sh` + `rc.d/turbomarbles_stream` (Xvfb + Chromium + ffmpeg to YouTube; DEPLOY.md). Options:
-  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `lite=1` (cheaper drawing for a machine without a graphics card: no glow, ≤30 redraws/s), `speed=slow|normal|fast` (robots-only rooms play at `room.pace`: 2.2× / 1.5× / 1× the
+  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `lite=1` (cheaper drawing for a machine without a graphics card: no glow, ≤30 redraws/s), `show=<minutes>` (a timed show: when time is up the game in progress finishes, then the champion = most wins this
+  show, points break ties, a full tie plays a tie-breaker game between just those teams; the champion card stays 30 s, then a new show;
+  `break=<seconds>` with `record=<RECORD_KEY>` asks the server for a stream break so the headless streamer stops sending and
+  YouTube starts a new video: `/stream-break`, `/stream-state.json`), `speed=slow|normal|fast` (robots-only rooms play at `room.pace`: 2.2× / 1.5× / 1× the
   normal robot delays). The Play page's
   "Stream it" fold-out builds the URL. Kiosk options are per URL, never saved to the browser's settings.
 - Music: `public/js/music.js`, adaptive background music made live with Web Audio (in-game "Music" option; on by default

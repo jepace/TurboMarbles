@@ -3405,7 +3405,7 @@ function renderSidebar() {
   // The same game view for players, watchers and the stream page; `playing` keeps the player's controls.
   document.body.classList.toggle('playing', !KIOSK && !watching && !viewingStored);
   if (document.body.classList.toggle('streamview', true) !== document.body.dataset.sv) { document.body.dataset.sv = document.body.classList.contains('streamview'); setTimeout(placeCommentary, 0); }
-  $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
+  $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel();
   $('kb-season').style.display = KIOSK || (watching && gameState.score && !gameState.match) ? '' : 'none';
   $('btn-leave-after').style.display = watching && !KIOSK ? '' : 'none';
   const list = $('player-list');
@@ -3722,12 +3722,52 @@ $('sb-copy').addEventListener('click', async () => {
 const RECORD_KEY = KIOSK ? new URLSearchParams(location.search).get('record') : null;
 const LITE = KIOSK && new URLSearchParams(location.search).get('lite') === '1';
 let lastLiteDraw = 0;
+// ---- Shows (stream page show=<minutes>): a clock, a final game, a tie-breaker, a champion ----
+function showLabel() {
+  const sh = gameState?.show;
+  if (!sh) return '';
+  if (sh.tiebreak) return ' · Tie-breaker!';
+  const left = sh.endsAt - Date.now();
+  return left > 0 ? ` · ${Math.ceil(left / 60000)} min left` : ' · Final game';
+}
+setInterval(() => { if (gameState?.show && $('kb-game')) $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel(); }, 15000);
+on('showUpdate', ({ tiebreak }) => {
+  if (gameState?.show) gameState.show.tiebreak = tiebreak;
+  commentator.league([...tiebreak.flatMap((c, i) => [i ? (i === tiebreak.length - 1 ? ' and ' : ', ') : 'Time! ', { team: c }]), ' are level at the top: a tie-breaker decides the show!'], 3);
+});
+on('showOver', msg => afterAnimations(() => setTimeout(() => showChampionCard(msg), 7000)));   // the last game's card first
+function showChampionCard({ champion, standings, minutes }) {
+  // The champion's card stays up; then the next show (stream page: a short break first, so YouTube starts a new video).
+  const card = $('watch-card'), col = COLOR_MAP[dc(champion)] ?? '#f0c040', t = TEAMS[champion];
+  clearTimeout(watchCardTimer);
+  card.style.setProperty('--win-color', col);
+  card.replaceChildren(
+    el('div', { class: 'wc-emoji' }, '🏆'),
+    el('div', { class: 'wc-head' }, `${minutes}-minute show · champions`),
+    el('div', { class: 'wc-title' }, `${t?.emoji ?? ''} ${t?.name ?? champion}`),
+    el('div', { class: 'standings show-final' }, ...standings.map((x, k) => el('div', { class: 'st-row' },
+      el('span', { class: 'st-rank' }, String(k + 1)), el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(x.color)] ?? '#888'}` }),
+      el('span', { class: 'st-name' }, `${TEAMS[x.color]?.emoji ?? ''} ${TEAMS[x.color]?.short ?? x.color}`),
+      el('span', { class: 'st-pts' }, `${x.wins}–${x.games - x.wins}`)))));
+  card.style.display = 'flex';
+  const a = $('board-area').getBoundingClientRect(), r = $('board-canvas').getBoundingClientRect();
+  card.style.left = (r.left - a.left + r.width / 2) + 'px'; card.style.top = (r.top - a.top + r.height / 2) + 'px';
+  if (!KIOSK) return;
+  const q = new URLSearchParams(location.search), hold = 30000;
+  setTimeout(() => {
+    // break=<seconds>: ask the stream to pause (the headless streamer stops sending), so the next show is a new video.
+    const brk = Number(q.get('break')) || 0, key = q.get('record');
+    if (brk && key) fetch(`/stream-break?key=${encodeURIComponent(key)}&sec=${brk}`, { method: 'POST' }).catch(() => {});
+    setTimeout(() => location.reload(), brk * 1000 + 2000);
+  }, hold);
+}
+
 function startKiosk() {
   const q = new URLSearchParams(location.search);
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
   myName = 'Viewer' + Math.floor(1000 + Math.random() * 9000);
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal' });
+  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal', show: Number(q.get('show')) || 0 });
 }
 if (KIOSK) {
   const q = new URLSearchParams(location.search);

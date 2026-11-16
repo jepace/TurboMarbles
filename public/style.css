@@ -967,3 +967,4 @@ body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line
 .wc-over { font-size: 1.1rem; font-weight: 600; letter-spacing: 0; color: #dfe6f2; }
 #watch-card .wc-mvp { font-size: 1.15rem; color: #f0c040; }
 body.kiosk #watch-card .wc-title { font-size: 3.4rem; }
+.standings.show-final { min-width: 16rem; font-size: 1.2rem; margin-top: 0.4rem; }

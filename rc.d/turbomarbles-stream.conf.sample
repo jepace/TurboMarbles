@@ -6,6 +6,9 @@ STREAM_KEY=
 # The page to stream (stream page options: players, speed, theme, music, commentary…).
 STREAM_PAGE=https://marbles.pacehouse.com/?watch=robots&players=6&lite=1
 # To keep each game's music as MP3 on the server, add &record=<RECORD_KEY from turbomarbles.conf>.
+# Timed shows (one YouTube video each): &show=60&break=60&record=<RECORD_KEY> — a 60-minute show, the
+# champion, then a 60 s break in which this streamer stops sending (YouTube ends the video), then a new show.
+# Leave show= out for an endless stream.
 # 1280x720 + 2500k, or 1920x1080 + 4500k.
 STREAM_SIZE=1280x720
 STREAM_VBITRATE=2500k

@@ -77,7 +77,12 @@ sleep 8
 
 # ffmpeg, restarted if it drops (network blips); the whole script exits (and the
 # service restarts it) if the screen or the browser dies.
+# Breaks between shows (the page asks the server; see /stream-state.json): stop
+# sending until the break is over, so YouTube ends that video and starts a new one.
+STATE_URL="${STREAM_STATE_URL:-$(echo "$PAGE" | sed -E 's#^(https?://[^/]+).*#\1#')/stream-state.json}"
+on_break() { fetch -qo - "$STATE_URL" 2>/dev/null | grep -q '"break":true' || curl -fsS "$STATE_URL" 2>/dev/null | grep -q '"break":true'; }
 while kill -0 "$XVFB" 2>/dev/null && kill -0 "$CHR" 2>/dev/null; do
+  if on_break; then sleep 5; continue; fi
   ffmpeg -hide_banner -loglevel warning \
     -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$FPS" -video_size "${W}x${H}" -i "$DISP" \
     -thread_queue_size 512 -f pulse -i tm.monitor \
@@ -86,6 +91,11 @@ while kill -0 "$XVFB" 2>/dev/null && kill -0 "$CHR" 2>/dev/null; do
     -c:a aac -b:a 160k -ar 44100 \
     -f flv "$RTMP/$KEY" &
   FF=$!
+  # Watch for a break while ffmpeg runs.
+  while kill -0 "$FF" 2>/dev/null; do
+    sleep 10
+    if on_break; then echo "stream: break between shows" >&2; kill "$FF"; break; fi
+  done
   wait "$FF"
   echo "stream: ffmpeg exited ($?), restarting in 5 s" >&2
   sleep 5

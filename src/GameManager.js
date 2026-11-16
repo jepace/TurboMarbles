@@ -96,7 +96,7 @@ function genId() {
 // the socket's current room. (Previously a socket could create several rooms
 // but was only tracked in the last, so the others leaked forever.)
 
-export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false, matchTo = 0, watch = false, pace = 1.5 } = {}) {
+export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = false, matchTo = 0, watch = false, pace = 1.5, showMinutes = 0 } = {}) {
   if (sessions.has(hostWs._id)) leaveRoom(hostWs);
   sweepStaleLobbies();
   if (rooms.size >= MAX_TOTAL_ROOMS) return { error: 'Server is full' };
@@ -157,6 +157,8 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
   // the next; the host only watches, until they quit. Nothing is stored.
   if (watch) {
     room.watch = true;
+    // A show: after showMinutes the game in progress finishes, then the champion (0 = endless).
+    if (showMinutes > 0) room.show = { endsAt: Date.now() + showMinutes * 60000, minutes: showMinutes, tiebreak: null, over: false };
     room.match = null;
     // Robots-only rooms play slower than robots in a game with people: at the
     // default 1.5× a robot move comes every ~0.9 s and a turn starts after
@@ -226,11 +228,33 @@ export const ROBOT_NAMES = ['Robot', ...Object.values(ROBOT_COLOR_NAMES).flat()]
 const seatPlayers = room => room.slots.map(s => ({ id: s.playerId, name: s.name, color: s.color, isRobot: s.isRobot }));
 
 // League rooms: each seat is its colour's team.
+// A show's standings (this room's session): most wins, then points; a tie at the
+// top (wins and points level) goes to a tie-breaker game between those teams.
+function showChampion(room) {
+  const teams = room._league?.session?.teams ?? {};
+  const standings = Object.entries(teams).map(([color, t]) => ({ color, wins: t.wins ?? 0, points: t.points ?? 0, games: t.games ?? 0 }))
+    .sort((a, b) => b.wins - a.wins || b.points - a.points);
+  const top = standings[0];
+  const level = top ? standings.filter(x => x.wins === top.wins && x.points === top.points) : [];
+  return { color: top?.color ?? null, tied: level.length > 1 ? level.map(x => x.color) : null, standings };
+}
+// (For tests.)
+export const _show = { showChampion: r => showChampion(r), seatTiebreak: (r, c) => seatTiebreak(r, c), beginGame: (r, p) => beginGame(r, p), seatPlayers: r => seatPlayers(r) };
+// The tie-breaker: only the tied teams, evenly spaced.
+function seatTiebreak(room, colors) {
+  const n = colors.length, arms = ARM_MAP[n] ?? colors.map((_, i) => i);
+  room.slots = colors.map((color, i) => ({ index: i, playerId: 'robot-' + i, name: TEAMS[color]?.short ?? color, color, armIndex: arms[i], isRobot: true, ws: null, accountId: null }));
+  room.totalPlayers = n;
+  room.score = Array(n).fill(0); room.wins = Array(n).fill(0);
+  room.forcedLineup = colors;
+}
+
 function assignTeams(room) {
   // Robots-only rooms: a fresh line-up every game. Any teams, in any seats (the
   // seats themselves stay evenly spaced): new rivalries, new music.
   // The teams that have played least this month go next (a fair season).
-  if (room.slots.every(s => s.isRobot)) {
+  if (room.forcedLineup) { const f = room.forcedLineup; room.forcedLineup = null; room.slots.forEach((s, i) => { s.color = f[i]; }); }
+  else if (room.slots.every(s => s.isRobot)) {
     const pool = pickLineup(room.slots.length);
     room.slots.forEach((s, i) => { s.color = pool[i]; });
   }
@@ -430,14 +454,29 @@ function finishGame(room) {
     }, config.dropNextGameMs);
     t.unref?.();
   }
-  if (room.watch) {
+  if (room.watch) setImmediate(() => {
+    if (!rooms.has(room.id) || room.game !== game) return;
+    // A show whose time is up: a champion, or a tie-breaker between the teams level
+    // at the top. (After the result went out: the league tracker counts it first.)
+    if (room.show && Date.now() >= room.show.endsAt && !room.show.over) {
+      const champ = showChampion(room);
+      if (champ.tied) {
+        room.show.tiebreak = champ.tied;
+        broadcast(room, { event: 'showUpdate', tiebreak: champ.tied, standings: champ.standings });
+      } else {
+        room.show.over = true;
+        broadcast(room, { event: 'showOver', champion: champ.color, standings: champ.standings, minutes: room.show.minutes });
+        return;
+      }
+    }
     const t = setTimeout(() => {
       if (rooms.has(room.id) && room.state === 'finished' && room.game === game) {
+        if (room.show?.tiebreak) seatTiebreak(room, room.show.tiebreak);
         beginGame(room, seatPlayers(room));
       }
     }, config.watchNextGameMs);
     t.unref?.();
-  }
+  });
   const ratings = room._ratings ? room.slots.map(s => (s.accountId && room._ratings[s.accountId]) || null) : null;
   rec.ratingPairs = room._ratings?.pairs ?? null;
   room._ratings = null;
@@ -1609,6 +1648,7 @@ function publicState(room) {
     league: !!room.league,
     turnNo: game._turnNo ?? 1,
     gameNo: room.gamesPlayed + (room.state === 'finished' ? 0 : 1),   // this room's game number (1st, 2nd…)
+    show: room.show ? { endsAt: room.show.endsAt, minutes: room.show.minutes, tiebreak: room.show.tiebreak, over: room.show.over } : null,
     players: game.players.map((p, i) => ({
       index: i,
       name: room.slots[i].name,

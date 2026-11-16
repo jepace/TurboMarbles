@@ -95,6 +95,16 @@ app.post('/music-upload', express.raw({ type: () => true, limit: '80mb' }), asyn
   try { const path = await saveRecording(req.body, { song: req.query.song, game: req.query.game, mime: req.headers['content-type'] ?? '' }); console.log('[music] saved', path); res.json({ ok: true }); }
   catch (err) { console.error('[music] save failed', err); res.status(500).end(); }
 });
+// Between shows the stream page asks for a short break (stream page break=<seconds>):
+// the headless streamer polls /stream-state.json and stops sending meanwhile, so
+// YouTube closes that video and the next show starts a new one.
+let streamBreakUntil = 0;
+app.post('/stream-break', (req, res) => {
+  if (!recordKeyOk(req.query.key)) return res.status(403).end();
+  streamBreakUntil = Date.now() + Math.max(10, Math.min(600, Number(req.query.sec) || 60)) * 1000;
+  res.json({ ok: true, until: streamBreakUntil });
+});
+app.get('/stream-state.json', (req, res) => res.json({ break: Date.now() < streamBreakUntil, until: streamBreakUntil }));
 app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null }));
 app.get('/league.json', (req, res) => res.json(leagueOverview()));
 
@@ -278,7 +288,7 @@ function dispatch(ws, msg) {
       const hostColor = typeof msg.hostColor === 'string' ? msg.hostColor : undefined;
       const matchTo = Number.isInteger(msg.matchTo) && msg.matchTo >= 1 && msg.matchTo <= 25 ? msg.matchTo : 0;
       const watch = msg.watch === true;
-      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo: watch ? 0 : matchTo, watch, pace: { slow: 2.2, normal: 1.5, fast: 1 }[msg.speed] ?? 1.5 });
+      const result = createRoom(ws, name, n, hostColor, { cube: msg.cube === true, matchTo: watch ? 0 : matchTo, watch, pace: { slow: 2.2, normal: 1.5, fast: 1 }[msg.speed] ?? 1.5, showMinutes: watch ? Math.max(0, Math.min(600, Number(msg.show) || 0)) : 0 });
       if (result.error) return send(ws, { event: 'error', code: 'CREATE_FAILED', message: result.error });
       ws._room = result.code;
       send(ws, { event: 'roomCreated', ...result });

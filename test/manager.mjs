@@ -8,7 +8,7 @@ import {
   handleUndo, handleCommit, handleAnalyzeGame, handleAnalyzeDeeper, handlePlayOutAll,
   _reset, _getRoom, handleSwapSeats, isWatcher, handleQuit, handleWatchGame, liveGames, startWatchRoom,
 } from '../src/GameManager.js';
-import { config as gmConfig, ROBOT_NAMES } from '../src/GameManager.js';
+import { config as gmConfig, ROBOT_NAMES, _show } from '../src/GameManager.js';
 gmConfig.secureDice = false;   // the tests script dice through Math.random
 
 // ---- Harness ----------------------------------------------------------------
@@ -1141,6 +1141,23 @@ describe('watch mode: robots in every seat, the host only watches', () => {
   assert(room.state === 'playing' && room.game.players.every(p => p.isRobot), 'the game starts with robots only');
   handleQuit(host, r.roomId);
   assert(!_getRoom(r.roomId), 'the last watcher quitting ends a robots-only game');
+});
+
+describe('shows: time up → champion, or a tie-breaker between the tied teams', () => {
+  setup();
+  const host = mockWs();
+  const r = createRoom(host, 'Zed', 6, undefined, { watch: true, showMinutes: 30 });
+  const room = _getRoom(r.roomId);
+  assert(room.show && room.show.minutes === 30, 'a 30-minute show');
+  room._league.session.teams = { blue: { wins: 3, points: 9, games: 5 }, pink: { wins: 3, points: 9, games: 5 }, white: { wins: 1, points: 2, games: 5 } };
+  const c = _show.showChampion(room);
+  assert(c.tied && c.tied.length === 2 && c.tied.includes('blue') && c.tied.includes('pink'), 'level on wins and points: a tie');
+  room._league.session.teams.pink.points = 7;
+  assert(_show.showChampion(room).color === 'blue' && !_show.showChampion(room).tied, 'points break a tie in wins');
+  _show.seatTiebreak(room, ['blue', 'pink']);
+  _show.beginGame(room, _show.seatPlayers(room));
+  assert(room.game.players.length === 2 && room.game.players.map(p => p.color).sort().join() === 'blue,pink', 'the tie-breaker: just the tied teams');
+  handleQuit(host, r.roomId);
 });
 
 describe('watching a human game', () => {
