@@ -2720,11 +2720,18 @@ function renderCube() {
   if (inLeague() && leagueTable) {
     $('score-line').style.display = 'block';
     $('kb-season').textContent = `Season · ${leagueMonthName(leagueMonth)}`;
-    $('score-line').replaceChildren(el('div', { class: 'standings' }, ...leagueTable.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
+    // Each team: won–lost this month, and wins above par (fair across game sizes).
+    const sign = v => `${v > 0.05 ? '+' : v < -0.05 ? '−' : ''}${Math.abs(v ?? 0).toFixed(1)}`;
+    $('score-line').replaceChildren(el('div', { class: 'standings season' },
+      el('div', { class: 'st-row st-head' }, el('span'), el('span'), el('span'),
+        el('span', { class: 'st-rec', title: 'Won – lost this month' }, 'W–L'),
+        el('span', { class: 'st-pts', title: 'Wins above par: a win in a game of n teams counts 1 − 1/n and a loss −1/n, so 2-team and 6-team games count fairly' }, '+/−')),
+      ...leagueTable.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
       el('span', { class: 'st-rank' }, String(k + 1)),
       el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
       el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
-      el('span', { class: 'st-pts' + (t.par > 0.05 ? ' plus' : t.par < -0.05 ? ' minus' : ''), title: 'Wins above par: fair across game sizes' }, `${t.par > 0.05 ? '+' : t.par < -0.05 ? '−' : ''}${Math.abs(t.par ?? 0).toFixed(1)}`)))));
+      el('span', { class: 'st-rec' }, `${t.wins}–${t.games - t.wins}`),
+      el('span', { class: 'st-pts' + (t.par > 0.05 ? ' plus' : t.par < -0.05 ? ' minus' : '') }, sign(t.par))))));
   } else if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
   else $('score-line').textContent = line;
 }
