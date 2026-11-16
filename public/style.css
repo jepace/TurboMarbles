@@ -950,8 +950,20 @@ body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line
 /* My turn: my row in the game list pulses (instead of a 'Your turn' line). */
 .player-row.my-turn { animation: my-turn 1.1s ease-in-out infinite; }
 @keyframes my-turn { 50% { border-color: #f0c040; box-shadow: 0 0 0 3px #f0c04066; background: #f0c04022; } }
-.standings.season .st-row { grid-template-columns: 1.4em 12px 1fr auto auto 3.2em; column-gap: 8px; }
+.standings.season .st-row { grid-template-columns: 1.2em 10px minmax(0, 1fr) auto auto auto; column-gap: 6px; }
+.standings.season .st-rec, .standings.season .st-pts { font-size: 0.82em; }
+.standings.season .st-name { overflow: visible; text-overflow: clip; }
 .st-rec { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 .standings.season .st-pts { text-align: right; }
 .st-head span { font-size: 0.65em; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; }
 .log-hit { font-weight: 700; }
+
+/* The end-of-game card: readable at a glance. */
+#watch-card { align-items: center; text-align: center; gap: 0.6rem; min-width: 24rem; padding: 1.6rem 2.4rem; border: 3px solid var(--win-color, #f0c040); box-shadow: 0 0 0 6px color-mix(in srgb, var(--win-color, #f0c040) 30%, transparent), 0 10px 40px #000a; }
+#watch-card .wc-emoji { font-size: 3.2rem; line-height: 1; }
+#watch-card .wc-title { font-size: 2.6rem; color: var(--win-color, #f0c040); justify-content: center; }
+.wc-stamp { font-size: 1.6rem; font-weight: 900; letter-spacing: 1px; color: #ff9a3c; transform: rotate(-3deg); }
+.wc-stamp.bag { color: #ff5a5a; }
+.wc-over { font-size: 1.1rem; font-weight: 600; letter-spacing: 0; color: #dfe6f2; }
+#watch-card .wc-mvp { font-size: 1.15rem; color: #f0c040; }
+body.kiosk #watch-card .wc-title { font-size: 3.4rem; }

@@ -3786,23 +3786,26 @@ function showWatchCard(winnerIndex, result, score) {
   if (!g || winnerIndex == null) return;
   const w = g.players[winnerIndex];
   const losers = result?.losers ?? (result ? g.players.map((_, i) => ({ pi: i, points: result.points })).filter(l => l.pi !== winnerIndex) : []);
-  const pts = g.players.map((_, i) => i === winnerIndex ? losers.reduce((t, l) => t + l.points, 0) : -(losers.find(l => l.pi === i)?.points ?? 0));
-  // Aggros and baggros, by loser (3+ players: some losers may have one, some not).
-  const big = losers.filter(l => (l.mult ?? (result?.baggro ? 3 : result?.aggro ? 2 : 1)) >= 2)
-    .map(l => `${(l.mult ?? (result?.baggro ? 3 : 2)) === 3 ? 'baggro' : 'aggro'} over ${inLeague() ? teamLabel(l.pi) : g.players[l.pi].name}`);
-  const how = result?.dropped ? 'double dropped' : big.length ? big.join(' · ') + '!' : null;
-  const card = $('watch-card');
+  // Up only a few seconds: readable at a glance. The winner, big and in their
+  // colour; a stamp for an aggro / baggro (or a dropped double); the marble of
+  // the game. The numbers live in the Season table and on the League page.
+  const card = $('watch-card'), col = COLOR_MAP[dc(w.color)] ?? '#f0c040';
+  card.style.setProperty('--win-color', col);
+  const stamps = [
+    ...losers.filter(l => (l.mult ?? (result?.baggro ? 3 : result?.aggro ? 2 : 1)) >= 2).map(l => {
+      const bag = (l.mult ?? (result?.baggro ? 3 : 2)) === 3;
+      return el('div', { class: 'wc-stamp' + (bag ? ' bag' : '') }, bag ? 'BAGGRO!' : 'AGGRO!',
+        el('span', { class: 'wc-over' }, ` over ${inLeague() ? teamLabel(l.pi) : g.players[l.pi].name}`));
+    }),
+    ...(result?.dropped ? [el('div', { class: 'wc-stamp' }, 'DOUBLE DROPPED')] : []),
+  ];
   card.replaceChildren(
-    el('div', { class: 'wc-title' }, el('span', { class: 'wc-dot', style: `background:${COLOR_MAP[dc(w.color)] ?? '#888'}` }), inLeague() ? `${TEAMS[w.color]?.name ?? w.name} win!` : `${w.name} wins!`),
-    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ Marble of the game: ${marbleFullName(leagueMvp[0], leagueMvp[1])} (${TEAMS[leagueMvp[0]]?.short})`) : '',
-    how ? el('div', { class: 'wc-how' }, how) : '',
-    el('div', { class: 'wc-head' }, 'This game'), standings(pts),
-    ...(inLeague() && leagueTable ? [el('div', { class: 'wc-head' }, 'This session'), el('div', { class: 'standings' },
-      ...leagueTable.filter(t => t.sessionGames).sort((a, b) => b.sessionPoints - a.sessionPoints).map((t, k) => el('div', { class: 'st-row' },
-        el('span', { class: 'st-rank' }, String(k + 1)), el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
-        el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
-        el('span', { class: 'st-pts' + (t.sessionPoints > 0 ? ' plus' : t.sessionPoints < 0 ? ' minus' : '') }, `${t.sessionPoints > 0 ? '+' : t.sessionPoints < 0 ? '−' : ''}${Math.abs(t.sessionPoints)}`))))]
-      : [score ? el('div', { class: 'wc-head' }, 'Session') : '', score ? standings(score) : '']));
+    el('div', { class: 'wc-emoji' }, inLeague() ? (TEAMS[w.color]?.emoji ?? '🏆') : '🏆'),
+    el('div', { class: 'wc-title' }, inLeague() ? `${TEAMS[w.color]?.short ?? w.name} win!` : `${w.name} wins!`),
+    ...stamps,
+    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ ${marbleFullName(leagueMvp[0], leagueMvp[1])}`) : '');
+  { const a = $('board-area').getBoundingClientRect(), r = $('board-canvas').getBoundingClientRect();   // on the board's centre
+    card.style.left = (r.left - a.left + r.width / 2) + 'px'; card.style.top = (r.top - a.top + r.height / 2) + 'px'; }
   card.style.display = 'flex';
   clearTimeout(watchCardTimer);
   watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 10000);
