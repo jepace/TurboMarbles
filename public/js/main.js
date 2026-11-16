@@ -2285,7 +2285,9 @@ $('opt-feedback').addEventListener('change', e => { settings.feedback = e.target
 
 on('roomCreated', () => { renderLobbyInvite(); $('btn-lobby-leave').textContent = 'Cancel game'; });
 on('joinedRoom', () => { $('btn-lobby-leave').textContent = 'Leave'; });
-on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, matchTo, watch }) => {
+let recordToken = null;   // a stream page's music uploads (from the server, for its own room)
+on('roomCreated', ({ roomId: rid, code, reconnectToken, color, totalPlayers, slots, cube, matchTo, watch, recordToken: rt }) => {
+  if (KIOSK) recordToken = rt ?? null;
   roomId = rid;
   // Watch mode: the robots' game starts at once; this viewer has no seat.
   if (watch) { watching = true; watchRoomId = rid; myPlayerIndex = null; setReconnectInfo({ roomId: rid, watch: true }); return; }
@@ -2352,7 +2354,7 @@ on('gameStarted', ({ gameState: gs }) => {
   setTimeout(() => commentator.start(gs.players.map(p => ({ name: gs.league && TEAMS[p.color] ? TEAMS[p.color].short : p.name, color: p.color })), settings.music || KIOSK ? songName() : null, gs.league), 0);
   clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
   musicReset();
-  if (RECORD_KEY) setTimeout(() => musicRecordStart(), 200);   // after the song switch
+  if (KIOSK) setTimeout(() => musicRecordStart(), 200);   // the stream page always records (after the song switch)
   applyWatch(gs);
   gameState = gs;
   if (gs.diceCommit) setTimeout(() => log(`🎲 ${KIOSK ? `Dice fixed · ${gs.diceCommit.slice(0, 8)}` : `Dice fixed for this game · fingerprint ${gs.diceCommit.slice(0, 12)}…`}`, null, 'log-dice'), 0);
@@ -2666,9 +2668,9 @@ function showGameOver(winnerIndex) {
   // The game-over window waits for the winning move's animation.
   afterAnimations(() => musicWin(gameState?.players?.[winnerIndex]?.color, !!gameState?.watch));
   // Stream page recording: the game through its fanfare, then upload.
-  if (RECORD_KEY) { const gameNo = gameState?.gameNo; setTimeout(() => musicRecordStop().then(r => {
-    if (!r?.blob?.size) return;
-    fetch(`/music-upload?key=${encodeURIComponent(RECORD_KEY)}&song=${encodeURIComponent(r.song)}&game=${gameNo ?? 0}`, { method: 'POST', headers: { 'Content-Type': r.blob.type }, body: r.blob }).catch(() => {});
+  if (KIOSK) { const gameNo = gameState?.gameNo; setTimeout(() => musicRecordStop().then(r => {
+    if (!r?.blob?.size || !(RECORD_KEY || recordToken)) return;
+    fetch(`/music-upload?${RECORD_KEY ? `key=${encodeURIComponent(RECORD_KEY)}` : `token=${recordToken}`}&song=${encodeURIComponent(r.song)}&game=${gameNo ?? 0}`, { method: 'POST', headers: { 'Content-Type': r.blob.type }, body: r.blob }).catch(() => {});
   }), 9000); }
   if (!watching) afterAnimations(() => { if (gameState?.phase === 'GAME_OVER') $('win-overlay').style.display = 'flex'; });
   $('cube-offer').style.display = 'none';
@@ -4005,6 +4007,9 @@ const commentaryOn = () => settings.commentary ?? true;
 $('btn-gear').addEventListener('click', () => { $('opt-commentary').checked = commentaryOn(); });
 $('opt-commentary').addEventListener('change', e => { settings.commentary = e.target.checked; saveSettings(); placeCommentary(); });
 
+
+// The music podcast link: shown once the feed has episodes.
+fetch('/podcast.xml', { method: 'HEAD' }).then(r => { if (r.ok && !KIOSK) $('nav-podcast').style.display = ''; }).catch(() => {});
 
 // ---- The live stream link (server setting STREAM_URL) ----
 fetch('/site.json').then(r => r.json()).then(({ streamUrl }) => {

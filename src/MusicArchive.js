@@ -22,12 +22,12 @@ export function saveRecording(buf, { song, game, mime = 'audio/webm' } = {}) {
   mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-');
   const base = `${stamp}_game${Number(game) || 0}`;
-  const ext = mime.includes('ogg') ? 'ogg' : 'webm';
+  const ext = mime.includes('mp4') || mime.includes('aac') ? 'm4a' : mime.includes('ogg') ? 'ogg' : 'webm';
   const raw = join(dir, `${base}.${ext}`);
   writeFileSync(raw, buf);
   const ff = FFMPEG();
   const done = path => { prune(dir); return path; };
-  if (!ff) return Promise.resolve(done(raw));
+  if (!ff || ext === 'm4a') return Promise.resolve(done(raw));   // M4A is fine for podcasts as it is
   const mp3 = join(dir, `${base}.mp3`);
   return new Promise(resolve => {
     const p = spawn(ff, ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-codec:a', 'libmp3lame', '-q:a', '3', mp3], { stdio: ['ignore', 'ignore', 'pipe'] });
@@ -42,7 +42,7 @@ export function saveRecording(buf, { song, game, mime = 'audio/webm' } = {}) {
 
 // Keep the newest KEEP recordings in a song's folder.
 function prune(dir) {
-  const files = readdirSync(dir).filter(f => /\.(mp3|webm|ogg)$/.test(f)).sort().reverse();
+  const files = readdirSync(dir).filter(f => /\.(mp3|m4a|webm|ogg)$/.test(f)).sort().reverse();
   for (const f of files.slice(KEEP)) { try { unlinkSync(join(dir, f)); } catch {} }
 }
 
@@ -54,7 +54,7 @@ export function listRecordings() {
   if (!existsSync(root)) return out;
   for (const song of readdirSync(root)) {
     let files; try { files = readdirSync(join(root, song)); } catch { continue; }
-    for (const file of files) if (/\.mp3$/.test(file)) {
+    for (const file of files) if (/\.(mp3|m4a)$/.test(file)) {
       const st = statSync(join(root, song, file));
       out.push({ song, title: SONG_TITLE(song), file, size: st.size, at: st.mtimeMs });
     }
@@ -62,7 +62,7 @@ export function listRecordings() {
   return out.sort((a, b) => b.at - a.at);
 }
 export const recordingPath = (song, file) => {
-  if (!/^[a-z0-9-]{1,40}$/.test(song) || !/^[\w-]+\.mp3$/.test(file)) return null;   // no path tricks
+  if (!/^[a-z0-9-]{1,40}$/.test(song) || !/^[\w-]+\.(mp3|m4a)$/.test(file)) return null;   // no path tricks
   const p = join(musicDir(), song, file);
   return existsSync(p) ? p : null;
 };

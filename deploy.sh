@@ -38,6 +38,9 @@ if [ "${1}" = "--dry-run" ]; then
     exit 0
 fi
 
+# ffmpeg turns the stream's music recordings into MP3s for the podcast.
+bastille cmd marbles sh -c 'command -v ffmpeg >/dev/null || pkg install -y ffmpeg' || echo "(ffmpeg not installed: recordings stay as recorded)"
+
 # Install / update production dependencies inside the jail.
 bastille cmd marbles sh -c "cd /var/www/marbles && npm install --omit=dev --prefer-offline"
 

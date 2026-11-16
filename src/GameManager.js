@@ -182,7 +182,9 @@ export function createRoom(hostWs, hostName, totalPlayers, hostColor, { cube = f
 
   // Return the hostId as reconnectToken so the host can authenticate reconnects.
   // The client must store this and send it back in any 'reconnect' action.
-  return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers, cube: room.cube, watch: !!room.watch,
+  // Robot watch rooms record their music: a token (to the host only) lets that page upload it.
+  if (room.watch) room.recordToken = randomBytes(16).toString('hex');
+  return { roomId, code, reconnectToken: hostId, color: slots[0].color, totalPlayers, cube: room.cube, watch: !!room.watch, recordToken: room.recordToken ?? null,
     matchTo: room.match?.length ?? 0,
     slots: slots.map(s => ({ index: s.index, name: s.name, color: s.color, arm: s.armIndex, isRobot: s.isRobot, filled: !!s.playerId })) };
 }
@@ -237,6 +239,17 @@ function showChampion(room) {
   const top = standings[0];
   const level = top ? standings.filter(x => x.wins === top.wins && x.points === top.points) : [];
   return { color: top?.color ?? null, tied: level.length > 1 ? level.map(x => x.color) : null, standings };
+}
+// A music upload's token: a live robot watch room's, once per finished game.
+export function recordTokenOk(token, game) {
+  if (typeof token !== 'string' || token.length !== 32) return false;
+  const room = [...rooms.values()].find(r => r.recordToken === token);
+  if (!room || !room.watch) return false;
+  room._uploaded ??= new Set();
+  const g = Number(game) || 0;
+  if (room._uploaded.has(g) || g > room.gamesPlayed) return false;
+  room._uploaded.add(g);
+  return true;
 }
 // (For tests.)
 export const _show = { showChampion: r => showChampion(r), seatTiebreak: (r, c) => seatTiebreak(r, c), beginGame: (r, p) => beginGame(r, p), seatPlayers: r => seatPlayers(r) };

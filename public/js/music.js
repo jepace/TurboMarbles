@@ -567,7 +567,8 @@ export function musicRecordStart() {
   if (!ctx || recorder || typeof MediaRecorder === 'undefined') return false;
   const dest = ctx.createMediaStreamDestination();
   master.connect(dest);
-  const type = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported?.(t));
+  // AAC (M4A) when the browser can: podcasts take it as is; else Opus (the server converts with ffmpeg).
+  const type = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4', 'audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/webm'].find(t => MediaRecorder.isTypeSupported?.(t));
   const rec = new MediaRecorder(dest.stream, type ? { mimeType: type, audioBitsPerSecond: 128000 } : undefined), parts = [];
   rec.ondataavailable = e => { if (e.data.size) parts.push(e.data); };
   recorder = { rec, parts, dest, song: (blend?.to ?? song).name };

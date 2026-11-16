@@ -10,7 +10,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import {
+import { recordTokenOk,
   createRoom, joinRoom, streamRoomsWatched, streamChat, isWatcher, startWatchRoom, liveGames, handleWatchGame, addRobot, removeRobot, startGame,
   handleRoll, handleMove, handleForfeitDie,
   handleDisconnect, handleReconnect, getRoomByWs, roomCodeOf, seatAccountOf, serverSnapshot,
@@ -90,7 +90,7 @@ app.use(helmet());
 // Site settings the page needs: the live stream link (STREAM_URL), if any.
 // The stream page uploads each game's music (?record=<RECORD_KEY> on its URL).
 app.post('/music-upload', express.raw({ type: () => true, limit: '80mb' }), async (req, res) => {
-  if (!recordKeyOk(req.query.key)) return res.status(403).end();
+  if (!recordKeyOk(req.query.key) && !recordTokenOk(req.query.token, req.query.game)) return res.status(403).end();
   if (!req.body?.length) return res.status(400).end();
   try { const path = await saveRecording(req.body, { song: req.query.song, game: req.query.game, mime: req.headers['content-type'] ?? '' }); console.log('[music] saved', path); res.json({ ok: true }); }
   catch (err) { console.error('[music] save failed', err); res.status(500).end(); }
@@ -109,7 +109,7 @@ app.get('/stream-state.json', (req, res) => res.json({ break: Date.now() < strea
 app.get('/music/:song/:file', (req, res) => {
   const p = recordingPath(req.params.song, req.params.file);
   if (!p) return res.status(404).end();
-  res.type('audio/mpeg').sendFile(p);
+  res.type(p.endsWith('.m4a') ? 'audio/mp4' : 'audio/mpeg').sendFile(p);
 });
 app.get('/podcast.xml', (req, res) => {
   const base = (process.env.PUBLIC_URL || process.env.ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
@@ -123,7 +123,7 @@ app.get('/podcast.xml', (req, res) => {
     return `  <item>
     <title>${esc(`${r.title} — ${when.toISOString().slice(0, 10)}${game ? `, game ${game}` : ''}`)}</title>
     <description>${esc(`The ${r.title} theme, as it played live through one TurboMarbles robot league game: every bonk, hub trip and race to home shaped it.`)}</description>
-    <enclosure url="${esc(url)}" length="${r.size}" type="audio/mpeg"/>
+    <enclosure url="${esc(url)}" length="${r.size}" type="${r.file.endsWith('.m4a') ? 'audio/mp4' : 'audio/mpeg'}"/>
     <guid isPermaLink="false">${esc(`${r.song}/${r.file}`)}</guid>
     <pubDate>${when.toUTCString()}</pubDate>
   </item>`;
