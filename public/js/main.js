@@ -4165,7 +4165,7 @@ function renderLeague() {
   if (!d) return;
   const teamCell = t => el('span', { class: 'lg-team' }, lgDot(t.color), `${t.emoji ?? ''} ${t.name}`);
   if (leagueTab === 'standings') {
-    const season = [...d.teams].sort((a, b) => (b.season.par ?? 0) - (a.season.par ?? 0) || (b.season.wins ?? 0) - (a.season.wins ?? 0));
+    const season = [...d.teams].sort((a, b) => (b.season.par ?? 0) - (a.season.par ?? 0) || (b.season.points ?? 0) - (a.season.points ?? 0) || (b.season.wins ?? 0) - (a.season.wins ?? 0));
     const parTxt = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v ?? 0).toFixed(1)}`;
     const career = [...d.teams].sort((a, b) => (b.career.wins ?? 0) / Math.max(1, b.career.games ?? 0) - (a.career.wins ?? 0) / Math.max(1, a.career.games ?? 0));
     box.replaceChildren(

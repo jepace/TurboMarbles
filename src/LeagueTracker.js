@@ -303,7 +303,7 @@ export class LeagueTracker {
         const sea = store.leagueGet('season:' + mon, c), ses = this.session.teams[c];
         return { color: c, games: sea.games ?? 0, wins: sea.wins ?? 0, points: sea.points ?? 0,
           par: sea.par ?? 0, pipsPerTurn: sea.turns ? (sea.pips ?? 0) / sea.turns : null, sessionGames: ses?.games ?? 0, sessionWins: ses?.wins ?? 0, sessionPoints: ses?.points ?? 0 };
-      }).sort((a, b) => b.par - a.par || b.wins - a.wins || a.games - b.games),
+      }).sort((a, b) => b.par - a.par || b.points - a.points || b.wins - a.wins || a.games - b.games),
     };
   }
   sendState(extra = {}) { const s = this.state(); if (s) this.send({ event: 'leagueState', ...s, ...extra }); }
