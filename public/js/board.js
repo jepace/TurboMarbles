@@ -235,9 +235,9 @@ export function clearAllMarbleOverrides() {
 }
 
 // Which base hole each marble sits in: by the player's baseOrder (marble ids,
-// first out first), the leader in the hole beside the start square, then
-// outwards; without one, marble id = hole.
-const RANK_HOLE = [1, 2, 0, 3];
+// first out first): the best in the first hole, then in order along the row;
+// without one, marble id = hole.
+const RANK_HOLE = [0, 1, 2, 3];
 let baseHoleOf = [];   // [playerIndex][marbleId] → hole
 function baseHole(playerIndex, marbleId) { return baseHoleOf[playerIndex]?.[marbleId] ?? marbleId; }
 export function getBasePosition(playerIndex, marbleId) {
