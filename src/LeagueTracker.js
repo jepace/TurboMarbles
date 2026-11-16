@@ -41,6 +41,8 @@ export class LeagueTracker {
         const t = g.teams[this.colorOf(msg.playerIndex)];
         if (!t) return;
         g.dice = msg.dice;
+        // A turn starts with its first roll (6s give more rolls in the same turn).
+        if (g.turnOwner !== msg.playerIndex) { g.turnOwner = msg.playerIndex; t.turns = (t.turns ?? 0) + 1; }
         g.rolls++; t.rolls++; t.sixes += msg.dice.filter(d => d === 6).length; if (msg.dice[0] === msg.dice[1]) t.doubles++;
         // Stuck in the hub: a turn starting with a marble there.
         const inHub = game?.players[msg.playerIndex]?.marbles.findIndex(m => m.zone === 'center') ?? -1;
@@ -117,7 +119,7 @@ export class LeagueTracker {
         return this.standings();
       }
       case 'gameResult': return this.finish(msg);
-      case 'turnChanged': return this.sendState();   // the live game numbers for the teams' cards
+      case 'turnChanged': if (g) g.turnOwner = null; return this.sendState();   // the live game numbers for the teams' cards
     }
   }
 
@@ -193,12 +195,12 @@ export class LeagueTracker {
       const before = store.leagueGet('team', t.color);
       const streak = won ? (before.streak ?? 0) + 1 : 0, lossStreak = won ? 0 : (before.lossStreak ?? 0) + 1;
       const tm = Object.values(g.marbles).filter(m => m.color === t.color), sum = k => tm.reduce((x, m) => x + m[k], 0);
-      store.leagueAdd('team', t.color, { distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), exits: sum('exits'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
+      store.leagueAdd('team', t.color, { turns: t.turns ?? 0, distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), exits: sum('exits'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
       // Wins above par: a win is worth 1 − 1/n, a loss −1/n (n teams), so games of any size compare.
       const par = (won ? 1 : 0) - 1 / n;
-      store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, par });
+      store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, par, turns: t.turns ?? 0, distance: t.distance });
       store.leagueAdd('team', t.color, { par });
       // How often each pair of teams has met this month (for fair line-ups).
       for (const o of Object.keys(g.teams)) if (o > t.color) store.leagueAdd('meets:' + mon, `${t.color}|${o}`, { games: 1 });
@@ -280,7 +282,7 @@ export class LeagueTracker {
       // This game so far, per team (for the team cards).
       game: this.g ? Object.fromEntries(Object.values(this.g.teams).map(t => {
         const ms = Object.values(this.g.marbles).filter(m => m.color === t.color), sum = k => ms.reduce((a, m) => a + (m[k] ?? 0), 0);
-        return [t.color, { rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, bonks: t.bonks, bonked: t.bonked, distance: t.distance,
+        return [t.color, { turns: t.turns ?? 0, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, bonks: t.bonks, bonked: t.bonked, distance: t.distance,
           starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubTurns: t.hubTurns, exits: sum('exits'), homes: ms.filter(m => m.homeOrder).length, maxDeficit: t.maxDeficit }];
       })) : null,
       // The month's table, all six teams (the line-up changes every game).
