@@ -985,7 +985,7 @@ function marbleCard(hit) {
     el('div', { class: 'mc-bio' }, info.bio),
     el('div', { class: 'mc-cheer' }, `“${info.cheer}”`),
     el('div', { class: 'mc-stats' }, stat(st.games, 'games'), stat(st.homes, 'home'), stat(st.firstHomes, 'first home'), stat(st.mvps, 'MVP'),
-      stat(st.bonks, 'bonks'), stat(st.bonked, 'bonked'), stat(st.hubTrips, 'hub trips'), stat((st.distance ?? 0).toLocaleString(), 'spaces')),
+      stat(st.bonks, 'bonks'), stat(st.bonked, 'bonked'), stat(st.hubTrips, 'hub trips'), stat(st.games ? ((st.pips ?? 0) / st.games).toFixed(0) : '–', 'pips / game')),
     el('div', { class: 'mc-where' }, `Now: ${where}`),
   ];
 }
@@ -2725,12 +2725,14 @@ function renderCube() {
     $('score-line').replaceChildren(el('div', { class: 'standings season' },
       el('div', { class: 'st-row st-head' }, el('span'), el('span'), el('span'),
         el('span', { class: 'st-rec', title: 'Won – lost this month' }, 'W–L'),
+        el('span', { class: 'st-rec', title: 'Race progress per turn this month: pips gained (hub and star-circle shortcuts count big; bonks and going round again count against)' }, 'Pips'),
         el('span', { class: 'st-pts', title: 'Wins above par: a win in a game of n teams counts 1 − 1/n and a loss −1/n, so 2-team and 6-team games count fairly' }, '+/−')),
       ...leagueTable.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
       el('span', { class: 'st-rank' }, String(k + 1)),
       el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
       el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
       el('span', { class: 'st-rec' }, `${t.wins}–${t.games - t.wins}`),
+      el('span', { class: 'st-rec' }, t.pipsPerTurn != null ? t.pipsPerTurn.toFixed(1) : '–'),
       el('span', { class: 'st-pts' + (t.par > 0.05 ? ' plus' : t.par < -0.05 ? ' minus' : '') }, sign(t.par))))));
   } else if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
   else $('score-line').textContent = line;
@@ -4068,7 +4070,7 @@ function teamCard(color, kind) {
   if (kind === 'game') {
     const g = leagueGame?.[color] ?? {};
     return [...head, el('div', { class: 'mc-where' }, 'This game'),
-      el('div', { class: 'mc-stats' }, stat(g.homes, 'home'), stat(g.distance, 'spaces'), stat(g.turns ? (g.distance / g.turns).toFixed(1) : '–', 'per turn'), stat(g.bonks, 'bonks'), stat(g.bonked, 'bonked'),
+      el('div', { class: 'mc-stats' }, stat(g.homes, 'home'), stat(g.distance, 'spaces'), stat(g.turns ? (g.pips / g.turns).toFixed(1) : '–', 'pips / turn'), stat(g.bonks, 'bonks'), stat(g.bonked, 'bonked'),
         stat(g.rolls, 'rolls'), stat(g.sixes, 'sixes'), stat(g.doubles, 'doubles'), stat(g.hubTrips, 'hub trips'),
         stat(g.exits, 'left base'), stat(g.starSpaces, 'star hops'), stat(g.hubTurns, 'hub waits'), stat(g.maxDeficit, 'most behind'))];
   }
@@ -4079,7 +4081,7 @@ function teamCard(color, kind) {
     el('div', { class: 'mc-stats' }, stat(s.games, 'games'), stat(s.wins, 'wins'), stat(`${(s.par ?? 0) >= 0 ? '+' : '−'}${Math.abs(s.par ?? 0).toFixed(1)}`, 'above par'), stat(s.points, 'points')),
     el('div', { class: 'mc-where' }, 'Career'),
     el('div', { class: 'mc-stats' }, stat(c.games, 'games'), stat(c.wins, 'wins'), stat(pct(c.wins ?? 0, c.games ?? 0), 'win %'), stat(c.bestStreak, 'best streak'),
-      stat(c.bonks, 'bonks'), stat(c.bonked, 'bonked'), stat(c.comebacks, 'comebacks'), stat(c.turns ? ((c.distance ?? 0) / c.turns).toFixed(1) : '–', 'spaces / turn'))];
+      stat(c.bonks, 'bonks'), stat(c.bonked, 'bonked'), stat(c.comebacks, 'comebacks'), stat(c.turns ? ((c.pips ?? 0) / c.turns).toFixed(1) : '–', 'pips / turn'))];
 }
 document.addEventListener('mouseover', e => {
   const row = e.target.closest?.('[data-card][data-team]');
@@ -4160,8 +4162,8 @@ function renderLeague() {
       lgTable(['#', 'Team', 'Played', 'Won', 'Above par', 'Strength', 'Points', 'Bonks'], season.map((t, i) => [String(i + 1), teamCell(t), String(t.season.games ?? 0), String(t.season.wins ?? 0), parTxt(t.season.par), (t.strength ?? 1).toFixed(2), lgSgn(t.season.points), String(t.season.bonks ?? 0)])),
       el('p', { class: 'muted', style: 'font-size:0.85rem' }, 'Above par: wins counted fairly across game sizes (a win is worth 1 − 1/n, a loss −1/n, with n teams in the game). Strength: how likely a team is to win against the field it faced (1.00 = average; 1.50 wins half again as often), fitted to every game this month.'),
       el('h3', {}, 'All time'),
-      lgTable(['Team', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggro\'d', 'Sixes / roll', 'Spaces / turn', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
-        career.map(t => { const c = t.career; return [teamCell(t), t.captain ?? '', String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–', c.turns ? ((c.distance ?? 0) / c.turns).toFixed(1) : '–',
+      lgTable(['Team', 'Captain', 'Played', 'Won', 'Win %', 'Points', 'Streak', 'Best', 'Comebacks', 'Wire to wire', 'Aggro\'d', 'Sixes / roll', 'Pips / turn', 'Spaces', 'Left base', 'Star circle', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+        career.map(t => { const c = t.career; return [teamCell(t), t.captain ?? '', String(c.games ?? 0), String(c.wins ?? 0), lgPct(c.wins, c.games), lgSgn(c.points), String(c.streak ?? 0), String(c.bestStreak ?? 0), String(c.comebacks ?? 0), String(c.wireToWire ?? 0), String((c.aggrosTaken ?? 0) + (c.baggrosTaken ?? 0)), c.rolls ? ((c.sixes ?? 0) / c.rolls).toFixed(2) : '–', c.turns ? ((c.pips ?? 0) / c.turns).toFixed(1) : '–',
           (c.distance ?? 0).toLocaleString(), String(c.exits ?? 0), String(c.starSpaces ?? 0), c.hubWaits ? `${Math.round(100 * (c.hubExits ?? 0) / c.hubWaits)}%` : '–', String(c.goArounds ?? 0), String(c.hubHits ?? 0), String(c.circleHits ?? 0)]; })),
       d.rivals.length ? el('h3', {}, 'Rivalries (bonks between them)') : '',
       d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');

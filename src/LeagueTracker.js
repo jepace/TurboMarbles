@@ -16,6 +16,16 @@ import { pipCount, PLAYER_CONFIG, ALL_STARS } from '../public/js/constants.js';
 import * as store from './Store.js';
 
 const START_PIPS = 346;
+// Net progress in pips (the race): shortcuts through the hub and round the
+// star circle count big, a bonk or going round again counts against.
+const teamPips = p => START_PIPS - pipCount(armOf(p.config.color), p.marbles);
+const BASE_PIPS = 84;   // a marble in base is 84 squares from its home entry
+function marblePips(p, m) {
+  if (m.zone === 'base') return 0;
+  if (m.zone === 'home') return BASE_PIPS;
+  const one = pipCount(armOf(p.config.color), [m]) - 10;   // pipCount adds the four empty home slots (1+2+3+4)
+  return BASE_PIPS - one;
+}
 const armOf = color => PLAYER_CONFIG.findIndex(c => c.color === color);
 const season = (t = Date.now()) => new Date(t).toISOString().slice(0, 7);   // '2026-11'
 const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
@@ -195,12 +205,13 @@ export class LeagueTracker {
       const before = store.leagueGet('team', t.color);
       const streak = won ? (before.streak ?? 0) + 1 : 0, lossStreak = won ? 0 : (before.lossStreak ?? 0) + 1;
       const tm = Object.values(g.marbles).filter(m => m.color === t.color), sum = k => tm.reduce((x, m) => x + m[k], 0);
-      store.leagueAdd('team', t.color, { turns: t.turns ?? 0, distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), exits: sum('exits'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
+      const pl = game.players.find(p => p.color === t.color), net = pl ? teamPips(pl) : 0;
+      store.leagueAdd('team', t.color, { pips: net, turns: t.turns ?? 0, distance: t.distance, starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubExits: sum('hubExits'), hubWaits: sum('hubTurns'), exits: sum('exits'), goArounds: sum('goArounds'), hubHits: sum('hubHits'), circleHits: sum('circleHits'), games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, bonked: t.bonked, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, hubTurns: t.hubTurns,
         aggrosTaken: big === 2 ? 1 : 0, baggrosTaken: big === 3 ? 1 : 0, wireToWire: won && wire ? 1 : 0, comebacks: won && t.maxDeficit >= 60 ? 1 : 0 });
       store.leagueSet('team', t.color, { streak, lossStreak, bestStreak: Math.max(before.bestStreak ?? 0, streak) });
       // Wins above par: a win is worth 1 − 1/n, a loss −1/n (n teams), so games of any size compare.
       const par = (won ? 1 : 0) - 1 / n;
-      store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, par, turns: t.turns ?? 0, distance: t.distance });
+      store.leagueAdd('season:' + mon, t.color, { games: 1, wins: won ? 1 : 0, points: pts[t.color] ?? 0, bonks: t.bonks, par, turns: t.turns ?? 0, distance: t.distance, pips: net });
       store.leagueAdd('team', t.color, { par });
       // How often each pair of teams has met this month (for fair line-ups).
       for (const o of Object.keys(g.teams)) if (o > t.color) store.leagueAdd('meets:' + mon, `${t.color}|${o}`, { games: 1 });
@@ -216,7 +227,8 @@ export class LeagueTracker {
     if (aggroed?.length === 1) notes.push([1, { team: wColor }, pick([' win an aggro over ', ' take an aggro off ']), { team: aggroed[0] }, ': not one marble home.']);
     else if (aggroed?.length > 1) notes.push([1, { team: wColor }, ' win aggros over ', ...aggroed.flatMap((c, i) => [i ? (i === aggroed.length - 1 ? ' and ' : ', ') : '', { team: c }]), ': nothing home.']);
     for (const m of Object.values(g.marbles)) {
-      store.leagueAdd('marble', `${m.color}:${m.id}`, { distance: m.distance, starSpaces: m.starSpaces, hubTurns: m.hubTurns, hubExits: m.hubExits, hubPassThrough: m.hubPassThrough, goArounds: m.goArounds, hubHits: m.hubHits, circleHits: m.circleHits, games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
+      const mp = (() => { const pl = game.players.find(p => p.color === m.color); return pl ? marblePips(pl, pl.marbles[m.id]) : 0; })();
+      store.leagueAdd('marble', `${m.color}:${m.id}`, { pips: mp, distance: m.distance, starSpaces: m.starSpaces, hubTurns: m.hubTurns, hubExits: m.hubExits, hubPassThrough: m.hubPassThrough, goArounds: m.goArounds, hubHits: m.hubHits, circleHits: m.circleHits, games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
     }
     for (const [pair, c] of Object.entries(g.rivals)) store.leagueAdd('rival', pair, { bonks: c });
     this.session.games++;
@@ -282,14 +294,15 @@ export class LeagueTracker {
       // This game so far, per team (for the team cards).
       game: this.g ? Object.fromEntries(Object.values(this.g.teams).map(t => {
         const ms = Object.values(this.g.marbles).filter(m => m.color === t.color), sum = k => ms.reduce((a, m) => a + (m[k] ?? 0), 0);
-        return [t.color, { turns: t.turns ?? 0, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, bonks: t.bonks, bonked: t.bonked, distance: t.distance,
+        const pl = this.room.game?.players.find(p => p.color === t.color);
+        return [t.color, { pips: pl ? teamPips(pl) : 0, turns: t.turns ?? 0, rolls: t.rolls, sixes: t.sixes, doubles: t.doubles, bonks: t.bonks, bonked: t.bonked, distance: t.distance,
           starSpaces: t.starSpaces, hubTrips: sum('hubTrips'), hubTurns: t.hubTurns, exits: sum('exits'), homes: ms.filter(m => m.homeOrder).length, maxDeficit: t.maxDeficit }];
       })) : null,
       // The month's table, all six teams (the line-up changes every game).
       table: Object.keys(TEAMS).map(c => {
         const sea = store.leagueGet('season:' + mon, c), ses = this.session.teams[c];
         return { color: c, games: sea.games ?? 0, wins: sea.wins ?? 0, points: sea.points ?? 0,
-          par: sea.par ?? 0, sessionGames: ses?.games ?? 0, sessionWins: ses?.wins ?? 0, sessionPoints: ses?.points ?? 0 };
+          par: sea.par ?? 0, pipsPerTurn: sea.turns ? (sea.pips ?? 0) / sea.turns : null, sessionGames: ses?.games ?? 0, sessionWins: ses?.wins ?? 0, sessionPoints: ses?.points ?? 0 };
       }).sort((a, b) => b.par - a.par || b.wins - a.wins || a.games - b.games),
     };
   }
