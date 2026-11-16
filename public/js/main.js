@@ -2728,15 +2728,13 @@ function renderCube() {
     const sign = v => `${v > 0.05 ? '+' : v < -0.05 ? '−' : ''}${Math.abs(v ?? 0).toFixed(1)}`;
     $('score-line').replaceChildren(el('div', { class: 'standings season' },
       el('div', { class: 'st-row st-head' }, el('span'), el('span'), el('span'),
-        el('span', { class: 'st-rec', title: 'Won – lost this month' }, 'W–L'),
-        el('span', { class: 'st-rec', title: 'Race progress per turn this month: pips gained (hub and star-circle shortcuts count big; bonks and going round again count against)' }, 'Pips'),
+        el('span', { class: 'st-rec', title: 'Wins this month, and the share of games won' }, 'Wins'),
         el('span', { class: 'st-pts', title: 'Wins above par: a win in a game of n teams counts 1 − 1/n and a loss −1/n, so 2-team and 6-team games count fairly' }, '+/−')),
       ...leagueTable.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
       el('span', { class: 'st-rank' }, String(k + 1)),
       el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
       el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
-      el('span', { class: 'st-rec' }, `${t.wins}–${t.games - t.wins}`),
-      el('span', { class: 'st-rec' }, t.pipsPerTurn != null ? t.pipsPerTurn.toFixed(1) : '–'),
+      el('span', { class: 'st-rec' }, t.games ? `${t.wins} · ${Math.round(100 * t.wins / t.games)}%` : '–'),
       el('span', { class: 'st-pts' + (t.par > 0.05 ? ' plus' : t.par < -0.05 ? ' minus' : '') }, sign(t.par))))));
   } else if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
   else $('score-line').textContent = line;
@@ -3871,7 +3869,7 @@ $('btn-game-profile').addEventListener('click', () => setGear(false));
 // ---- Commentary: a feed in the space beside the board ----
 // Shown where the board leaves room on the left (the stream page always has it);
 // in a game it is a gear option. Newest line at the bottom, older ones fade.
-const COMMENT_MAX = 7;
+const COMMENT_MAX = 9;
 // League lines name teams ("the Rollers"): plural, so the verb right after one
 // agrees ("the Rollers takes" → "take", "the Waves's" → "the Waves'"), and a
 // line that starts with one gets a capital "The".
@@ -3912,8 +3910,8 @@ const commentator = createCommentator((parts, level) => {
       return el('span', { class: 'cm-name' }, el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(color)] ?? '#888'}` }), text ?? '?');
     })()));
   box.append(line);
-  while (box.children.length > (KIOSK ? 5 : box.classList.contains('in-sidebar') ? 3 : COMMENT_MAX)) box.firstChild.remove();
-  [...box.children].forEach((c, i, all) => { c.style.opacity = String(Math.max(0.25, 1 - (all.length - 1 - i) * 0.14)); });
+  while (box.children.length > (KIOSK ? 6 : box.classList.contains('in-sidebar') ? 3 : COMMENT_MAX)) box.firstChild.remove();
+  [...box.children].forEach((c, i, all) => { c.style.opacity = String(Math.max(0.45, 1 - (all.length - 1 - i) * 0.09)); });
 });
 function placeCommentary() {
   const box = $('commentary'), area = $('board-area'), cv = $('board-canvas');
@@ -3934,7 +3932,7 @@ function placeCommentary() {
   box.style.width = beside ? (stream ? room : Math.min(room, 460)) + 'px' : '';
   // Text scales with the column (the stream page has its own large sizes).
   // One text size for the commentary, the season table and the game's rows (the stream page has its own).
-  const svFont = `${Math.max(0.8, Math.min(1.25, room / 300))}rem`;
+  const svFont = `${Math.max(0.85, Math.min(1.35, room / 250))}rem`;
   box.style.fontSize = beside && stream && !KIOSK ? svFont : '';
   document.body.style.setProperty('--sv-font', svFont);
   // The logo and address: as wide as the column, on top; the commentary stops below.
@@ -3950,8 +3948,8 @@ function placeCommentary() {
   box.style.maxHeight = beside && brand.offsetHeight ? Math.max(0, area.clientHeight - brand.offsetTop - brand.offsetHeight - 40) + 'px' : '';
   // The dice: on the board's square, in its top-right corner. The cube: by its owner.
   const a = area.getBoundingClientRect(), c = cv.getBoundingClientRect(), d = $('dice-area');
-  d.style.left = (c.right - a.left - d.offsetWidth - 14) + 'px';
-  d.style.top = (c.top - a.top + 14) + 'px';
+  d.style.left = (c.right - a.left - d.offsetWidth - 22) + 'px';
+  d.style.top = (c.top - a.top + 22) + 'px';
   placeBoardCube();
   if ($('cube-offer').classList.contains('cube-modal')) centreOnBoard($('cube-offer'));
 }

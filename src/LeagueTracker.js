@@ -156,7 +156,7 @@ export class LeagueTracker {
     if (tm) {
       const rec = store.leagueGet('team', spot.color), cap = captainOf(spot.color);
       notes.push([1, { team: spot.color }, ' are led by captain ', { marble: [spot.color, cap] }, '.',
-        rec.games ? ` ${rec.wins ?? 0} wins from ${rec.games} so far.` : '', ` "${tm.marbles[cap]?.cheer ?? ''}"`]);
+        rec.games ? ` ${rec.wins ?? 0} win${(rec.wins ?? 0) === 1 ? "" : "s"} from ${rec.games} so far.` : '', ` "${tm.marbles[cap]?.cheer ?? ''}"`]);
     }
     notes.slice(0, 3).forEach((n, i) => setTimeout(() => this.note(...n), 4000 + i * 5000));
   }
