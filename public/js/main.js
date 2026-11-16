@@ -3803,12 +3803,12 @@ function showWatchCard(winnerIndex, result, score) {
     el('div', { class: 'wc-emoji' }, inLeague() ? (TEAMS[w.color]?.emoji ?? '🏆') : '🏆'),
     el('div', { class: 'wc-title' }, inLeague() ? `${TEAMS[w.color]?.short ?? w.name} win!` : `${w.name} wins!`),
     ...stamps,
-    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ ${marbleFullName(leagueMvp[0], leagueMvp[1])}`) : '');
+    inLeague() && leagueMvp ? el('div', { class: 'wc-mvp' }, `⭐ MVP: ${marbleFullName(leagueMvp[0], leagueMvp[1])}`) : '');
   { const a = $('board-area').getBoundingClientRect(), r = $('board-canvas').getBoundingClientRect();   // on the board's centre
     card.style.left = (r.left - a.left + r.width / 2) + 'px'; card.style.top = (r.top - a.top + r.height / 2) + 'px'; }
   card.style.display = 'flex';
   clearTimeout(watchCardTimer);
-  watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 10000);
+  watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 12000);
   // "Leave after this game": the result card, then out.
   if (leaveAfter && !KIOSK) setTimeout(() => { if (leaveAfter) { leaveAfter = false; $('btn-leave-after').classList.remove('on'); $('btn-leave-after').textContent = 'Leave after this game'; $('btn-quit').click(); } }, 8000);
 }
