@@ -31,6 +31,7 @@ let commitPending = false;      // true when readyToCommit received, waiting for
 // ---- Per-turn move log accumulation (for backgammon notation) ----
 let turnNumber    = 0;    // increments each turnChanged; set to 1 on gameStarted
 let turnLogMoves  = [];   // [{ marbleId, path: [str,...], bumped }] for current turn
+const turnHitColors = new Map();   // '42*' → the colour of the marble hit there (this turn)
 let turnLogDice   = null; // [die0, die1] rolled this turn
 let turnLogPlayer = null; // playerIndex for current turn
 let pendingFeedback = null; // { text, cls } — robot comparison for my roll, logged with it
@@ -2371,7 +2372,7 @@ on('gameStarted', ({ gameState: gs }) => {
   // Fresh game: drop everything left over from a previous game in this tab.
   $('game-log').replaceChildren();
   turnNumber    = 1;
-  turnLogMoves  = [];
+  turnLogMoves  = []; turnHitColors.clear();
   turnLogDice   = null;
   turnLogPlayer = null;
   resetAnimations();
@@ -2403,7 +2404,7 @@ on('rolled', ({ playerIndex, dice, moves, combos, envy }) => {
 
   // Capture dice for backgammon notation (extra roll starts a fresh move list)
   if (turnLogPlayer !== playerIndex) {
-    turnLogMoves  = [];
+    turnLogMoves  = []; turnHitColors.clear();
     turnLogPlayer = playerIndex;
   }
   turnLogDice = dice;
@@ -2487,6 +2488,7 @@ on('marbleMoved', ({ playerIndex, marbleId, from, to, path, dieIndex }) => {
   // zone location so the asterisk lands on the right space, not the final one.
   // All in the mover's numbers (backgammon style: the countdown to their home).
   const bumpLocs = new Set(victims.map(v => locNotation(v.loc, playerIndex)));
+  for (const v of victims) turnHitColors.set(locNotation(v.loc, playerIndex) + '*', gameState.players[v.ownerIndex]?.color);
   const fromStr = locNotation(from, playerIndex);
   const toStr   = locNotation(to, playerIndex) + (bumpLocs.has(locNotation(to, playerIndex)) ? '*' : '');
   const last    = turnLogMoves[turnLogMoves.length - 1];
@@ -2595,7 +2597,7 @@ on('extraRoll', ({ playerIndex }) => {
   gameState.phase = 'EXTRA_ROLL';
   commitPending = false;
   // Start fresh move accumulation for the extra roll
-  turnLogMoves = [];
+  turnLogMoves = []; turnHitColors.clear();
   setCommitVisible(false); setUndoVisible(false);
   if (playerIndex === myPlayerIndex) {
     enableRoll();
@@ -3303,6 +3305,15 @@ function flushTurnLog() {
     : '--';
   const line = log(`${turnNumber}. ${name}: ${diceStr}: ${movesStr}`, color);
   line.dataset.turn = turnNumber;
+  // A hit square ("42*") in the colour of the marble it sent home.
+  if (turnHitColors.size) {
+    const t = line.querySelector('.log-text'), msg = t.textContent;
+    t.replaceChildren(...msg.split(/([^\s/]+\*)/).map(part => {
+      const c = turnHitColors.get(part);
+      return c ? el('span', { class: 'log-hit', style: `color:${COLOR_MAP[dc(c)] ?? 'inherit'}` }, part) : part;
+    }));
+    turnHitColors.clear();
+  }
   // Feedback lines start with "↳", so tools/replay.mjs ignores them in a copied log.
   // A roll with no legal move ("--") is never committed, so the server sends
   // no feedback for it; it was played the only way it could be.
@@ -3311,7 +3322,7 @@ function flushTurnLog() {
   }
   if (pendingFeedback && pi === myPlayerIndex && settings.feedback) log(`↳ ${pendingFeedback.text}`, null, `log-feedback ${pendingFeedback.cls}`);
   pendingFeedback = null;
-  turnLogMoves = [];
+  turnLogMoves = []; turnHitColors.clear();
   turnLogDice  = null;
 }
 

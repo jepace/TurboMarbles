@@ -954,3 +954,4 @@ body.streamview:not(.kiosk) .player-row, body.streamview:not(.kiosk) #score-line
 .st-rec { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
 .standings.season .st-pts { text-align: right; }
 .st-head span { font-size: 0.65em; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); font-weight: 600; }
+.log-hit { font-weight: 700; }
