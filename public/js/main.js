@@ -984,7 +984,6 @@ function marbleCard(hit) {
     el('div', { class: 'mc-name' }, dot, marbleFullName(color, hit.id), info.captain ? el('span', { class: 'mc-cap' }, ' ©') : ''),
     el('div', { class: 'mc-team' }, `${TEAMS[color].emoji} ${TEAMS[color].name}`),
     el('div', { class: 'mc-bio' }, info.bio),
-    el('div', { class: 'mc-cheer' }, `“${info.cheer}”`),
     el('div', { class: 'mc-stats' }, stat(st.games, 'games'), stat(st.homes, 'home'), stat(st.firstHomes, 'first home'), stat(st.mvps, 'MVP'),
       stat(st.bonks, 'bonks'), stat(st.bonked, 'bonked'), stat(st.hubTrips, 'hub trips'), stat(st.turns ? ((st.pips ?? 0) / st.turns).toFixed(1) : '–', 'pips / turn')),
     ...[['nemesis', 'Nemesis'], ['victim', 'Favourite victim']].map(([k, label]) => { const x = st[k]; if (!x) return ''; const [c, i] = x.id.split(':');
@@ -4251,7 +4250,7 @@ function renderLeague() {
       ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), (m.name ?? m.id) + (m.captain ? ' Ⓒ' : '')), m.team, String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.exits ?? 0), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
         m.hubTurns ? `${Math.round(100 * (m.hubExits ?? 0) / m.hubTurns)}%` : '–', String(m.goArounds ?? 0), String(m.hubHits ?? 0), String(m.circleHits ?? 0)])));
   } else if (leagueTab === 'records') {
-    const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', bestTurn: 'Biggest single turn (pips gained)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
+    const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', bestTurn: 'Monster Turn: most pips in one turn', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
     box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), TEAMS[String(r.holder ?? '').split(':')[0]] ? el('span', { 'data-team': String(r.holder).split(':')[0], 'data-card': 'season', class: 'lg-holder' }, r.detail ?? r.holder) : (r.detail ?? r.holder ?? ''), lgDate(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
   } else {
     // Each game opens in the replay + analysis (kept 90 days).

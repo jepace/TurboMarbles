@@ -169,7 +169,7 @@ export class LeagueTracker {
     if (tm) {
       const rec = store.leagueGet('team', spot.color), cap = captainOf(spot.color);
       notes.push([1, { team: spot.color }, ' are led by captain ', { marble: [spot.color, cap] }, '.',
-        rec.games ? ` ${rec.wins ?? 0} win${(rec.wins ?? 0) === 1 ? "" : "s"} from ${rec.games} so far.` : '', ` "${tm.marbles[cap]?.cheer ?? ''}"`]);
+        rec.games ? ` ${rec.wins ?? 0} win${(rec.wins ?? 0) === 1 ? "" : "s"} from ${rec.games} so far.` : '']);
     }
     notes.slice(0, 3).forEach((n, i) => setTimeout(() => this.note(...n), 4000 + i * 5000));
   }
@@ -260,7 +260,7 @@ export class LeagueTracker {
     if (g.bonks) rec('mostBonksGame', g.bonks, wColor, `${n}-player game won by ${teamName(wColor)}`, `${g.bonks} bonks in a single game`);
     if (w.maxDeficit >= 30) rec('biggestComeback', w.maxDeficit, wColor, `${teamName(wColor)}`, `the biggest comeback: ${teamName(wColor)} from ${w.maxDeficit} pips behind`);
     const bt = Object.values(g.teams).filter(t => t.bestTurn != null).sort((a, b) => b.bestTurn - a.bestTurn)[0];
-    if (bt?.bestTurn >= 30) rec('bestTurn', bt.bestTurn, bt.color, `${teamName(bt.color)}`, `the biggest turn: ${teamName(bt.color)} gained ${bt.bestTurn} pips in one turn`);
+    if (bt?.bestTurn > 0) rec('bestTurn', bt.bestTurn, bt.color, `${teamName(bt.color)}`, `the Monster Turn: ${teamName(bt.color)} tore off ${bt.bestTurn} pips in a single turn`);
     rec('longestGame', turns, wColor, `${turns} rolls, ${Math.round(ms / 60000)} min`, `the longest game: ${turns} rolls`);
     if (margin > 0 && margin <= 40) rec('closestFinish', margin, wColor, `${teamName(wColor)} by ${margin} pips`, `the closest finish: ${margin} pips`, { lowerIsBetter: true });
     const tw = store.leagueGet('team', wColor);

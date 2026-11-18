@@ -146,12 +146,12 @@ export function createCommentator(onLine) {
       const ai = info(byPi, byMarble), vi = info(victimPi, victimMarble);
       if (league && ai && Math.random() < 0.3) {
         const t = ai.trait;
-        if (t === 'troublemaker' || t === 'hothead' || t === 'prickly') return say(2, A, pick([' strikes again! ', ' can\'t help itself: bonk! ', ' bonks ']), V, pick([`. "${ai.cheer}"`, '. Nobody is surprised.', '. Typical.']));
-        if (t === 'gentle') return say(2, A, ' bonks ', V, pick([' and looks genuinely sorry about it.', `. "${ai.cheer}"`]));
-        return say(2, A, ' bonks ', V, `! "${ai.cheer}"`);
+        if (t === 'troublemaker' || t === 'hothead' || t === 'prickly') return say(2, A, pick([' strikes again! ', ' can\'t help itself: bonk! ', ' bonks ']), V, pick(['. Nobody is surprised.', '. Typical.']));
+        if (t === 'gentle') return say(2, A, ' bonks ', V, ' and looks genuinely sorry about it.');
+        return say(2, A, ' bonks ', V, pick(['! Bonk!', '. Back you go.']));
       }
-      if (league && vi && vi.trait === 'tough' && Math.random() < 0.5) return say(2, A, ' bonks ', V, pick([', who just shrugs it off.', `. "${vi.cheer}"`, '. Back to base, again. Tough as ever.']));
-      if (league && vi && vi.trait === 'optimist' && Math.random() < 0.5) return say(2, A, ' bonks ', V, `. "${vi.cheer}" Undaunted, as always.`);
+      if (league && vi && vi.trait === 'tough' && Math.random() < 0.5) return say(2, A, ' bonks ', V, pick([', who just shrugs it off.', '. Back to base, again. Tough as ever.']));
+      if (league && vi && vi.trait === 'optimist' && Math.random() < 0.5) return say(2, A, ' bonks ', V, '. Undaunted, as always.');
       // Losing full mobility (every marble was out of base) is worth a word.
       if (mobile[victimPi] && Math.random() < 0.35 && mobilityOk()) { mobile[victimPi] = false; return say(2, A, pick([' bonks ', ' bumps ']), V, pick(LOST)); }
       return say(2, A, pick([' bumps ', ' bonks ', ' bonks ', ' knocks out ', ' clips ', ' takes out ']), V,
@@ -171,7 +171,7 @@ export function createCommentator(onLine) {
       if (count >= 2 && d === 0 && Math.random() < 0.7) return say(1, P(pi), pick([
         ` has ${count} home, nice and tidy.`, `: ${count} home, tidily packed from the top.`, ` keeps a tidy home row: ${count} in, no gaps.`]));
       if (count === 1 && !said.has('firstHome')) { said.add('firstHome');
-        if (league && mi) return say(2, W, pick([' is the first marble home! ', ' gets home first! ']), mi.trait === 'quiet' ? 'Not a word, as usual.' : `"${mi.cheer}"`);
+        if (league && mi) return say(2, W, pick([' is the first marble home! ', ' gets home first! ']), mi.trait === 'quiet' ? 'Not a word, as usual.' : '');
         return say(2, P(pi), pick([' gets the first marble home!', ' is first to put one home.', ' opens the scoring: one marble home.'])); }
       if (league && mi && count < 3 && Math.random() < 0.5) return say(1, W, pick([` makes it home for `, ` is safely home for `]), P(pi), mi.trait === 'slow and steady' || mi.trait === 'patient' ? '. Got there in the end.' : '.');
       if (count === 3 && !said.has('final:' + pi)) { said.add('final:' + pi); return say(3, P(pi), pick([' has three home. One to go!', ' is on the final marble!', ': three down, one to go. Final lap!'])); }
