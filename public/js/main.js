@@ -1155,13 +1155,13 @@ function previewGame(g) {
 let boardBorrowed = false;
 // The PR chart: one dot per analysed game (green won, red lost; hover for the
 // game, click to open its analysis), the 10-game average as a line, and the
-// title bands behind (World Class at the top: lower PR is better).
+// title bands behind (World Class at the bottom: lower PR is better).
 function prChart(trend) {
   const games = trend.map(x => { const n = x.choices + x.cube_decisions; return n ? { ...x, pr: 500 * (2 * x.eq_lost + x.cube_eq_lost) / n } : null; }).filter(Boolean);
   if (games.length < 2) return '';
   const ns = 'http://www.w3.org/2000/svg', Wd = 900, Ht = 240, L = 40, R = 104, T = 12, B = 28;
   const TOP = 30;   // PR shown up to 30; worse games sit on the bottom edge
-  const X = i => L + i * (Wd - L - R) / (games.length - 1), Y = v => T + Math.min(v, TOP) / TOP * (Ht - T - B);
+  const X = i => L + i * (Wd - L - R) / (games.length - 1), Y = v => Ht - B - Math.min(v, TOP) / TOP * (Ht - T - B);   // PR 0 at the bottom
   const svg = document.createElementNS(ns, 'svg');
   svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('class', 'pr-chart');
   const add = (tag, attrs, parent = svg) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.append(e); return e; };
@@ -1171,7 +1171,7 @@ function prChart(trend) {
   let lo = 0;
   PR_TITLES.forEach(([max, name], k) => {
     const hi = Math.min(max, TOP); if (lo >= TOP) return;
-    add('rect', { x: L, y: Y(lo), width: Wd - L - R, height: Y(hi) - Y(lo), fill: BAND[k], opacity: 0.07 });
+    add('rect', { x: L, y: Y(hi), width: Wd - L - R, height: Y(lo) - Y(hi), fill: BAND[k], opacity: 0.07 });
     txt(Wd - R + 8, (Y(lo) + Y(hi)) / 2 + 4, name, { fill: BAND[k], 'font-size': 12, 'font-weight': 600 });
     lo = hi;
   });
@@ -1180,8 +1180,6 @@ function prChart(trend) {
     add('line', { x1: L, x2: Wd - R, y1: Y(v), y2: Y(v), stroke: '#ffffff12' });
     txt(L - 6, Y(v) + 4, v === 30 ? '30+' : String(v), { fill: '#9fb0c8', 'font-size': 11, 'text-anchor': 'end' });
   }
-  // Better is up (PR 0 at the top): say so on the axis.
-  txt(L - 6, T - 1 > 8 ? T - 1 : 10, '▲ better', { fill: '#7ee08a', 'font-size': 10, 'text-anchor': 'start', x: L + 4 });
   // Dates along the bottom (a few).
   const ticks = Math.min(6, games.length);
   for (let k = 0; k < ticks; k++) {
@@ -1206,11 +1204,11 @@ function prChart(trend) {
     c.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
   });
   const now = avg.at(-1), first = avg[Math.min(9, avg.length - 1)];
-  const trendWord = avg.length >= 12 ? (now < first - 1 ? '↗ improving' : now > first + 1 ? '↘ slipping' : '→ steady') : '';
+  const trendWord = avg.length >= 12 ? (now < first - 1 ? '↘ improving' : now > first + 1 ? '↗ slipping' : '→ steady') : '';
   return el('div', { class: 'pr-wrap' },
     el('h3', {}, 'PR ', el('span', { class: 'pr-now', style: `color:${BAND[PR_TITLES.findIndex(([m]) => now < m)]}` }, `${prText(now)} · ${prTitle(now)}`), trendWord ? el('span', { class: 'muted pr-trend' }, ` ${trendWord}`) : ''),
     el('div', { class: 'pr-box' }, svg, tip),
-    el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${games.length} analysed games · gold line: 10-game average · dots: each game (green won, red lost); click one to open it · the chart is upside down on purpose: a lower PR is better, so better play is higher`));
+    el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${games.length} analysed games · gold line: 10-game average · dots: each game (green won, red lost); click one to open it · lower is better`));
 }
 window.__prChart = prChart;   // (console / tests)
 function renderProfile() {
