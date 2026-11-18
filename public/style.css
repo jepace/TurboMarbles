@@ -445,7 +445,7 @@ button.secondary { background: #fff2; }
 .acct-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .acct-row input { max-width: 220px; }
 .keybox { font-family: ui-monospace, monospace; background: var(--surface); padding: 6px 8px; border-radius: 6px; word-break: break-all; font-size: 0.85rem; }
-#profile-trend svg { width: 100%; height: 80px; background: #0d1b2a; border-radius: 6px; }
+#profile-trend svg.rating-chart { width: 100%; height: 80px; background: #0d1b2a; border-radius: 6px; }
 
 button.danger { color: #ff8080; }
 
@@ -977,7 +977,7 @@ body.streamview:not(.kiosk) #game-log { font-size: 0.74rem; opacity: 0.85; borde
 .lg-holder, .lg-team[data-card] { cursor: help; text-decoration: underline dotted #ffffff40; text-underline-offset: 3px; }
 .league-table th[title] { cursor: help; }
 .pr-box { position: relative; }
-.pr-chart { width: 100%; height: auto; display: block; background: #0b1626; border-radius: 10px; }
+#profile-trend .pr-chart, .pr-chart { width: 100%; height: auto; display: block; background: #0b1626; border-radius: 10px; }
 .pr-dot { cursor: pointer; transition: r 0.1s; }
 .pr-dot:hover { r: 8; }
 .pr-tip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; background: #0b1626f2; border: 1px solid #c8920a; border-radius: 8px; padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; z-index: 5; }
