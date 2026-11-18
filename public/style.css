@@ -972,3 +972,5 @@ body.kiosk #watch-card .wc-title { font-size: 3.4rem; }
 .standings.show-final { min-width: 16rem; font-size: 1.2rem; margin-top: 0.4rem; }
 /* Game view: the commentary starts under the logo (no dead gap); the log is quieter. */
 body.streamview:not(.kiosk) #game-log { font-size: 0.74rem; opacity: 0.85; border-top: 1px solid #ffffff14; padding-top: 6px; }
+.standings.season .st-head span { font-size: 0.8em; text-transform: none; letter-spacing: 0; font-weight: 700; color: #9fb0c8; padding-bottom: 2px; border-bottom: 1px solid #ffffff1a; }
+.standings.season .st-head span:nth-child(-n+3) { border-bottom: none; }
