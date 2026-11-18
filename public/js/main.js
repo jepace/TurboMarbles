@@ -1153,6 +1153,64 @@ function previewGame(g) {
   });
 }
 let boardBorrowed = false;
+// The PR chart: one dot per analysed game (green won, red lost; hover for the
+// game, click to open its analysis), the 10-game average as a line, and the
+// title bands behind (World Class at the top: lower PR is better).
+function prChart(trend) {
+  const games = trend.map(x => { const n = x.choices + x.cube_decisions; return n ? { ...x, pr: 500 * (2 * x.eq_lost + x.cube_eq_lost) / n } : null; }).filter(Boolean);
+  if (games.length < 2) return '';
+  const ns = 'http://www.w3.org/2000/svg', Wd = 900, Ht = 240, L = 40, R = 104, T = 12, B = 28;
+  const TOP = 30;   // PR shown up to 30; worse games sit on the bottom edge
+  const X = i => L + i * (Wd - L - R) / (games.length - 1), Y = v => T + Math.min(v, TOP) / TOP * (Ht - T - B);
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('class', 'pr-chart');
+  const add = (tag, attrs, parent = svg) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.append(e); return e; };
+  const txt = (x, y, t, attrs = {}) => { const e = add('text', { x, y, ...attrs }); e.textContent = t; return e; };
+  // Title bands.
+  const BAND = ['#7ee08a', '#5fc6d8', '#7a9cf0', '#b08cf0', '#e0a85a', '#e07a7a'];
+  let lo = 0;
+  PR_TITLES.forEach(([max, name], k) => {
+    const hi = Math.min(max, TOP); if (lo >= TOP) return;
+    add('rect', { x: L, y: Y(lo), width: Wd - L - R, height: Y(hi) - Y(lo), fill: BAND[k], opacity: 0.07 });
+    txt(Wd - R + 8, (Y(lo) + Y(hi)) / 2 + 4, name, { fill: BAND[k], 'font-size': 12, 'font-weight': 600 });
+    lo = hi;
+  });
+  // PR axis.
+  for (const v of [0, 5, 10, 15, 20, 25, 30]) {
+    add('line', { x1: L, x2: Wd - R, y1: Y(v), y2: Y(v), stroke: '#ffffff12' });
+    txt(L - 6, Y(v) + 4, v === 30 ? '30+' : String(v), { fill: '#9fb0c8', 'font-size': 11, 'text-anchor': 'end' });
+  }
+  // Dates along the bottom (a few).
+  const ticks = Math.min(6, games.length);
+  for (let k = 0; k < ticks; k++) {
+    const i = Math.round(k * (games.length - 1) / Math.max(1, ticks - 1));
+    txt(X(i), Ht - 8, new Date(games[i].t).toLocaleDateString([], { month: 'short', day: 'numeric' }), { fill: '#9fb0c8', 'font-size': 11, 'text-anchor': 'middle' });
+  }
+  // The 10-game average.
+  const avg = games.map((_, i) => { const w = games.slice(Math.max(0, i - 9), i + 1); return w.reduce((a, g) => a + g.pr, 0) / w.length; });
+  add('polyline', { points: avg.map((v, i) => `${X(i)},${Y(v)}`).join(' '), fill: 'none', stroke: '#f0c040', 'stroke-width': 3, 'stroke-linejoin': 'round' });
+  // Each game.
+  const tip = el('div', { class: 'pr-tip', style: 'display:none' });
+  games.forEach((g, i) => {
+    const c = add('circle', { cx: X(i), cy: Y(g.pr), r: 5, fill: g.won ? '#7ee08a' : '#ff8a7a', stroke: '#0b1626', 'stroke-width': 1.5, class: 'pr-dot' });
+    c.addEventListener('mouseenter', () => {
+      tip.replaceChildren(el('b', {}, `PR ${prText(g.pr)} · ${prTitle(g.pr)}`),
+        el('div', {}, `${new Date(g.t).toLocaleDateString([], { month: 'short', day: 'numeric' })} · ${g.n_players} players${g.vs_robot ? ' (robots)' : ''} · ${g.won ? 'won' : 'lost'}`),
+        el('div', { class: 'muted' }, `10-game average ${prText(avg[i])} · click to open`));
+      const box = svg.getBoundingClientRect(), k = box.width / Wd;
+      tip.style.left = `${X(i) * k}px`; tip.style.top = `${Y(g.pr) * k}px`; tip.style.display = 'block';
+    });
+    c.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+    c.addEventListener('click', () => send({ action: 'openGame', id: g.id }));
+  });
+  const now = avg.at(-1), first = avg[Math.min(9, avg.length - 1)];
+  const trendWord = avg.length >= 12 ? (now < first - 1 ? '↗ improving' : now > first + 1 ? '↘ slipping' : '→ steady') : '';
+  return el('div', { class: 'pr-wrap' },
+    el('h3', {}, 'PR ', el('span', { class: 'pr-now', style: `color:${BAND[PR_TITLES.findIndex(([m]) => now < m)]}` }, `${prText(now)} · ${prTitle(now)}`), trendWord ? el('span', { class: 'muted pr-trend' }, ` ${trendWord}`) : ''),
+    el('div', { class: 'pr-box' }, svg, tip),
+    el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${games.length} analysed games · gold line: 10-game average · dots: each game (green won, red lost); click one to open it · lower PR is better`));
+}
+window.__prChart = prChart;   // (console / tests)
 function renderProfile() {
   const d = profileData;
   if (!d) return;
@@ -1191,21 +1249,8 @@ function renderProfile() {
     $('profile-trend').replaceChildren(el('h3', {}, 'Rating'), svg,
       el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${hist.length - 1} rated game${hist.length === 2 ? '' : 's'} · now ${last} · best ${best}`));
   } else $('profile-trend').replaceChildren();
-  // PR over time (every analysed game in the filter, robots' games too): each game, and a 10-game average.
-  const tr = (d.stats.trend ?? []).map(x => { const n = x.choices + x.cube_decisions; return n ? 500 * (2 * x.eq_lost + x.cube_eq_lost) / n : null; }).filter(v => v != null);
-  if (tr.length >= 2) {
-    const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 140, pad = 10;
-    const hi = Math.max(10, ...tr) * 1.05;
-    const X = i => pad + i * (Wd - 2 * pad) / (tr.length - 1), Y = v => pad + v / hi * (Ht - 2 * pad);   // lower PR is better: drawn higher
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('class', 'rating-chart');
-    const add = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.append(e); return e; };
-    tr.forEach((v, i) => add('circle', { cx: X(i), cy: Y(v), r: 2.5, fill: '#9fb0c888' }));
-    const avg = tr.map((_, i) => { const w = tr.slice(Math.max(0, i - 9), i + 1); return w.reduce((a, b) => a + b, 0) / w.length; });
-    add('polyline', { points: avg.map((v, i) => `${X(i)},${Y(v)}`).join(' '), fill: 'none', stroke: '#7ee08a', 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke' });
-    $('profile-trend').append(el('h3', {}, 'PR'), svg,
-      el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${tr.length} analysed games · dots: each game, line: 10-game average · lower is better (higher on the chart) · now ${prText(avg.at(-1))}`));
-  }
+  // PR over time (every analysed game in the filter, robots' games too).
+  $('profile-trend').append(prChart(d.stats.trend ?? []));
   const h = d.stats.headToHead;
   $('profile-h2h').replaceChildren(h.length ? el('table', { class: 'ptable' },
     el('tr', {}, el('th', {}, 'Opponent'), el('th', {}, 'Games'), el('th', {}, 'Won'), el('th', {}, 'Points')),

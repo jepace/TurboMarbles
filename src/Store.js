@@ -736,7 +736,7 @@ export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) 
     FROM seats s JOIN games g ON g.id = s.game_id WHERE ${W} AND g.vs_robot = 1`).get(playerId);
   if (bots?.games) h2h.unshift({ id: null, name: '🤖 Robots', games: bots.games, wins: bots.wins, points: bots.points, robots: true });
   const trend = db.prepare(`
-    SELECT g.ended_at t, s.choices, s.eq_lost, COALESCE(s.cube_decisions,0) cube_decisions, COALESCE(s.cube_eq_lost,0) cube_eq_lost
+    SELECT g.id, g.n_players, g.vs_robot, s.won, g.ended_at t, s.choices, s.eq_lost, COALESCE(s.cube_decisions,0) cube_decisions, COALESCE(s.cube_eq_lost,0) cube_eq_lost
     FROM seats s JOIN games g ON g.id = s.game_id
     WHERE ${W} AND s.choices > 0 ORDER BY g.ended_at DESC LIMIT 200`).all(playerId).reverse();
   return { totals, headToHead: h2h, trend };

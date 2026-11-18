@@ -976,3 +976,10 @@ body.streamview:not(.kiosk) #game-log { font-size: 0.74rem; opacity: 0.85; borde
 .standings.season .st-head span:nth-child(-n+3) { border-bottom: none; }
 .lg-holder, .lg-team[data-card] { cursor: help; text-decoration: underline dotted #ffffff40; text-underline-offset: 3px; }
 .league-table th[title] { cursor: help; }
+.pr-box { position: relative; }
+.pr-chart { width: 100%; height: auto; display: block; background: #0b1626; border-radius: 10px; }
+.pr-dot { cursor: pointer; transition: r 0.1s; }
+.pr-dot:hover { r: 8; }
+.pr-tip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; background: #0b1626f2; border: 1px solid #c8920a; border-radius: 8px; padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; z-index: 5; }
+.pr-now { font-size: 1rem; margin-left: 6px; }
+.pr-trend { font-size: 0.85rem; font-weight: 400; }
