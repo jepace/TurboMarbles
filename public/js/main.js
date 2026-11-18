@@ -2351,6 +2351,7 @@ function updateStartButton() {
 }
 
 on('gameStarted', ({ gameState: gs }) => {
+  if (leaveAfter && watching && !KIOSK) { leaveNow(); return; }   // asked to leave: never into the next game
   setTimeout(placeCommentary, 0);
   setTimeout(() => commentator.start(gs.players.map(p => ({ name: gs.league && TEAMS[p.color] ? TEAMS[p.color].short : p.name, color: p.color })), settings.music || KIOSK ? songName() : null, gs.league), 0);
   clearTimeout(watchCardTimer); $('watch-card').style.display = 'none';
@@ -3818,8 +3819,15 @@ function momentSound(sound, pi) {
 }
 let lastBumped = null;   // the marble the coming bonk sends home (music: its team's voice, heartbreak near home)
 let leaveAfter = false;
+function leaveNow() {
+  leaveAfter = false; $('btn-leave-after').classList.remove('on'); $('btn-leave-after').textContent = 'Leave after this game';
+  $('btn-quit').click();
+}
 $('btn-leave-after').addEventListener('click', () => {
   leaveAfter = !leaveAfter;
+  // Already over (the result card is up): leave once the card has had its moment.
+  const over = gameState && (gameState.winner != null || gameState.phase === 'GAME_OVER');
+  if (leaveAfter && over) { setTimeout(() => { if (leaveAfter) leaveNow(); }, $('watch-card').style.display === 'none' ? 0 : 3000); }
   $('btn-leave-after').classList.toggle('on', leaveAfter);
   $('btn-leave-after').textContent = leaveAfter ? 'Leaving after this game ✓' : 'Leave after this game';
 });
@@ -3853,7 +3861,7 @@ function showWatchCard(winnerIndex, result, score) {
   clearTimeout(watchCardTimer);
   watchCardTimer = setTimeout(() => { card.style.display = 'none'; }, 12000);
   // "Leave after this game": the result card, then out.
-  if (leaveAfter && !KIOSK) setTimeout(() => { if (leaveAfter) { leaveAfter = false; $('btn-leave-after').classList.remove('on'); $('btn-leave-after').textContent = 'Leave after this game'; $('btn-quit').click(); } }, 8000);
+  if (leaveAfter && !KIOSK) setTimeout(() => { if (leaveAfter) leaveNow(); }, 8000);
 }
 
 
