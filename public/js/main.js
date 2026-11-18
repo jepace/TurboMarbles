@@ -982,11 +982,13 @@ function marbleCard(hit) {
   const stat = (v, k) => el('div', { class: 'mc-stat' }, el('b', {}, String(v ?? 0)), el('span', {}, k));
   return [
     el('div', { class: 'mc-name' }, dot, marbleFullName(color, hit.id), info.captain ? el('span', { class: 'mc-cap' }, ' ©') : ''),
-    el('div', { class: 'mc-team' }, `${TEAMS[color].emoji} ${TEAMS[color].name} · ${info.trait}`),
+    el('div', { class: 'mc-team' }, `${TEAMS[color].emoji} ${TEAMS[color].name}`),
     el('div', { class: 'mc-bio' }, info.bio),
     el('div', { class: 'mc-cheer' }, `“${info.cheer}”`),
     el('div', { class: 'mc-stats' }, stat(st.games, 'games'), stat(st.homes, 'home'), stat(st.firstHomes, 'first home'), stat(st.mvps, 'MVP'),
-      stat(st.bonks, 'bonks'), stat(st.bonked, 'bonked'), stat(st.hubTrips, 'hub trips'), stat(st.games ? ((st.pips ?? 0) / st.games).toFixed(0) : '–', 'pips / game')),
+      stat(st.bonks, 'bonks'), stat(st.bonked, 'bonked'), stat(st.hubTrips, 'hub trips'), stat(st.turns ? ((st.pips ?? 0) / st.turns).toFixed(1) : '–', 'pips / turn')),
+    ...[['nemesis', 'Nemesis'], ['victim', 'Favourite victim']].map(([k, label]) => { const x = st[k]; if (!x) return ''; const [c, i] = x.id.split(':');
+      return el('div', { class: 'mc-where' }, `${label}: ${marbleFullName(c, +i)} (${TEAMS[c]?.short}) · ${x.n} bonk${x.n === 1 ? '' : 's'}`); }),
     el('div', { class: 'mc-where' }, `Now: ${where}`),
   ];
 }
@@ -4134,7 +4136,7 @@ function teamCard(color, kind) {
         stat(g.exits, 'left base'), stat(g.starSpaces, 'star hops'), stat(g.hubTurns, 'hub waits'), stat(g.maxDeficit, 'most behind'))];
   }
   loadMarbleStats();
-  const s = leagueTable?.find(x => x.color === color) ?? {}, c = leagueTeams?.[color]?.career ?? {};
+  const s = leagueTable?.find(x => x.color === color) ?? leagueTeams?.[color]?.season ?? {}, c = leagueTeams?.[color]?.career ?? {};
   const pct = (a, b) => (b ? `${Math.round(100 * a / b)}%` : '–');
   return [...head, el('div', { class: 'mc-where' }, `Season · ${leagueMonthName(leagueMonth)}`),
     el('div', { class: 'mc-stats' }, stat(s.games, 'games'), stat(s.wins, 'wins'), stat(`${(s.par ?? 0) >= 0 ? '+' : '−'}${Math.abs(s.par ?? 0).toFixed(1)}`, 'above par'), stat(s.points, 'points')),
@@ -4144,13 +4146,14 @@ function teamCard(color, kind) {
 }
 document.addEventListener('mouseover', e => {
   const row = e.target.closest?.('[data-card][data-team]');
-  if (!row || !inLeague()) { teamCardEl.style.display = 'none'; return; }
+  if (!row || !(inLeague() || row.closest('#screen-league'))) { teamCardEl.style.display = 'none'; return; }
   const kids = teamCard(row.dataset.team, row.dataset.card);
   if (!kids) return;
   teamCardEl.replaceChildren(...kids);
   teamCardEl.style.display = 'block';
   const r = row.getBoundingClientRect();
-  teamCardEl.style.left = `${Math.max(8, r.left - teamCardEl.offsetWidth - 10)}px`;
+  const onPage = !!row.closest('#screen-league');   // League page: beside the name; in a game: left of the sidebar
+  teamCardEl.style.left = `${!onPage && r.left - teamCardEl.offsetWidth - 10 >= 8 ? r.left - teamCardEl.offsetWidth - 10 : Math.min(innerWidth - teamCardEl.offsetWidth - 8, r.right + 12)}px`;
   teamCardEl.style.top = `${Math.min(innerHeight - teamCardEl.offsetHeight - 8, Math.max(8, r.top - 10))}px`;
 });
 let leagueTable = null, leagueMonth = null;
@@ -4176,6 +4179,20 @@ function cellKey(c) {
   const n = t.replace(/[−–]/g, '-').replace(/[,+%]|\s*pips?$/g, '').trim();
   return /^-?\d+(\.\d+)?$/.test(n) ? Number(n) : t.toLowerCase();
 }
+// What each League column means (hover a header).
+const LG_HELP = {
+  'Played': 'Games played', 'Won': 'Games won', 'Win %': 'Share of games won (an even share: 50% in 2-team games, 17% in 6-team games)',
+  'Above par': 'Wins above par: a win in a game of n teams counts 1 − 1/n, a loss −1/n, so every game size counts fairly. The season is ranked by this',
+  'Strength': 'How likely the team is to win against the teams it actually faced, all game sizes together (1.00 = average; 1.50 wins half again as often)',
+  'Points': 'Money-style points: each loser pays the winner 1, 2 for an aggro (nothing home), 3 for a baggro (all four still in base)',
+  'Bonks': 'Opposing marbles sent back to base', 'Bonked': 'Times sent back to base', 'Streak': 'Current winning streak', 'Best': 'Longest winning streak',
+  'Comebacks': 'Wins from 30+ pips behind', 'Wire to wire': 'Wins that led from start to finish', "Aggro'd": 'Losses with nothing home (aggro) or all in base (baggro)',
+  'Sixes / roll': 'Sixes per roll (two dice: 0.33 is average)', 'Pips / turn': 'Race progress per turn: hub and star-circle shortcuts count in full; bonks and going round again count against',
+  'Spaces': 'Squares moved by the dice (shortcuts count as their steps)', 'Left base': 'Marbles brought out of base', 'Star circle': 'Hops along the star circle',
+  'Hub escape': 'Share of hub waits that ended with a 1 (getting out)', 'Home line': 'Times going past home and round again', 'Hub hits': 'Bonks in the hub', 'Star hits': 'Bonks on a star',
+  'Homes': 'Marbles got home', 'First home': "Games where this marble was the team's first home", '⭐ MVP': 'Marble of the game awards', 'In hub': 'Trips into the hub',
+  'Games': 'Games played', 'Holder': 'Who holds it (hover for their card)', 'Set': 'When it was set', 'Rolls': 'Rolls in the game', 'Margin': 'Pips the runner-up still had to go',
+};
 function lgTable(head, rows, key = head.join('|')) {
   const table = el('table', { class: 'table league-table sortable' });
   const tbody = el('tbody');
@@ -4194,7 +4211,7 @@ function lgTable(head, rows, key = head.join('|')) {
     ths.forEach((th, i) => th.dataset.sort = st?.col === i ? (st.dir > 0 ? 'asc' : 'desc') : '');
   };
   const ths = head.map((h, i) => {
-    const th = el('th', { title: 'Sort by ' + h }, h);
+    const th = el('th', { title: (LG_HELP[h] ? LG_HELP[h] + ' · ' : '') + 'click to sort' }, h);
     th.addEventListener('click', () => {
       const st = lgSorts[key];
       // Numbers start high-to-low, text A–Z; a second click reverses.
@@ -4211,7 +4228,9 @@ function lgTable(head, rows, key = head.join('|')) {
 function renderLeague() {
   const d = leagueData, box = $('league-content');
   if (!d) return;
-  const teamCell = t => el('span', { class: 'lg-team' }, lgDot(t.color), `${t.emoji ?? ''} ${t.name}`);
+  // The hover cards use the same numbers.
+  leagueTeams = Object.fromEntries(d.teams.map(t => [t.color, t])); marbleStats = Object.fromEntries(d.marbles.map(m => [`${m.color}:${m.mid}`, m])); marbleStatsAt = Date.now();
+  const teamCell = t => el('span', { class: 'lg-team', 'data-team': t.color, 'data-card': 'season' }, lgDot(t.color), `${t.emoji ?? ''} ${t.name}`);
   if (leagueTab === 'standings') {
     const season = [...d.teams].sort((a, b) => (b.season.par ?? 0) - (a.season.par ?? 0) || (b.season.points ?? 0) - (a.season.points ?? 0) || (b.season.wins ?? 0) - (a.season.wins ?? 0));
     const parTxt = v => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v ?? 0).toFixed(1)}`;
@@ -4228,12 +4247,12 @@ function renderLeague() {
       d.rivals.length ? lgTable(['Teams', 'Bonks'], d.rivals.map(r => { const [a, b] = r.id.split('|'); return [el('span', {}, lgDot(a), TEAMS[a]?.short, ' vs ', lgDot(b), TEAMS[b]?.short), String(r.bonks)]; })) : '');
   } else if (leagueTab === 'marbles') {
     const ms = [...d.marbles].sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0));
-    box.replaceChildren(el('p', { class: 'muted' }, 'Click any column to sort.'), lgTable(['Marble', 'Team', 'Trait', 'Games', 'Spaces', 'Left base', 'Star circle', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'In hub', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
-      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), (m.name ?? m.id) + (m.captain ? ' Ⓒ' : '')), m.team, el('span', { class: 'muted' }, m.trait ?? ''), String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.exits ?? 0), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
+    box.replaceChildren(el('p', { class: 'muted' }, 'Click any column to sort.'), lgTable(['Marble', 'Team', 'Games', 'Spaces', 'Left base', 'Star circle', 'Bonks', 'Bonked', 'Homes', 'First home', '⭐ MVP', 'In hub', 'Hub escape', 'Home line', 'Hub hits', 'Star hits'],
+      ms.map(m => [el('span', { class: 'lg-marble', title: m.bio ?? '' }, lgDot(m.color), (m.name ?? m.id) + (m.captain ? ' Ⓒ' : '')), m.team, String(m.games ?? 0), (m.distance ?? 0).toLocaleString(), String(m.exits ?? 0), String(m.starSpaces ?? 0), String(m.bonks ?? 0), String(m.bonked ?? 0), String(m.homes ?? 0), String(m.firstHomes ?? 0), String(m.mvps ?? 0), String(m.hubTrips ?? 0),
         m.hubTurns ? `${Math.round(100 * (m.hubExits ?? 0) / m.hubTurns)}%` : '–', String(m.goArounds ?? 0), String(m.hubHits ?? 0), String(m.circleHits ?? 0)])));
   } else if (leagueTab === 'records') {
-    const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
-    box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), r.detail ?? r.holder ?? '', lgDate(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
+    const names = { mostDistanceGame: 'Most spaces by a marble in a game', mostBonksMarbleGame: 'Most bonks by a marble in a game', mostBonksGame: 'Most bonks in a game', biggestComeback: 'Biggest comeback (pips behind)', longestGame: 'Longest game (rolls)', closestFinish: 'Closest finish (pips)', bestTurn: 'Biggest single turn (pips gained)', longestStreak: 'Longest winning streak', mostSixesGame: 'Most sixes in a game' };
+    box.replaceChildren(d.records.length ? lgTable(['Record', '', 'Holder', 'Set'], d.records.map(r => [names[r.k] ?? r.k, String(r.v), TEAMS[String(r.holder ?? '').split(':')[0]] ? el('span', { 'data-team': String(r.holder).split(':')[0], 'data-card': 'season', class: 'lg-holder' }, r.detail ?? r.holder) : (r.detail ?? r.holder ?? ''), lgDate(r.at)])) : el('p', { class: 'muted' }, 'No records yet: the robots need to play some games.'));
   } else {
     // Each game opens in the replay + analysis (kept 90 days).
     const replay = id => { if (!id) return ''; const b = el('button', { class: 'secondary small-btn', title: 'Replay and analysis' }, '▶ Replay'); b.addEventListener('click', () => { connect(); send({ action: 'openGame', id }); }); return b; };

@@ -52,7 +52,7 @@ export class LeagueTracker {
         if (!t) return;
         g.dice = msg.dice;
         // A turn starts with its first roll (6s give more rolls in the same turn).
-        if (g.turnOwner !== msg.playerIndex) { g.turnOwner = msg.playerIndex; t.turns = (t.turns ?? 0) + 1; }
+        if (g.turnOwner !== msg.playerIndex) { g.turnOwner = msg.playerIndex; t.turns = (t.turns ?? 0) + 1; const pl = game?.players[msg.playerIndex]; t.turnStart = pl ? teamPips(pl) : null; }
         g.rolls++; t.rolls++; t.sixes += msg.dice.filter(d => d === 6).length; if (msg.dice[0] === msg.dice[1]) t.doubles++;
         // Stuck in the hub: a turn starting with a marble there.
         const inHub = game?.players[msg.playerIndex]?.marbles.findIndex(m => m.zone === 'center') ?? -1;
@@ -117,6 +117,11 @@ export class LeagueTracker {
         if (bm && inHub) bm.hubHits++;
         if (bm && onStar) bm.circleHits++;
         if (by) {
+          // Grudges: who has bonked whom, marble on marble, over their careers.
+          const vKey = `${victimColor}:${msg.marbleId}`, aKey = `${by.color}:${by.id}`;
+          store.leagueAdd('grudge', aKey, { [vKey]: 1 });
+          const times = store.leagueGet('grudge', aKey)[vKey] ?? 0;
+          if ([3, 5, 10, 20].includes(times)) this.note(2, { marble: [by.color, by.id] }, ` has now bonked `, { marble: [victimColor, msg.marbleId] }, ` ${times} times in their careers. This one's personal.`);
           g.teams[by.color].bonks++; g.teams[victimColor].bonked++;
           const pair = [by.color, victimColor].sort().join('|');
           g.rivals[pair] = (g.rivals[pair] ?? 0) + 1;
@@ -129,7 +134,15 @@ export class LeagueTracker {
         return this.standings();
       }
       case 'gameResult': return this.finish(msg);
-      case 'turnChanged': if (g) g.turnOwner = null; return this.sendState();   // the live game numbers for the teams' cards
+      case 'turnChanged': {
+        // The turn just ended: how far it took the team (the biggest of the game is kept).
+        if (g && g.turnOwner != null) {
+          const pl = game?.players[g.turnOwner], t = pl && g.teams[pl.color];
+          if (t && t.turnStart != null) { const d = teamPips(pl) - t.turnStart; if (d > (t.bestTurn ?? -Infinity)) t.bestTurn = d; }
+        }
+        if (g) g.turnOwner = null;
+        return this.sendState();
+      }   // the live game numbers for the teams' cards
     }
   }
 
@@ -228,7 +241,7 @@ export class LeagueTracker {
     else if (aggroed?.length > 1) notes.push([1, { team: wColor }, ' win aggros over ', ...aggroed.flatMap((c, i) => [i ? (i === aggroed.length - 1 ? ' and ' : ', ') : '', { team: c }]), ': nothing home.']);
     for (const m of Object.values(g.marbles)) {
       const mp = (() => { const pl = game.players.find(p => p.color === m.color); return pl ? marblePips(pl, pl.marbles[m.id]) : 0; })();
-      store.leagueAdd('marble', `${m.color}:${m.id}`, { pips: mp, distance: m.distance, starSpaces: m.starSpaces, hubTurns: m.hubTurns, hubExits: m.hubExits, hubPassThrough: m.hubPassThrough, goArounds: m.goArounds, hubHits: m.hubHits, circleHits: m.circleHits, games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
+      store.leagueAdd('marble', `${m.color}:${m.id}`, { turns: g.teams[m.color]?.turns ?? 0, pips: mp, distance: m.distance, starSpaces: m.starSpaces, hubTurns: m.hubTurns, hubExits: m.hubExits, hubPassThrough: m.hubPassThrough, goArounds: m.goArounds, hubHits: m.hubHits, circleHits: m.circleHits, games: 1, bonks: m.bonks, bonked: m.bonked, exits: m.exits, hubTrips: m.hubTrips, homes: m.homeOrder ? 1 : 0, firstHomes: m.firstHome ? 1 : 0, mvps: mvp === m ? 1 : 0, wins: m.color === wColor ? 1 : 0 });
     }
     for (const [pair, c] of Object.entries(g.rivals)) store.leagueAdd('rival', pair, { bonks: c });
     this.session.games++;
@@ -246,6 +259,8 @@ export class LeagueTracker {
       `${marbleName(topBonker.color, topBonker.id)} with ${topBonker.bonks} bonks in one game`);
     if (g.bonks) rec('mostBonksGame', g.bonks, wColor, `${n}-player game won by ${teamName(wColor)}`, `${g.bonks} bonks in a single game`);
     if (w.maxDeficit >= 30) rec('biggestComeback', w.maxDeficit, wColor, `${teamName(wColor)}`, `the biggest comeback: ${teamName(wColor)} from ${w.maxDeficit} pips behind`);
+    const bt = Object.values(g.teams).filter(t => t.bestTurn != null).sort((a, b) => b.bestTurn - a.bestTurn)[0];
+    if (bt?.bestTurn >= 30) rec('bestTurn', bt.bestTurn, bt.color, `${teamName(bt.color)}`, `the biggest turn: ${teamName(bt.color)} gained ${bt.bestTurn} pips in one turn`);
     rec('longestGame', turns, wColor, `${turns} rolls, ${Math.round(ms / 60000)} min`, `the longest game: ${turns} rolls`);
     if (margin > 0 && margin <= 40) rec('closestFinish', margin, wColor, `${teamName(wColor)} by ${margin} pips`, `the closest finish: ${margin} pips`, { lowerIsBetter: true });
     const tw = store.leagueGet('team', wColor);
@@ -397,6 +412,14 @@ export function leagueOverview() {
     const info = TEAMS[color]?.marbles[+id];
     return { ...m, color, mid: +id, name: info?.name, trait: info?.trait, bio: info?.bio, captain: !!info?.captain, team: teamName(color) };
   });
+  // Grudges: each marble's favourite victim and nemesis (most bonks either way).
+  const grudge = store.leagueAll('grudge'), victim = {}, nemesis = {};
+  for (const row of grudge) for (const [v, n] of Object.entries(row)) {
+    if (v === 'id') continue;
+    if (!victim[row.id] || n > victim[row.id].n) victim[row.id] = { id: v, n };
+    if (!nemesis[v] || n > nemesis[v].n) nemesis[v] = { id: row.id, n };
+  }
+  for (const m of marbles) { const k = `${m.color}:${m.mid}`; m.victim = victim[k] ?? null; m.nemesis = nemesis[k] ?? null; }
   const rivals = store.leagueAll('rival').sort((a, b) => (b.bonks ?? 0) - (a.bonks ?? 0)).slice(0, 8);
   return { league: LEAGUE_NAME, season: mon, teams, marbles, rivals, records: store.leagueRecords(), recent: store.leagueRecentGames(50) };
 }
