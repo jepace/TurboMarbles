@@ -2728,13 +2728,15 @@ function renderCube() {
     const sign = v => `${v > 0.05 ? '+' : v < -0.05 ? '−' : ''}${Math.abs(v ?? 0).toFixed(1)}`;
     $('score-line').replaceChildren(el('div', { class: 'standings season' },
       el('div', { class: 'st-row st-head' }, el('span'), el('span'), el('span'),
-        el('span', { class: 'st-rec', title: 'Wins this month, and the share of games won' }, 'Wins'),
+        el('span', { class: 'st-rec', title: 'Wins this month' }, 'W'),
+        el('span', { class: 'st-rec', title: 'Share of games won (an even share in a 6-team game is 17%)' }, 'Win %'),
         el('span', { class: 'st-pts', title: 'Wins above par: a win in a game of n teams counts 1 − 1/n and a loss −1/n, so 2-team and 6-team games count fairly' }, '+/−')),
       ...leagueTable.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
       el('span', { class: 'st-rank' }, String(k + 1)),
       el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
       el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
-      el('span', { class: 'st-rec' }, t.games ? `${t.wins} · ${Math.round(100 * t.wins / t.games)}%` : '–'),
+      el('span', { class: 'st-rec' }, String(t.wins)),
+      el('span', { class: 'st-rec' }, t.games ? `${Math.round(100 * t.wins / t.games)}%` : '–'),
       el('span', { class: 'st-pts' + (t.par > 0.05 ? ' plus' : t.par < -0.05 ? ' minus' : '') }, sign(t.par))))));
   } else if (watching && gameState?.score && !gameState.match) $('score-line').replaceChildren(standings(gameState.score));
   else $('score-line').textContent = line;
