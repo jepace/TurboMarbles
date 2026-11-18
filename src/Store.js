@@ -714,6 +714,7 @@ export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) 
   if (players === '2') where.push('g.n_players = 2');
   if (players === '3+') where.push('g.n_players >= 3');
   if (robots === 'none') where.push('g.vs_robot = 0');
+  if (robots === 'only') where.push('g.vs_robot = 1');
   const W = where.join(' AND ');
   const totals = db.prepare(`
     SELECT COUNT(*) games, COALESCE(SUM(s.won),0) wins, COALESCE(SUM(s.points),0) points,
@@ -730,6 +731,10 @@ export function playerStats(playerId, { players = 'all', robots = 'any' } = {}) 
     FROM seats s JOIN seats o ON o.game_id = s.game_id AND o.seat != s.seat JOIN games g ON g.id = s.game_id
     WHERE ${W} AND o.is_robot = 0 AND o.player_id IS NOT NULL
     GROUP BY o.player_id ORDER BY games DESC LIMIT 50`).all(playerId);
+  // The robots, as one opponent: games with a robot seat.
+  const bots = db.prepare(`SELECT COUNT(*) games, COALESCE(SUM(s.won),0) wins, COALESCE(SUM(s.points),0) points
+    FROM seats s JOIN games g ON g.id = s.game_id WHERE ${W} AND g.vs_robot = 1`).get(playerId);
+  if (bots?.games) h2h.unshift({ id: null, name: '🤖 Robots', games: bots.games, wins: bots.wins, points: bots.points, robots: true });
   const trend = db.prepare(`
     SELECT g.ended_at t, s.choices, s.eq_lost, COALESCE(s.cube_decisions,0) cube_decisions, COALESCE(s.cube_eq_lost,0) cube_eq_lost
     FROM seats s JOIN games g ON g.id = s.game_id
@@ -744,7 +749,7 @@ export function playerGames(playerId, { limit = 50, before = Infinity, players =
     SELECT g.id, g.ended_at, g.n_players, g.vs_robot, g.cube, g.report_gz IS NOT NULL analysed, g.rolls_gz,
            me.seat, me.won, me.points, me.aggro
     FROM seats me JOIN games g ON g.id = me.game_id
-    WHERE me.player_id = ? AND g.ended_at < ?${players === '2' ? ' AND g.n_players = 2' : players === '3+' ? ' AND g.n_players >= 3' : ''}${robots === 'none' ? ' AND g.vs_robot = 0' : ''}
+    WHERE me.player_id = ? AND g.ended_at < ?${players === '2' ? ' AND g.n_players = 2' : players === '3+' ? ' AND g.n_players >= 3' : ''}${robots === 'none' ? ' AND g.vs_robot = 0' : robots === 'only' ? ' AND g.vs_robot = 1' : ''}
     ORDER BY g.ended_at DESC LIMIT ?`).all(playerId, Number.isFinite(before) ? before : 9e15, Math.min(limit, 200));
   const seatsQ = db.prepare(`SELECT s.seat, s.name, s.color, s.arm, s.is_robot, s.won, s.points, s.aggro, s.player_id, s.rating_after,
     s.choices, s.eq_lost, s.cube_decisions, s.cube_eq_lost FROM seats s WHERE s.game_id = ? ORDER BY s.seat`);

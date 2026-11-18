@@ -129,7 +129,7 @@ function mailVerify(player, email) {
     `Hi ${player.name},\n\nTo use this address for password resets, open this link within a day:\n${publicUrl()}/?verify=${token}\n\nIf this wasn't you, ignore this email.`);
 }
 // Stats filters from a message: players 'all' | '2' | '3+'; robots 'any' | 'none'.
-const filterOf = msg => ({ players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: msg.robots === 'none' ? 'none' : 'any' });
+const filterOf = msg => ({ players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: ['none', 'only'].includes(msg.robots) ? msg.robots : 'any' });
 function friendsPayload(id) {
   const l = store.friendList(id), unread = store.unreadCounts(id);
   const mark = f => ({ ...f, online: isOnline(f.id), unread: unread[f.id] ?? 0 });

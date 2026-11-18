@@ -1191,6 +1191,21 @@ function renderProfile() {
     $('profile-trend').replaceChildren(el('h3', {}, 'Rating'), svg,
       el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${hist.length - 1} rated game${hist.length === 2 ? '' : 's'} · now ${last} · best ${best}`));
   } else $('profile-trend').replaceChildren();
+  // PR over time (every analysed game in the filter, robots' games too): each game, and a 10-game average.
+  const tr = (d.stats.trend ?? []).map(x => { const n = x.choices + x.cube_decisions; return n ? 500 * (2 * x.eq_lost + x.cube_eq_lost) / n : null; }).filter(v => v != null);
+  if (tr.length >= 2) {
+    const ns = 'http://www.w3.org/2000/svg', Wd = 600, Ht = 140, pad = 10;
+    const hi = Math.max(10, ...tr) * 1.05;
+    const X = i => pad + i * (Wd - 2 * pad) / (tr.length - 1), Y = v => pad + v / hi * (Ht - 2 * pad);   // lower PR is better: drawn higher
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${Wd} ${Ht}`); svg.setAttribute('preserveAspectRatio', 'none'); svg.setAttribute('class', 'rating-chart');
+    const add = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); svg.append(e); return e; };
+    tr.forEach((v, i) => add('circle', { cx: X(i), cy: Y(v), r: 2.5, fill: '#9fb0c888' }));
+    const avg = tr.map((_, i) => { const w = tr.slice(Math.max(0, i - 9), i + 1); return w.reduce((a, b) => a + b, 0) / w.length; });
+    add('polyline', { points: avg.map((v, i) => `${X(i)},${Y(v)}`).join(' '), fill: 'none', stroke: '#7ee08a', 'stroke-width': 2.5, 'vector-effect': 'non-scaling-stroke' });
+    $('profile-trend').append(el('h3', {}, 'PR'), svg,
+      el('div', { class: 'muted', style: 'font-size:0.8rem' }, `${tr.length} analysed games · dots: each game, line: 10-game average · lower is better (higher on the chart) · now ${prText(avg.at(-1))}`));
+  }
   const h = d.stats.headToHead;
   $('profile-h2h').replaceChildren(h.length ? el('table', { class: 'ptable' },
     el('tr', {}, el('th', {}, 'Opponent'), el('th', {}, 'Games'), el('th', {}, 'Won'), el('th', {}, 'Points')),
