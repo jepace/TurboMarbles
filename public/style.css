@@ -992,3 +992,5 @@ body.streamview:not(.kiosk) #game-log { font-size: 0.74rem; opacity: 0.85; borde
 .sm-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #ffffff10; flex-wrap: wrap; }
 .sm-label { width: 6.5rem; font-weight: 600; }
 .sm-sub { padding-left: 6.5rem; font-size: 0.9rem; }
+.legal-links { margin-top: 14px; text-align: center; font-size: 0.8rem; color: var(--muted); }
+.legal-links a { color: var(--muted); }

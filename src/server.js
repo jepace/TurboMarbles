@@ -123,6 +123,9 @@ app.get('/music/:song/:file', (req, res) => {
   if (!p) return res.status(404).end();
   res.type(p.endsWith('.m4a') ? 'audio/mp4' : 'audio/mpeg').sendFile(p);
 });
+// The policy pages at clean addresses (Google's sign-in setup asks for them).
+app.get('/privacy', (req, res) => res.sendFile(join(__dirname, '..', 'public', 'privacy.html')));
+app.get('/terms', (req, res) => res.sendFile(join(__dirname, '..', 'public', 'terms.html')));
 app.get('/podcast.xml', (req, res) => {
   const base = (process.env.PUBLIC_URL || process.env.ORIGIN || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
   const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
