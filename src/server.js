@@ -81,7 +81,19 @@ const isPlainObject = v => v !== null && typeof v === 'object' && !Array.isArray
 
 const app = express();
 app.disable('x-powered-by');
-app.use(helmet());
+// Google sign-in loads its script and button from accounts.google.com, and its
+// pop-up needs to talk back to this page.
+app.use(helmet({
+  contentSecurityPolicy: { directives: {
+    'script-src': ["'self'", 'https://accounts.google.com/gsi/client'],
+    'frame-src': ["'self'", 'https://accounts.google.com/gsi/'],
+    'connect-src': ["'self'", 'https://accounts.google.com/gsi/'],
+    'style-src': ["'self'", 'https:', "'unsafe-inline'", 'https://accounts.google.com/gsi/style'],
+  } },
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+}));
+// The passkey helper for the page (the browser half of @simplewebauthn).
+app.use('/vendor/webauthn', express.static(join(__dirname, '..', 'node_modules', '@simplewebauthn', 'browser', 'esm')));
 
 
 
@@ -143,7 +155,7 @@ ${items}
 </channel>
 </rss>`);
 });
-app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null }));
+app.get('/site.json', (req, res) => res.json({ streamUrl: setting('streamUrl') || null, googleClientId: process.env.GOOGLE_CLIENT_ID || null }));
 app.get('/league.json', (req, res) => res.json(leagueOverview()));
 
 app.use(express.static(join(__dirname, '..', 'public'), {
@@ -190,6 +202,7 @@ wss.on('connection', (ws, req) => {
 
   const ip = clientIp(req);
   ws._ip = ip;
+  ws._origin = req.headers.origin ?? null;   // passkeys: the page's origin when the server has no PUBLIC_URL / ORIGIN
   const count = (connPerIp.get(ip) ?? 0) + 1;
   if (count > MAX_CONN_PER_IP) {
     ws.close(1013, 'Too many connections');

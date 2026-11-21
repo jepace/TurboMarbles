@@ -1086,6 +1086,61 @@ on('identity', ({ player, prefs, needsPassword, admin }) => {
   // Signed in already: skip the login screen.
   if (me && $('screen-landing').classList.contains('active')) { myName = me.name; goHome(); }
 });
+// ---- Signing in with Google and passkeys ----
+// Google: the button comes from Google Identity Services (only when the server
+// has a GOOGLE_CLIENT_ID); its token goes to the server, which checks it.
+let googleId = null;
+function loadGoogle(clientId) {
+  if (!clientId || window.google?.accounts?.id) return;
+  const sc = document.createElement('script');
+  sc.src = 'https://accounts.google.com/gsi/client'; sc.async = true;
+  sc.onload = () => {
+    google.accounts.id.initialize({ client_id: clientId, callback: r => { connect(); if (!me) pendingAfterRegister = () => { myName = me.name; goHome(); }; send({ action: 'googleLogin', credential: r.credential }); } });
+    renderGoogleButtons();
+  };
+  document.head.append(sc);
+}
+function renderGoogleButtons() {
+  if (!window.google?.accounts?.id) return;
+  for (const id of ['g-signin', 'g-link']) {
+    const box = $(id); if (!box || box.dataset.done) continue;
+    google.accounts.id.renderButton(box, { theme: 'filled_blue', size: 'large', shape: 'pill', text: id === 'g-link' ? 'continue_with' : 'signin_with', width: 260 });
+    box.dataset.done = '1';
+  }
+}
+fetch('/site.json').then(r => r.json()).then(({ googleClientId }) => { googleId = googleClientId; if (googleId && !KIOSK) loadGoogle(googleId); }).catch(() => {});
+// Passkeys: the browser half of @simplewebauthn (served by the server).
+const webauthn = () => import('/vendor/webauthn/index.js');
+const passkeysWork = () => !!window.PublicKeyCredential;
+if (!passkeysWork()) $('btn-passkey-login').style.display = 'none';
+$('btn-passkey-login').addEventListener('click', () => { connect(); pendingAfterRegister = () => { myName = me.name; goHome(); }; send({ action: 'passkeyLoginStart' }); });
+on('passkeyLoginOptions', async ({ options }) => {
+  try { const { startAuthentication } = await webauthn(); send({ action: 'passkeyLoginFinish', response: await startAuthentication({ optionsJSON: options }) }); }
+  catch (e) { if (e?.name !== 'NotAllowedError') toastAnywhere('Passkey sign-in was cancelled or failed.'); }
+});
+on('passkeyRegisterOptions', async ({ options }) => {
+  try { const { startRegistration } = await webauthn(); send({ action: 'passkeyRegisterFinish', response: await startRegistration({ optionsJSON: options }), label: deviceLabel() }); }
+  catch (e) { toastAnywhere(e?.name === 'InvalidStateError' ? 'This device already has a passkey for you.' : 'The passkey was not saved.'); }
+});
+const deviceLabel = () => { const u = navigator.userAgent; return /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Mac/.test(u) ? 'Mac' : /Android/.test(u) ? 'Android' : /Windows/.test(u) ? 'Windows' : 'This device'; };
+// Settings: how you can sign in.
+on('signInMethods', m => {
+  const box = $('signin-methods'); if (!box) return;
+  if (m.added === 'passkey') toastAnywhere('✓ Passkey added: sign in with it next time.');
+  if (m.linked === 'google') toastAnywhere('✓ Google linked.');
+  const row = (label, ...kids) => el('div', { class: 'sm-row' }, el('span', { class: 'sm-label' }, label), ...kids);
+  const btn = (text, fn, cls = 'secondary small-btn') => { const b = el('button', { class: cls }, text); b.addEventListener('click', fn); return b; };
+  const pk = m.passkeys ?? [];
+  box.replaceChildren(el('h3', {}, 'Sign-in methods'),
+    row('Password', el('span', { class: 'muted' }, m.password ? 'set' : 'none')),
+    m.googleClientId ? row('Google', m.google ? el('span', { class: 'muted' }, typeof m.google === 'string' ? m.google : 'linked') : el('div', { id: 'g-link' }),
+      m.google ? btn('Unlink', () => send({ action: 'googleUnlink' })) : '') : '',
+    row('Passkeys', el('span', { class: 'muted' }, pk.length ? '' : 'none'), passkeysWork() ? btn('+ Add a passkey', () => send({ action: 'passkeyRegisterStart' })) : el('span', { class: 'muted' }, '(not supported in this browser)')),
+    ...pk.map(p => el('div', { class: 'sm-row sm-sub' }, el('span', {}, `🔑 ${p.label ?? 'Passkey'}`),
+      el('span', { class: 'muted' }, `added ${new Date(p.created).toLocaleDateString()}${p.lastUsed ? ` · used ${new Date(p.lastUsed).toLocaleDateString()}` : ''}`),
+      btn('Remove', () => { if (confirm('Remove this passkey?')) send({ action: 'passkeyRemove', id: p.id }); }))));
+  if (googleId) { loadGoogle(googleId); renderGoogleButtons(); }
+});
 on('registered', ({ player, key, linked, prefs, admin }) => {
   setAdminUser(!!admin);
   saveKey(key);
@@ -1104,7 +1159,7 @@ on('accountDeleted', () => {
 
 // Stats and Settings both come from the profile data.
 let profileFrom = 'screen-home', profileTarget = 'screen-profile';
-const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile', ...(typeof statsFilter !== 'undefined' ? statsFilter : {}) }); };
+const openProfile = (target, from) => { profileTarget = target; profileFrom = from; connect(); send({ action: 'profile', ...(typeof statsFilter !== 'undefined' ? statsFilter : {}) }); if (target === 'screen-settings') send({ action: 'signInMethods' }); };
 $('btn-profile-back').addEventListener('click', () => show(profileFrom));
 $('btn-settings-back').addEventListener('click', () => show(profileFrom));
 $('btn-game-profile').addEventListener('click', () => openProfile('screen-settings', 'screen-game'));

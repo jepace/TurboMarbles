@@ -983,3 +983,12 @@ body.streamview:not(.kiosk) #game-log { font-size: 0.74rem; opacity: 0.85; borde
 .pr-tip { position: absolute; transform: translate(-50%, calc(-100% - 12px)); pointer-events: none; background: #0b1626f2; border: 1px solid #c8920a; border-radius: 8px; padding: 6px 10px; font-size: 0.82rem; white-space: nowrap; z-index: 5; }
 .pr-now { font-size: 1rem; margin-left: 6px; }
 .pr-trend { font-size: 0.85rem; font-weight: 400; }
+.alt-signin { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: 14px; }
+.alt-or { width: 100%; display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 0.85rem; }
+.alt-or::before, .alt-or::after { content: ''; flex: 1; border-top: 1px solid #ffffff22; }
+#g-signin:empty { display: none; }
+#btn-passkey-login { width: 260px; }
+.signin-methods { margin-top: 1.2rem; max-width: 34rem; }
+.sm-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #ffffff10; flex-wrap: wrap; }
+.sm-label { width: 6.5rem; font-weight: 600; }
+.sm-sub { padding-left: 6.5rem; font-size: 0.9rem; }

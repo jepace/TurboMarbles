@@ -22,6 +22,7 @@
 //
 // A signed-in connection carries ws._player = { id, name }.
 import * as store from './Store.js';
+import * as signIn from './SignIn.js';
 import { adminView, saveSettings } from './SiteSettings.js';
 import { sendMail, publicUrl } from './Mailer.js';
 
@@ -40,7 +41,8 @@ setInterval(() => { const t = Date.now(); for (const [k, v] of hits) if (!v.some
 export const ACCOUNT_ACTIONS = new Set(['report', 'adminUnlock', 'adminStatus', 'adminSettings', 'adminSaveSettings', 'adminSearch', 'adminBan', 'adminUnban', 'adminRename',
   'adminResetRating', 'adminDelete', 'adminReports', 'adminResolve', 'login', 'logout', 'setPassword', 'setEmail', 'clearEmail', 'verifyEmail', 'forgotPassword', 'resetPassword', 'leaderboard', 'friends', 'friendRequest', 'friendRespond', 'friendRemove',
   'block', 'unblock', 'dm', 'conversation', 'invite', 'setPrefs', 'identify', 'register', 'rename', 'linkCode', 'redeemLink', 'signOutOthers',
-  'deleteAccount', 'profile', 'history', 'openGame']);
+  'deleteAccount', 'profile', 'history', 'openGame', 'googleLogin', 'googleUnlink', 'passkeyRegisterStart', 'passkeyRegisterFinish',
+  'passkeyLoginStart', 'passkeyLoginFinish', 'passkeyRemove', 'signInMethods']);
 
 // ---- Presence: which players are connected (by account) ----
 const online = new Map();            // playerId → Set<ws>
@@ -129,6 +131,12 @@ function mailVerify(player, email) {
     `Hi ${player.name},\n\nTo use this address for password resets, open this link within a day:\n${publicUrl()}/?verify=${token}\n\nIf this wasn't you, ignore this email.`);
 }
 // Stats filters from a message: players 'all' | '2' | '3+'; robots 'any' | 'none'.
+// How this player can sign in (Settings shows it).
+function methodsOf(id) {
+  const ids = store.identitiesOf(id);
+  return { password: store.hasPassword(id), google: ids.find(x => x.provider === 'google')?.email ?? (ids.some(x => x.provider === 'google') ? true : false),
+    passkeys: store.passkeysOf(id).map(p => ({ id: p.id, label: p.label, created: p.created_at, lastUsed: p.last_used })), googleClientId: signIn.googleClientId() };
+}
 const filterOf = msg => ({ players: ['2', '3+'].includes(msg.players) ? msg.players : 'all', robots: ['none', 'only'].includes(msg.robots) ? msg.robots : 'any' });
 function friendsPayload(id) {
   const l = store.friendList(id), unread = store.unreadCounts(id);
@@ -154,7 +162,7 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       setPlayer(ws, p);
       ws._key = msg.key;
       return send(ws, { event: 'identity', player: p, devices: store.deviceCount(p.id), prefs: store.getPrefs(p.id), admin: store.isAdmin(p.id),
-        needsPassword: !store.hasPassword(p.id) });
+        needsPassword: !store.hasPassword(p.id) && !store.identitiesOf(p.id).length && !store.passkeysOf(p.id).length });
     }
     case 'register': {
       const name = cleanName(msg.name);
@@ -230,6 +238,88 @@ export function handleAccountAction(ws, msg, { send, cleanName, onOpenGame, room
       if (r.banned) return err('BANNED', `This account is banned${r.reason ? `: ${r.reason}` : '.'}`);
       setPlayer(ws, r.player); ws._key = r.key;
       return send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id), admin: store.isAdmin(r.player.id) });
+    }
+    // ---- Google ----
+    case 'googleLogin': {
+      if (limited('loginFail', ip)) return err('RATE_LIMITED', 'Too many tries. Wait a while.');
+      signIn.verifyGoogleToken(msg.credential).then(c => {
+        if (!c?.sub) { hit('loginFail', ip); return err('BAD_LOGIN', 'Google sign-in failed. Try again.'); }
+        const email = c.email_verified ? store.cleanEmail(c.email) : null;
+        // Signed in already: link Google to this account.
+        if (ws._player) {
+          const other = store.identityPlayer('google', c.sub);
+          if (other && other.id !== ws._player.id) return err('GOOGLE_TAKEN', 'That Google account is already linked to another player.');
+          store.linkIdentity(ws._player.id, 'google', c.sub, email);
+          return send(ws, { event: 'signInMethods', ...methodsOf(ws._player.id), linked: 'google' });
+        }
+        let r = store.signInIdentity('google', c.sub);
+        if (!r) {   // new here: a new account named after them
+          if (limited('register', ip)) return err('RATE_LIMITED', 'Too many new players from here. Try again later.');
+          r = store.registerFromIdentity(c.given_name || c.name || (email ?? '').split('@')[0], 'google', c.sub, email);
+          if (r.error) return err(r.error, 'Could not create the account.');
+          hit('register', ip);
+        }
+        if (r.banned) return err('BANNED', `This account is banned${r.reason ? `: ${r.reason}` : '.'}`);
+        setPlayer(ws, r.player); ws._key = r.key;
+        send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id), admin: store.isAdmin(r.player.id) });
+      }).catch(e => { console.error('[google] sign-in failed', e.message); err('BAD_LOGIN', 'Google sign-in is not available right now.'); });
+      return;
+    }
+    case 'googleUnlink': {
+      if (!needMe()) return;
+      const m = methodsOf(me.id);
+      if (!m.password && !m.passkeys.length) return err('LAST_METHOD', 'Add a password or a passkey first, or you could not sign in again.');
+      store.unlinkIdentity(me.id, 'google');
+      return send(ws, { event: 'signInMethods', ...methodsOf(me.id) });
+    }
+    case 'signInMethods': {
+      if (!needMe()) return;
+      return send(ws, { event: 'signInMethods', ...methodsOf(me.id) });
+    }
+    // ---- Passkeys ----
+    case 'passkeyRegisterStart': {
+      if (!needMe()) return;
+      signIn.passkeyRegisterOptions(me, store.passkeysOf(me.id), ws._origin).then(o => { ws._pkReg = o.challenge; send(ws, { event: 'passkeyRegisterOptions', options: o }); })
+        .catch(e => err('PASSKEY_FAILED', e.message));
+      return;
+    }
+    case 'passkeyRegisterFinish': {
+      if (!needMe() || !ws._pkReg) return;
+      const challenge = ws._pkReg; ws._pkReg = null;
+      signIn.passkeyRegisterVerify(msg.response, challenge, ws._origin).then(c => {
+        if (!c) return err('PASSKEY_FAILED', 'The passkey could not be saved.');
+        store.addPasskey(me.id, { ...c, label: String(msg.label ?? '').slice(0, 40) || null });
+        send(ws, { event: 'signInMethods', ...methodsOf(me.id), added: 'passkey' });
+      }).catch(e => err('PASSKEY_FAILED', e.message));
+      return;
+    }
+    case 'passkeyLoginStart': {
+      if (limited('loginFail', ip)) return err('RATE_LIMITED', 'Too many tries. Wait a while.');
+      signIn.passkeyLoginOptions(ws._origin).then(o => { ws._pkAuth = o.challenge; send(ws, { event: 'passkeyLoginOptions', options: o }); })
+        .catch(e => err('PASSKEY_FAILED', e.message));
+      return;
+    }
+    case 'passkeyLoginFinish': {
+      if (!ws._pkAuth) return;
+      const challenge = ws._pkAuth; ws._pkAuth = null;
+      const stored = store.passkeyById(msg.response?.id);
+      if (!stored) { hit('loginFail', ip); return err('BAD_LOGIN', 'That passkey is not known here (it may have been removed).'); }
+      signIn.passkeyLoginVerify(msg.response, challenge, stored, ws._origin).then(counter => {
+        if (counter == null) { hit('loginFail', ip); return err('BAD_LOGIN', 'Passkey sign-in failed.'); }
+        const r = store.signInPasskey(stored.id, counter);
+        if (!r) return err('BAD_LOGIN', 'Passkey sign-in failed.');
+        if (r.banned) return err('BANNED', `This account is banned${r.reason ? `: ${r.reason}` : '.'}`);
+        setPlayer(ws, r.player); ws._key = r.key;
+        send(ws, { event: 'registered', player: r.player, key: r.key, prefs: store.getPrefs(r.player.id), admin: store.isAdmin(r.player.id) });
+      }).catch(e => { hit('loginFail', ip); err('BAD_LOGIN', 'Passkey sign-in failed.'); });
+      return;
+    }
+    case 'passkeyRemove': {
+      if (!needMe()) return;
+      const m = methodsOf(me.id);
+      if (!m.password && !m.google && m.passkeys.length <= 1) return err('LAST_METHOD', 'This is your only way in: add a password or link Google first.');
+      store.removePasskey(me.id, msg.id);
+      return send(ws, { event: 'signInMethods', ...methodsOf(me.id) });
     }
     case 'logout': {
       if (ws._key) store.revokeSession(ws._key);

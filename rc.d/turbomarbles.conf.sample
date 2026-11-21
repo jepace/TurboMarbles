@@ -31,3 +31,8 @@ STREAM_URL=
 # has record=<this key> (e.g. STREAM_PAGE=…&record=<key> in turbomarbles-stream.conf). Kept as MP3
 # (ffmpeg; pkg install ffmpeg in the jail), newest 2 per song, in DATA_DIR/music/<song>/. Empty = off.
 RECORD_KEY=
+
+# Sign in with Google (optional): an OAuth client id from console.cloud.google.com → APIs & Services →
+# Credentials → Create credentials → OAuth client ID → Web application, with Authorized JavaScript origins =
+# https://marbles.pacehouse.com. Without it the Google button isn't shown. (Passkeys need no setup.)
+GOOGLE_CLIENT_ID=

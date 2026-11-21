@@ -43,6 +43,12 @@
       <input id="reset-pass" type="password" maxlength="200" placeholder="New password (8 or more characters)" autocomplete="new-password">
       <button id="btn-reset" type="submit">Set password and log in</button>
     </form>
+    <!-- Other ways in: Google (when the server has a client id) and passkeys -->
+    <div id="alt-signin" class="alt-signin">
+      <div class="alt-or"><span>or</span></div>
+      <div id="g-signin"></div>
+      <button id="btn-passkey-login" type="button" class="secondary">🔑 Sign in with a passkey</button>
+    </div>
     <div id="account-line" class="account-line"></div>
   </div>
 </div>
@@ -219,6 +225,7 @@
   <div class="card profile-card">
     <div class="profile-head"><h2>Settings</h2><button id="btn-settings-back" class="secondary">Back</button></div>
     <div id="profile-account"></div>
+    <div id="signin-methods" class="signin-methods"></div>
   </div>
 </div>
 

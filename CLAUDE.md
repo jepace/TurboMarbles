@@ -19,6 +19,7 @@ PUBLIC_URL=https://example.com  # links in emails (password reset, email confirm
 MAIL_FROM=noreply@example.com   # sender (with Resend: on a domain verified there)
 RESEND_API_KEY=re_…             # or RESEND_API_KEY_FILE=path: account emails go through Resend (resend.com);
                                 # else /usr/sbin/sendmail (SENDMAIL=path); else the links are written to the server log
+GOOGLE_CLIENT_ID=…      # optional: Sign in with Google (OAuth web client id); passkeys need no setup
 RECORD_KEY=…            # optional: stream breaks (&break=) need it; music recording works without it
 STREAM_URL=…                                    # optional fallback for the stream link (normally set on the Admin page → Stream)
 ```
@@ -36,6 +37,7 @@ node test/store.mjs       # players, device keys, link codes, games, stats (in-m
 node test/accounts.mjs    # account actions + finished games recorded with analysis (no server needed)
 node test/ai.mjs          # AI commentator, providers, YouTube chat reader, admin settings (fake clients)
 node test/league.mjs      # league tracker: robot games through it (careers, records, notes)
+node test/signin.mjs      # Google ID-token checks, accounts from Google, passkey store
 node test/integration.mjs # integration tests (requires server running)
 ```
 
@@ -50,7 +52,10 @@ node test/integration.mjs # integration tests (requires server running)
 - `src/RobotRollout.js`, `src/RobotThinker.js`, `src/robotThinkWorker.js` — late-game robot thinking: rollouts of its options in one background worker; `think()` always settles by the deadline (`config.robotThinkMs`, default 1500; 0 = off) and the robot falls back to its normal move. It only overrides the normal move when a rollout winner is clearly better.
 - `src/Evaluator.js` + `src/evaluator-weights.json` — instant position evaluator (softmax over players: race, base, home, danger, to-move; exact duel tables when they apply; `evaluate1` = 1-ply over the next roll). Fitted by `tools/train-evaluator.mjs` (gen / fit). Used for the instant analysis pass and to pick which options get played out.
 - `src/Store.js` — SQLite (built-in `node:sqlite`, Node 22.13+; disabled cleanly if missing): players, device keys (only hashes stored), link codes, finished games (roll records + analysis, gzipped), per-seat stats. `DATA_DIR` (rc.d: `/var/db/turbomarbles`; default `data/`).
-- `src/Accounts.js` — account WebSocket actions (register/login/logout/identify/setPassword/setEmail/verifyEmail/forgotPassword/resetPassword/rename/signOutOthers/deleteAccount/profile/history/openGame, social), rate-limited per IP and per account. Name + password (salted scrypt in `Store.js`, constant-time); each login creates a device session key (kept in the browser; only its hash is stored; logout revokes it). Optional email, confirmed by link, for password resets (`src/Mailer.js`: Resend if a key is set, else sendmail). Accounts from before passwords are asked to choose one. Names are unique; guests can't use a registered name.
+- `src/Accounts.js` — account WebSocket actions (register/login/logout/identify/setPassword/setEmail/verifyEmail/forgotPassword/resetPassword/rename/signOutOthers/deleteAccount/profile/history/openGame, social), rate-limited per IP and per account. Name + password (salted scrypt in `Store.js`, constant-time); each login creates a device session key (kept in the browser; only its hash is stored; logout revokes it). Optional email, confirmed by link, for password resets (`src/Mailer.js`: Resend if a key is set, else sendmail). Accounts from before passwords are asked to choose one.
+  Other ways in (`src/SignIn.js`): Google (Identity Services button → ID token checked against Google's JWKS; first sign-in makes an account,
+  signed in it links; `identities` table) and passkeys (WebAuthn via @simplewebauthn, discoverable credentials; `passkeys` table;
+  the browser half served at `/vendor/webauthn/`). Settings → Sign-in methods; the last way in can't be removed. Names are unique; guests can't use a registered name.
 - `src/server.js` — Express + WebSocket server entry point.
 - `public/js/constants.js` — **single source of truth** for all board constants (`PLAYER_CONFIG`, `ARM_MAP`, `ALL_STARS`, etc.). Imported by GameEngine, board.js, main.js, and cli.mjs.
 - `public/js/board.js` — **Canvas renderer only.** `computeLayout()` calculates all space pixel positions. `drawBoard()` renders everything. No game logic here.

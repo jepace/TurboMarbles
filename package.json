@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.3",
     "express": "^4.19.2",
     "helmet": "^8.1.0",
     "ws": "^8.17.1"

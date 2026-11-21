@@ -131,6 +131,24 @@ function migrate() {
       resolved_at INTEGER, resolved_by TEXT, note TEXT
     );
     CREATE INDEX IF NOT EXISTS reports_open ON reports(resolved_at, created_at);`);
+  // Other ways in: a linked Google account, and passkeys (WebAuthn).
+  db.exec(`CREATE TABLE IF NOT EXISTS identities (
+      provider   TEXT NOT NULL,               -- 'google'
+      subject    TEXT NOT NULL,               -- the provider's stable user id
+      player_id  TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      email      TEXT,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (provider, subject));
+    CREATE TABLE IF NOT EXISTS passkeys (
+      id         TEXT PRIMARY KEY,            -- credential id (base64url)
+      player_id  TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+      public_key BLOB NOT NULL,
+      counter    INTEGER NOT NULL DEFAULT 0,
+      transports TEXT,
+      label      TEXT,
+      created_at INTEGER NOT NULL,
+      last_used  INTEGER);
+    CREATE INDEX IF NOT EXISTS passkeys_player ON passkeys(player_id);`);
   if (!pcols.has('pw_hash')) db.exec('ALTER TABLE players ADD COLUMN pw_hash TEXT');
   if (!pcols.has('email')) db.exec('ALTER TABLE players ADD COLUMN email TEXT');            // verified only
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS players_email ON players(email) WHERE email IS NOT NULL;
@@ -289,6 +307,51 @@ function newSession(playerId) {
   const key = randomBytes(32).toString('base64url');
   db.prepare('INSERT INTO devices (key_hash, player_id, created_at, last_used) VALUES (?, ?, ?, ?)').run(sha(key), playerId, now(), now());
   return key;
+}
+// ---- Google and passkeys -----------------------------------------------------------
+const playerRow = id => db.prepare('SELECT id, name, banned_at, ban_reason FROM players WHERE id = ?').get(id);
+const signIn = row => (row.banned_at ? { banned: true, reason: row.ban_reason } : { player: { id: row.id, name: row.name }, key: newSession(row.id) });
+export function identityPlayer(provider, subject) {
+  const r = db?.prepare('SELECT player_id FROM identities WHERE provider = ? AND subject = ?').get(provider, String(subject));
+  return r ? playerRow(r.player_id) : null;
+}
+export function linkIdentity(playerId, provider, subject, email = null) {
+  db.prepare('INSERT OR REPLACE INTO identities (provider, subject, player_id, email, created_at) VALUES (?, ?, ?, ?, ?)').run(provider, String(subject), playerId, email, now());
+}
+export function unlinkIdentity(playerId, provider) { db?.prepare('DELETE FROM identities WHERE player_id = ? AND provider = ?').run(playerId, provider); }
+export function identitiesOf(playerId) { return db ? db.prepare('SELECT provider, email FROM identities WHERE player_id = ?').all(playerId) : []; }
+// Sign in through a linked identity or passkey → { player, key } | { banned } | null.
+export function signInIdentity(provider, subject) { const row = identityPlayer(provider, subject); return row ? signIn(row) : null; }
+// A new account for someone arriving through Google: their name, made unique.
+export function registerFromIdentity(baseName, provider, subject, email) {
+  const base = String(baseName || 'Player').replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 18) || 'Player';
+  for (let k = 0; k < 50; k++) {
+    const r = register(k ? `${base} ${k + 1}` : base);
+    if (r.error) continue;
+    linkIdentity(r.player.id, provider, subject, email);
+    if (email) { try { db.prepare('UPDATE players SET email = ? WHERE id = ? AND email IS NULL').run(email, r.player.id); } catch { /* email used by another account */ } }
+    return r;
+  }
+  return { error: 'NAME_TAKEN' };
+}
+export function addPasskey(playerId, { id, publicKey, counter, transports, label }) {
+  db.prepare('INSERT INTO passkeys (id, player_id, public_key, counter, transports, label, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(id, playerId, Buffer.from(publicKey), counter ?? 0, JSON.stringify(transports ?? []), label ?? null, now());
+}
+export function passkeysOf(playerId) {
+  return db ? db.prepare('SELECT id, label, created_at, last_used, transports FROM passkeys WHERE player_id = ? ORDER BY created_at').all(playerId)
+    .map(r => ({ ...r, transports: JSON.parse(r.transports || '[]') })) : [];
+}
+export function passkeyById(id) {
+  const r = db?.prepare('SELECT * FROM passkeys WHERE id = ?').get(String(id));
+  return r ? { ...r, publicKey: new Uint8Array(r.public_key), transports: JSON.parse(r.transports || '[]') } : null;
+}
+export function removePasskey(playerId, id) { db?.prepare('DELETE FROM passkeys WHERE player_id = ? AND id = ?').run(playerId, String(id)); }
+// A passkey sign-in: bump its counter, open a session.
+export function signInPasskey(id, counter) {
+  const r = passkeyById(id); if (!r) return null;
+  db.prepare('UPDATE passkeys SET counter = ?, last_used = ? WHERE id = ?').run(counter ?? r.counter, now(), r.id);
+  return signIn(playerRow(r.player_id));
 }
 export function hasPassword(id) { return !!db?.prepare('SELECT pw_hash FROM players WHERE id = ?').get(id)?.pw_hash; }
 export function setPassword(id, pw) { db.prepare('UPDATE players SET pw_hash = ? WHERE id = ?').run(hashPassword(pw), id); }
