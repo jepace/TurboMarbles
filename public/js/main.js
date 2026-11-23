@@ -3848,9 +3848,9 @@ function showLabel() {
   if (sh.tiebreak) return ' · Tie-breaker!';
   const left = sh.endsAt - Date.now();
   if (left <= 0) return ' · Final game';
-  // The last 10 minutes: minutes and seconds.
-  if (left <= 600e3) { const sec = Math.ceil(left / 1000); return ` · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} left`; }
-  return ` · ${Math.ceil(left / 60000)} min left`;
+  // A game clock, like a sport: 1:00:00, 59:59 … 0:01.
+  const sec = Math.ceil(left / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, ss = String(sec % 60).padStart(2, '0');
+  return ` · ⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss}`;
 }
 // Every second (cheap): the last ten minutes count in seconds.
 setInterval(() => { if (gameState?.show && $('kb-game')) $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel(); }, 1000);
