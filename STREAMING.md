@@ -18,6 +18,7 @@ own browser's settings.
 | `speed` | `slow`, `normal`, `fast` | `normal` | How fast the robots play. |
 | `match` | minutes | (endless) | A timed match: when time is up the game in progress finishes, the team with most wins is champion (points break ties; a full tie plays a tie-breaker game), a champion card shows for 30 s, then the stream stops (see `after`). |
 | `after` | `next` | (stop) | With `match`: the stream stops after the champion: the card stays with "Full time", the music fades, and (with `record`) the headless streamer stops sending until its service is started again. In OBS, the stream stops itself 20 s after "Full time" if the Browser Source has Page permissions → "Advanced access to OBS"; Refresh then starts streaming again (a new YouTube video). `after=next` instead starts a new match after 30 s (use with `break` for one YouTube video per match). |
+| `countdown` | seconds | 10 | With `match`: a "starts in" card before the first roll (the match clock starts after it). `0` = none. |
 | `break` | seconds | (none) | With `match` and `record`: after each match the headless streamer stops sending for this long, so YouTube ends that video and the next match starts a new one. |
 | `record` | your `RECORD_KEY` | — | Needed for `break`. (Music recording for the podcast works without it.) |
 | `music` | `0` | on | `music=0` turns the music off. |

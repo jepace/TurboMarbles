@@ -3963,7 +3963,9 @@ if (KIOSK) {
   document.body.classList.toggle('kiosk-nolog', q.get('log') === '0');
   document.body.classList.toggle('kiosk-nolist', q.get('players_list') === '0');
   $('kb-url').textContent = location.host;
-  startKiosk();
+  // A timed match opens with a countdown card, so the stream is up before the first roll (countdown=<seconds>, 0 = none).
+  const cd = q.get('match') ? Math.max(0, Math.min(120, Number(q.get('countdown') ?? 10) || 0)) : 0;
+  if (cd) kioskCountdown(cd, Number(q.get('match')), startKiosk); else startKiosk();
   // In OBS (advanced access): a fresh load of a match page starts the stream if it is off, so Refresh after "Full time" = a new video.
   if (q.get("match")) try { window.obsstudio?.getStatus?.(s => { if (s && !s.streaming) window.obsstudio.startStreaming?.(); }); } catch {}
 }
@@ -4439,4 +4441,19 @@ function renderLeague() {
       return [lgDate(g.at), String(g.players), el('span', {}, lgDot(g.winner), TEAMS[g.winner]?.name ?? g.winner), String(s.bonks ?? 0), String(s.turns ?? 0), s.margin ? `${s.margin} pips` : '–', mc ? (TEAMS[mc]?.marbles[+mi]?.name ?? '') : '', replay(s.gameId)];
     })) : el('p', { class: 'muted' }, 'No games yet.'));
   }
+}
+
+// Full-screen "starts in" card before a timed match.
+function kioskCountdown(sec, minutes, done) {
+  const n = el('div', { class: 'kc-num' }, String(sec));
+  const box = el('div', { id: 'kiosk-countdown' },
+    el('img', { src: 'img/logo.svg', alt: 'TurboMarbles' }),
+    el('div', { class: 'kc-title' }, minutes ? `${minutes}-minute match` : 'Match'),
+    el('div', { class: 'kc-sub' }, 'starts in'), n,
+    el('div', { class: 'kc-url' }, location.host));
+  document.body.append(box);
+  const t = setInterval(() => {
+    if (--sec > 0) { n.textContent = String(sec); return; }
+    clearInterval(t); box.classList.add('gone'); setTimeout(() => box.remove(), 800); done();
+  }, 1000);
 }

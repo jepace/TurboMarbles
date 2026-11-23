@@ -999,3 +999,12 @@ body.kiosk .kb-clock { font-size: 1.9rem; }
 body.kiosk #match-score .standings { font-size: 1.6rem; }
 body.streamview:not(.kiosk) #match-score .standings { font-size: var(--sv-font, 1rem); }
 #match-score { margin-bottom: 4px; }
+
+#kiosk-countdown { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.6rem;
+  background: radial-gradient(circle at 50% 40%, #1b2a4a, #070b16 75%); color: #e8eef8; transition: opacity 0.8s; }
+#kiosk-countdown.gone { opacity: 0; }
+#kiosk-countdown img { width: min(46vw, 760px); }
+#kiosk-countdown .kc-title { font-size: 3.2rem; font-weight: 800; margin-top: 1.5rem; }
+#kiosk-countdown .kc-sub { font-size: 2rem; opacity: 0.75; }
+#kiosk-countdown .kc-num { font-size: 11rem; font-weight: 900; line-height: 1; color: #ffd84a; font-variant-numeric: tabular-nums; }
+#kiosk-countdown .kc-url { font-size: 1.8rem; font-weight: 700; opacity: 0.8; margin-top: 1rem; }
