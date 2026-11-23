@@ -3920,6 +3920,8 @@ function showChampionCard({ champion, standings, minutes }) {
       setMusicActive(false);
       const key = q.get('record');
       if (key) fetch(`/stream-break?key=${encodeURIComponent(key)}&stop=1`, { method: 'POST' }).catch(() => {});
+      // In OBS (Browser Source, Page permissions: "Advanced access to OBS"): stop the stream ourselves, 20 s after the farewell.
+      setTimeout(() => { try { window.obsstudio?.stopStreaming?.(); } catch {} }, 20000);
     }, 8000);
     return;
   }
