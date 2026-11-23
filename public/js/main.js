@@ -4456,6 +4456,8 @@ function kioskCountdown(sec, minutes, done) {
     el('div', { class: 'kc-sub' }, 'starts in'), n,
     el('div', { class: 'kc-url' }, location.host));
   document.body.append(box);
+  // In OBS: say whether the page may start/stop the stream (needs Page permissions → Advanced access to OBS, level 5).
+  try { window.obsstudio?.getControlLevel?.(lv => box.append(el('div', { class: 'kc-obs' }, lv >= 5 ? 'OBS control: on' : `OBS control: off (level ${lv}) · set Page permissions → Advanced access to OBS`))); } catch {}
   const t = setInterval(() => {
     if (--sec > 0) { n.textContent = String(sec); return; }
     clearInterval(t); box.classList.add('gone'); setTimeout(() => box.remove(), 800); done();
