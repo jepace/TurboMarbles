@@ -3863,6 +3863,12 @@ function renderShowClock() {
     sb.insertBefore($('kb-season'), $('game-log')); sb.insertBefore($('score-line'), $('game-log'));
   }
   renderMatchScore(inMatch);
+  // The log only earns its place with room for a few lines; squeezed below that, it goes.
+  const log = $('game-log');
+  if (log && sb) {
+    let used = 0; for (const ch of sb.children) if (ch !== log) used += ch.offsetHeight;
+    log.style.display = sb.clientHeight - used < 140 ? 'none' : '';
+  }
 }
 // The match so far: wins and points per team that has played in it.
 function renderMatchScore(show) {
