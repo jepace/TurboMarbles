@@ -29,7 +29,7 @@ const NO_MOVE_SCORE = 200;
 // With 4+ players the robot takes more chances and leaves base sooner (self-play,
 // 6000 games each vs the old settings: 27.0% vs 25% at 4 players, 19.8% vs 16.7% at 6;
 // no gain at 3).
-const BASE_KNOBS = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10 };
+const BASE_KNOBS = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10, lead: 0 };
 const MANY_KNOBS = { ...BASE_KNOBS, risk: 0.5, pBase: 5 };
 // Overrides for self-play tuning (tools set fields here; empty in play).
 export const TUNE = {};
@@ -364,7 +364,19 @@ const BUMP_K = 0.75;
 function bumpValue(game, o, m) {
   const cfg = game.players[o].config;
   const lost = distToHome(cfg, { zone: 'base' }) - distToHome(cfg, m.zone === 'center' ? { zone: 'center' } : m);
-  return BUMP_K * S.bump * 5 * Math.max(0, lost) / (game.players.length - 1);
+  return BUMP_K * S.bump * 5 * Math.max(0, lost) / (game.players.length - 1) * leaderFactor(game, o);
+}
+// Hitting the leader is worth more than hitting a team already far behind
+// (3+ players): × (1 + lead) for the leading opponent down to × (1 − lead)
+// for the last, by how far along each opponent's race is.
+function leaderFactor(game, o) {
+  if (!S.lead || game.players.length < 3) return 1;
+  const left = p => p.marbles.reduce((t, m) => t + (m.zone === 'home' ? 0 : distToHome(p.config, marbleLoc(m))), 0);
+  const opps = game.players.filter((_, i) => i !== game.turnIndex).map(p => left(p));
+  const lo = Math.min(...opps), hi = Math.max(...opps);
+  if (hi - lo < 1) return 1;
+  const w = (hi - left(game.players[o])) / (hi - lo);   // 1 = the leader (least left), 0 = the last
+  return 1 + S.lead * (2 * w - 1);
 }
 
 // ---- Home layout ------------------------------------------------------------
