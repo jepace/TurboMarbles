@@ -3882,7 +3882,7 @@ function showChampionCard({ champion, standings, minutes }) {
   const q = new URLSearchParams(location.search), hold = 30000;
   // after=stop: one show, then the end. The champion card stays, the music fades,
   // and (with record=<RECORD_KEY>) the headless streamer is told to stop for good.
-  if (q.get('after') === 'stop') {
+  if (q.get('after') !== 'next') {   // a timed match ends the stream unless after=next
     setTimeout(() => {
       card.append(el('div', { class: 'wc-head', style: 'margin-top:0.8rem' }, "Full time. Thanks for watching!"));
       setMusicActive(false);

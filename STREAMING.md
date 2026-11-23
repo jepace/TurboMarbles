@@ -16,8 +16,8 @@ own browser's settings.
 | `watch=robots` | — | (required) | Makes it the stream page. |
 | `players` | 2–6 | 6 | Teams per game. |
 | `speed` | `slow`, `normal`, `fast` | `normal` | How fast the robots play. |
-| `match` | minutes | (endless) | A timed match: when time is up the game in progress finishes, the team with most wins is champion (points break ties; a full tie plays a tie-breaker game), a champion card shows for 30 s, then a new match starts. |
-| `after` | `stop` | (new match) | With `match`: after the champion, stop for good: the card stays with "Full time", the music fades, and (with `record`) the headless streamer stops sending and stays stopped until its service is started again. |
+| `match` | minutes | (endless) | A timed match: when time is up the game in progress finishes, the team with most wins is champion (points break ties; a full tie plays a tie-breaker game), a champion card shows for 30 s, then the stream stops (see `after`). |
+| `after` | `next` | (stop) | With `match`: the stream stops after the champion: the card stays with "Full time", the music fades, and (with `record`) the headless streamer stops sending until its service is started again. `after=next` instead starts a new match after 30 s (use with `break` for one YouTube video per match). |
 | `break` | seconds | (none) | With `match` and `record`: after each match the headless streamer stops sending for this long, so YouTube ends that video and the next match starts a new one. |
 | `record` | your `RECORD_KEY` | — | Needed for `break`. (Music recording for the podcast works without it.) |
 | `music` | `0` | on | `music=0` turns the music off. |
@@ -45,7 +45,7 @@ https://marbles.pacehouse.com/?watch=robots&players=6&lite=1&match=60&break=60&r
 
 One one-hour match, then the stream stops (headless streamer):
 ```
-https://marbles.pacehouse.com/?watch=robots&players=6&lite=1&match=60&after=stop&record=YOUR_RECORD_KEY
+https://marbles.pacehouse.com/?watch=robots&players=6&lite=1&match=60&record=YOUR_RECORD_KEY
 ```
 
 Head-to-head duels on a wooden board, no log:
