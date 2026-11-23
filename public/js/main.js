@@ -3873,6 +3873,17 @@ function showChampionCard({ champion, standings, minutes }) {
   card.style.left = (r.left - a.left + r.width / 2) + 'px'; card.style.top = (r.top - a.top + r.height / 2) + 'px';
   if (!KIOSK) return;
   const q = new URLSearchParams(location.search), hold = 30000;
+  // after=stop: one show, then the end. The champion card stays, the music fades,
+  // and (with record=<RECORD_KEY>) the headless streamer is told to stop for good.
+  if (q.get('after') === 'stop') {
+    setTimeout(() => {
+      card.append(el('div', { class: 'wc-head', style: 'margin-top:0.8rem' }, "That's the show. Thanks for watching!"));
+      setMusicActive(false);
+      const key = q.get('record');
+      if (key) fetch(`/stream-break?key=${encodeURIComponent(key)}&stop=1`, { method: 'POST' }).catch(() => {});
+    }, 8000);
+    return;
+  }
   setTimeout(() => {
     // break=<seconds>: ask the stream to pause (the headless streamer stops sending), so the next show is a new video.
     const brk = Number(q.get('break')) || 0, key = q.get('record');
@@ -3883,6 +3894,8 @@ function showChampionCard({ champion, standings, minutes }) {
 
 function startKiosk() {
   const q = new URLSearchParams(location.search);
+  // A fresh stream page: any earlier "the show is over" stop is lifted.
+  if (q.get('record')) fetch(`/stream-go?key=${encodeURIComponent(q.get('record'))}`, { method: 'POST' }).catch(() => {});
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
   myName = 'Viewer' + Math.floor(1000 + Math.random() * 9000);
   connect();

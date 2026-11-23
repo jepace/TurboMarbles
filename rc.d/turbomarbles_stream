@@ -44,6 +44,8 @@ turbomarbles_stream_prestart()
     install -d -o "${turbomarbles_stream_user}" -m 755 "${turbomarbles_stream_piddir}"
     touch "${turbomarbles_stream_log}"
     chown "${turbomarbles_stream_user}" "${turbomarbles_stream_log}"
+    # A real start: forget any "stopped after the show" (and tell the server).
+    rm -f "${turbomarbles_stream_piddir}/stopped"
     [ -e "${turbomarbles_stream_config}" ] && chown "${turbomarbles_stream_user}" "${turbomarbles_stream_config}" && chmod 600 "${turbomarbles_stream_config}"
 }
 

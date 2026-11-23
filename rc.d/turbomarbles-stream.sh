@@ -39,6 +39,12 @@ PRESET="${STREAM_PRESET:-veryfast}"
 CHROME="${CHROME:-$(command -v chrome || command -v chromium)}"
 DISP=":${STREAM_DISPLAY:-99}"
 
+# Stopped after a show (after=stop): stay idle until the service is started again
+# (its start clears the marker; the supervisor's automatic restarts don't).
+if [ -e "${STREAM_STOPFILE:-/var/run/turbomarbles_stream/stopped}" ]; then
+  echo "stream: stopped after the show; idle (service turbomarbles_stream restart to stream again)" >&2
+  while [ -e "${STREAM_STOPFILE:-/var/run/turbomarbles_stream/stopped}" ]; do sleep 30; done
+fi
 KEY="${STREAM_KEY:-}"
 if [ -z "$KEY" ] && [ -r "$KEY_FILE" ]; then KEY="$(tr -d ' \n\r' < "$KEY_FILE")"; fi
 [ -n "$KEY" ] || { echo "stream: no stream key (STREAM_KEY in $CONF, or $KEY_FILE)" >&2; exit 1; }
@@ -80,8 +86,12 @@ sleep 8
 # Breaks between shows (the page asks the server; see /stream-state.json): stop
 # sending until the break is over, so YouTube ends that video and starts a new one.
 STATE_URL="${STREAM_STATE_URL:-$(echo "$PAGE" | sed -E 's#^(https?://[^/]+).*#\1#')/stream-state.json}"
+STOPFILE="${STREAM_STOPFILE:-/var/run/turbomarbles_stream/stopped}"
+get_state() { fetch -qo - "$STATE_URL" 2>/dev/null || curl -fsS "$STATE_URL" 2>/dev/null; }
+on_stop() { get_state | grep -q '"stop":true'; }
 on_break() { fetch -qo - "$STATE_URL" 2>/dev/null | grep -q '"break":true' || curl -fsS "$STATE_URL" 2>/dev/null | grep -q '"break":true'; }
 while kill -0 "$XVFB" 2>/dev/null && kill -0 "$CHR" 2>/dev/null; do
+  if on_stop; then echo "stream: the show is over; stopping (start the service to stream again)" >&2; touch "$STOPFILE"; exit 0; fi
   if on_break; then sleep 5; continue; fi
   ffmpeg -hide_banner -loglevel warning \
     -thread_queue_size 512 -f x11grab -draw_mouse 0 -framerate "$FPS" -video_size "${W}x${H}" -i "$DISP" \
@@ -94,6 +104,7 @@ while kill -0 "$XVFB" 2>/dev/null && kill -0 "$CHR" 2>/dev/null; do
   # Watch for a break while ffmpeg runs.
   while kill -0 "$FF" 2>/dev/null; do
     sleep 10
+    if on_stop; then echo "stream: the show is over" >&2; kill "$FF"; break; fi
     if on_break; then echo "stream: break between shows" >&2; kill "$FF"; break; fi
   done
   wait "$FF"

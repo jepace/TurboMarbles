@@ -110,13 +110,17 @@ app.post('/music-upload', express.raw({ type: () => true, limit: '80mb' }), asyn
 // Between shows the stream page asks for a short break (stream page break=<seconds>):
 // the headless streamer polls /stream-state.json and stops sending meanwhile, so
 // YouTube closes that video and the next show starts a new one.
-let streamBreakUntil = 0;
+let streamBreakUntil = 0, streamStopped = false;
 app.post('/stream-break', (req, res) => {
   if (!recordKeyOk(req.query.key)) return res.status(403).end();
+  // stop=1 (after=stop): the stream ends for good, until the streamer is started again.
+  if (req.query.stop) { streamStopped = true; return res.json({ ok: true, stop: true }); }
   streamBreakUntil = Date.now() + Math.max(10, Math.min(600, Number(req.query.sec) || 60)) * 1000;
   res.json({ ok: true, until: streamBreakUntil });
 });
-app.get('/stream-state.json', (req, res) => res.json({ break: Date.now() < streamBreakUntil, until: streamBreakUntil }));
+app.get('/stream-state.json', (req, res) => res.json({ break: Date.now() < streamBreakUntil, until: streamBreakUntil, stop: streamStopped }));
+// The streamer starting again (its service was started): the stop is over.
+app.post('/stream-go', (req, res) => { if (!recordKeyOk(req.query.key)) return res.status(403).end(); streamStopped = false; streamBreakUntil = 0; res.json({ ok: true }); });
 // The music as a podcast: /podcast.xml (RSS with iTunes tags) over the kept recordings.
 app.get('/music/:song/:file', (req, res) => {
   const p = recordingPath(req.params.song, req.params.file);
