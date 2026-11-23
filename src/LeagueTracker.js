@@ -27,7 +27,7 @@ function marblePips(p, m) {
   return BASE_PIPS - one;
 }
 const armOf = color => PLAYER_CONFIG.findIndex(c => c.color === color);
-const season = (t = Date.now()) => new Date(t).toISOString().slice(0, 7);   // '2026-11'
+const season = (t = Date.now()) => { const d = new Date(t); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };   // '2026-11', in the server's local time
 const ord = n => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] ?? 'th');
 
 export class LeagueTracker {

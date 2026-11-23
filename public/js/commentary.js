@@ -99,7 +99,7 @@ export function createCommentator(onLine) {
       const six = dice.includes(6);
       sixRun = six ? { pi, n: sixRun.pi === pi ? sixRun.n + 1 : 1 } : { pi: null, n: 0 };
       if (dice[0] === 6 && dice[1] === 6) return say(1, P(pi), pick([' rolls double sixes! Another roll coming.', ' with boxcars: double six!', ': 6-6, the dream roll.', ' finds double sixes. Lovely.']));
-      if (dice[0] === 1 && dice[1] === 1) return say(1, P(pi), pick([' rolls snake eyes.', ': double ones. Not a lot to work with.', ' gets 1-1… tiny steps.']));
+      if (dice[0] === 1 && dice[1] === 1) return say(1, P(pi), pick([' rolls snake eyes: two keys to the base and the hub!', ': double ones. Small numbers, big options.', ' gets 1-1: a marble out, a hub escape, exact steps home. Lovely.']));
       if (sixRun.n === 3) return say(2, P(pi), pick([' is on fire: three sixes in a row!', ' keeps rolling sixes. Three straight!', ' — another six! That\'s three.']));
     },
 
