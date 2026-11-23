@@ -3906,7 +3906,7 @@ function startKiosk() {
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
   myName = 'Viewer' + Math.floor(1000 + Math.random() * 9000);
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal', show: Number(q.get('match') ?? q.get('show')) || 0 });
+  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal', show: Number(q.get('match')) || 0 });
 }
 if (KIOSK) {
   const q = new URLSearchParams(location.search);

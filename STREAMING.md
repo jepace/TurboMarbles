@@ -16,7 +16,7 @@ own browser's settings.
 | `watch=robots` | — | (required) | Makes it the stream page. |
 | `players` | 2–6 | 6 | Teams per game. |
 | `speed` | `slow`, `normal`, `fast` | `normal` | How fast the robots play. |
-| `match` (or `show`) | minutes | (endless) | A timed match: when time is up the game in progress finishes, the team with most wins is champion (points break ties; a full tie plays a tie-breaker game), a champion card shows for 30 s, then a new match starts. |
+| `match` | minutes | (endless) | A timed match: when time is up the game in progress finishes, the team with most wins is champion (points break ties; a full tie plays a tie-breaker game), a champion card shows for 30 s, then a new match starts. |
 | `after` | `stop` | (new match) | With `match`: after the champion, stop for good: the card stays with "Full time", the music fades, and (with `record`) the headless streamer stops sending and stays stopped until its service is started again. |
 | `break` | seconds | (none) | With `match` and `record`: after each match the headless streamer stops sending for this long, so YouTube ends that video and the next match starts a new one. |
 | `record` | your `RECORD_KEY` | — | Needed for `break`. (Music recording for the podcast works without it.) |
