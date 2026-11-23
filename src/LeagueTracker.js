@@ -395,7 +395,7 @@ export function luceStrengths(games, teams = Object.keys(TEAMS)) {
 }
 // This month's games with a known line-up.
 function monthGames(mon) {
-  return store.leagueRecentGames(5000).filter(r => new Date(r.at).toISOString().slice(0, 7) === mon && Array.isArray(r.summary?.lineup))
+  return store.leagueRecentGames(5000).filter(r => season(r.at) === mon && Array.isArray(r.summary?.lineup))
     .map(r => ({ lineup: r.summary.lineup, winner: r.winner }));
 }
 
