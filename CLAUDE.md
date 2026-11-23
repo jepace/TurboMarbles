@@ -162,8 +162,8 @@ old colour names, `spaceName`/`parseSpaceName`, are still accepted by the tools.
   robots-only game ends when its last watcher leaves (a dropped connection gets a short grace to come back).
 - Streaming: `/?watch=robots&players=6` is a kiosk page (no sign-in, no menus or buttons) that starts a
   robots-only watch room and restarts it if the room goes; for an OBS Browser Source at 1920×1080, or headless on the server: `rc.d/turbomarbles-stream.sh` + `rc.d/turbomarbles_stream` (Xvfb + Chromium + ffmpeg to YouTube; DEPLOY.md). Options:
-  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `lite=1` (cheaper drawing for a machine without a graphics card: no glow, ≤30 redraws/s), `show=<minutes>` (a timed show: when time is up the game in progress finishes, then the champion = most wins this
-  show, points break ties, a full tie plays a tie-breaker game between just those teams; the champion card stays 30 s, then a new show,
+  `numbers=1` (board numbers; off by default), `log=0`, `players_list=0`, `sound=1`, `music=0` (music is on by default), `lite=1` (cheaper drawing for a machine without a graphics card: no glow, ≤30 redraws/s), `match=<minutes> (or show=)` (a timed show: when time is up the game in progress finishes, then the champion = most wins this
+  show, points break ties, a full tie plays a tie-breaker game between just those teams; the champion card stays 30 s, then a new match,
   or with `after=stop` the end: the card stays, music fades, `/stream-break?stop=1` makes the headless streamer exit and idle until
   its service is started again (marker file; the page's `/stream-go` on load lifts the stop);
   `break=<seconds>` with `record=<RECORD_KEY>` asks the server for a stream break so the headless streamer stops sending and

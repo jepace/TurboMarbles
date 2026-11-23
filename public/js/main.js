@@ -3851,7 +3851,7 @@ function showLabel() {
   if (left <= 0) return 'Final game';
   // A game clock, like a sport: 1:00:00, 59:59 … 0:01.
   const sec = Math.ceil(left / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, ss = String(sec % 60).padStart(2, '0');
-  return `⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss} left in the show`;
+  return `⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss} left in the match`;
 }
 // Every second (cheap): the last ten minutes count in seconds.
 // The show's clock: its own line at the top of the right column, apart from the game.
@@ -3859,7 +3859,7 @@ function renderShowClock() { const c = $('kb-clock'); if (!c) return; const t = 
 setInterval(renderShowClock, 1000);
 on('showUpdate', ({ tiebreak }) => {
   if (gameState?.show) gameState.show.tiebreak = tiebreak;
-  commentator.league([...tiebreak.flatMap((c, i) => [i ? (i === tiebreak.length - 1 ? ' and ' : ', ') : 'Time! ', { team: c }]), ' are level at the top: a tie-breaker decides the show!'], 3);
+  commentator.league([...tiebreak.flatMap((c, i) => [i ? (i === tiebreak.length - 1 ? ' and ' : ', ') : 'Time! ', { team: c }]), ' are level at the top: a tie-breaker decides the match!'], 3);
 });
 on('showOver', msg => afterAnimations(() => setTimeout(() => showChampionCard(msg), 7000)));   // the last game's card first
 function showChampionCard({ champion, standings, minutes }) {
@@ -3869,7 +3869,7 @@ function showChampionCard({ champion, standings, minutes }) {
   card.style.setProperty('--win-color', col);
   card.replaceChildren(
     el('div', { class: 'wc-emoji' }, '🏆'),
-    el('div', { class: 'wc-head' }, `${minutes}-minute show · champions`),
+    el('div', { class: 'wc-head' }, `${minutes}-minute match · champions`),
     el('div', { class: 'wc-title' }, `${t?.emoji ?? ''} ${t?.name ?? champion}`),
     el('div', { class: 'standings show-final' }, ...standings.map((x, k) => el('div', { class: 'st-row' },
       el('span', { class: 'st-rank' }, String(k + 1)), el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(x.color)] ?? '#888'}` }),
@@ -3884,7 +3884,7 @@ function showChampionCard({ champion, standings, minutes }) {
   // and (with record=<RECORD_KEY>) the headless streamer is told to stop for good.
   if (q.get('after') === 'stop') {
     setTimeout(() => {
-      card.append(el('div', { class: 'wc-head', style: 'margin-top:0.8rem' }, "That's the show. Thanks for watching!"));
+      card.append(el('div', { class: 'wc-head', style: 'margin-top:0.8rem' }, "Full time. Thanks for watching!"));
       setMusicActive(false);
       const key = q.get('record');
       if (key) fetch(`/stream-break?key=${encodeURIComponent(key)}&stop=1`, { method: 'POST' }).catch(() => {});
@@ -3906,7 +3906,7 @@ function startKiosk() {
   const n = Math.min(6, Math.max(2, parseInt(q.get('players'), 10) || 6));
   myName = 'Viewer' + Math.floor(1000 + Math.random() * 9000);
   connect();
-  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal', show: Number(q.get('show')) || 0 });
+  send({ action: 'createRoom', name: myName, totalPlayers: n, matchTo: 0, cube: n === 2, watch: true, speed: q.get('speed') ?? 'normal', show: Number(q.get('match') ?? q.get('show')) || 0 });
 }
 if (KIOSK) {
   const q = new URLSearchParams(location.search);
