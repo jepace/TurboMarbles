@@ -29,7 +29,7 @@ const NO_MOVE_SCORE = 200;
 // With 4+ players the robot takes more chances and leaves base sooner (self-play,
 // 6000 games each vs the old settings: 27.0% vs 25% at 4 players, 19.8% vs 16.7% at 6;
 // no gain at 3).
-const BASE_KNOBS = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10, lead: 0 };
+const BASE_KNOBS = { risk: 1, bump: 1, enter: 1, homeStep: 1, pLand: 5, pHub: 10, pBase: 10, lead: 0, pFar: 0 };
 const MANY_KNOBS = { ...BASE_KNOBS, risk: 0.5, pBase: 5 };
 // Overrides for self-play tuning (tools set fields here; empty in play).
 export const TUNE = {};
@@ -438,7 +438,7 @@ function distToHome(cfg, loc) {
     const d = (st - s + TRACK_SIZE) % TRACK_SIZE;
     if (d < k) { k = d; star = st; }
   }
-  const viaStars = k + (k > 0 ? S.pLand : 0) + starHops(cfg, star) + 6;
+  const viaStars = k + (k > 0 ? S.pLand : 0) + (k > 6 ? S.pFar : 0) + starHops(cfg, star) + 6;
   return Math.min(walk, viaStars);
 }
 
