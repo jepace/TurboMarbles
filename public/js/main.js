@@ -3847,9 +3847,13 @@ function showLabel() {
   if (!sh) return '';
   if (sh.tiebreak) return ' · Tie-breaker!';
   const left = sh.endsAt - Date.now();
-  return left > 0 ? ` · ${Math.ceil(left / 60000)} min left` : ' · Final game';
+  if (left <= 0) return ' · Final game';
+  // The last 10 minutes: minutes and seconds.
+  if (left <= 600e3) { const sec = Math.ceil(left / 1000); return ` · ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} left`; }
+  return ` · ${Math.ceil(left / 60000)} min left`;
 }
-setInterval(() => { if (gameState?.show && $('kb-game')) $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel(); }, 15000);
+// Every second (cheap): the last ten minutes count in seconds.
+setInterval(() => { if (gameState?.show && $('kb-game')) $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel(); }, 1000);
 on('showUpdate', ({ tiebreak }) => {
   if (gameState?.show) gameState.show.tiebreak = tiebreak;
   commentator.league([...tiebreak.flatMap((c, i) => [i ? (i === tiebreak.length - 1 ? ' and ' : ', ') : 'Time! ', { team: c }]), ' are level at the top: a tie-breaker decides the show!'], 3);
