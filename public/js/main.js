@@ -3851,11 +3851,37 @@ function showLabel() {
   if (left <= 0) return 'Final game';
   // A game clock, like a sport: 1:00:00, 59:59 … 0:01.
   const sec = Math.ceil(left / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, ss = String(sec % 60).padStart(2, '0');
-  return `⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss} left in the match`;
+  return `⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss} to play`;
 }
 // Every second (cheap): the last ten minutes count in seconds.
 // The show's clock: its own line at the top of the right column, apart from the game.
-function renderShowClock() { const c = $('kb-clock'); if (!c) return; const t = showLabel(); c.textContent = t; c.style.display = t ? '' : 'none'; }
+function renderShowClock() {
+  const c = $('kb-clock'); if (!c) return; const t = showLabel(); c.textContent = t; c.style.display = t ? '' : 'none';
+  // In a timed match the eye goes clock → match score → this game; the month's season moves to the bottom.
+  const inMatch = !!t, sb = $('sidebar');
+  if (inMatch && $('kb-season').nextElementSibling === $('score-line') && $('score-line').nextElementSibling !== $('game-log')) {
+    sb.insertBefore($('kb-season'), $('game-log')); sb.insertBefore($('score-line'), $('game-log'));
+  }
+  renderMatchScore(inMatch);
+}
+// The match so far: wins and points per team that has played in it.
+function renderMatchScore(show) {
+  const box = $('match-score'); if (!box) return;
+  const rows = show && leagueTable ? leagueTable.filter(t => t.sessionGames).sort((a, b) => b.sessionWins - a.sessionWins || b.sessionPoints - a.sessionPoints) : [];
+  box.style.display = rows.length ? '' : 'none';
+  if (!rows.length) return;
+  const key = rows.map(t => `${t.color}${t.sessionWins}/${t.sessionPoints}`).join();
+  if (box.dataset.key === key) return;   // unchanged: don't rebuild every second
+  box.dataset.key = key;
+  box.replaceChildren(el('div', { class: 'kb-head' }, 'Match'), el('div', { class: 'standings season' },
+    el('div', { class: 'st-row st-head' }, el('span'), el('span'), el('span'), el('span', { class: 'st-rec', title: 'Wins in this match' }, 'W'), el('span', { class: 'st-rec', title: 'Games played in this match' }, 'GP'),
+      el('span', { class: 'st-pts', title: 'Points in this match (aggro 2, baggro 3): they break ties in wins' }, 'Pts')),
+    ...rows.map((t, k) => el('div', { class: 'st-row', 'data-team': t.color, 'data-card': 'season' },
+      el('span', { class: 'st-rank' }, String(k + 1)), el('span', { class: 'log-dot', style: `background:${COLOR_MAP[dc(t.color)] ?? '#888'}` }),
+      el('span', { class: 'st-name' }, `${TEAMS[t.color]?.emoji ?? ''} ${TEAMS[t.color]?.short ?? t.color}`),
+      el('span', { class: 'st-rec' }, String(t.sessionWins)), el('span', { class: 'st-rec' }, String(t.sessionGames)),
+      el('span', { class: 'st-pts' + (t.sessionPoints > 0 ? ' plus' : t.sessionPoints < 0 ? ' minus' : '') }, `${t.sessionPoints > 0 ? '+' : t.sessionPoints < 0 ? '−' : ''}${Math.abs(t.sessionPoints)}`)))));
+}
 setInterval(renderShowClock, 1000);
 on('showUpdate', ({ tiebreak }) => {
   if (gameState?.show) gameState.show.tiebreak = tiebreak;

@@ -996,3 +996,6 @@ body.streamview:not(.kiosk) #game-log { font-size: 0.74rem; opacity: 0.85; borde
 .legal-links a { color: var(--muted); }
 .kb-clock { font-size: 1.35em; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; padding: 6px 10px; margin-bottom: 6px; border-radius: 8px; background: #ffffff10; text-align: center; }
 body.kiosk .kb-clock { font-size: 1.9rem; }
+body.kiosk #match-score .standings { font-size: 1.6rem; }
+body.streamview:not(.kiosk) #match-score .standings { font-size: var(--sv-font, 1rem); }
+#match-score { margin-bottom: 4px; }
