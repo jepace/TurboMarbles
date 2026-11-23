@@ -3571,11 +3571,15 @@ function updatePips() {
   });
   musicUpdate(standing);
   afterAnimations(() => commentator.update(standing));
-  for (const el of document.querySelectorAll('#player-list .pips')) {
-    const p = gameState.players[Number(el.dataset.player)];
-    const arm = armOfP(p);
-    el.textContent = arm >= 0 ? `${pipCount(arm, p.marbles)} pips` : '';
-  }
+  // The race leader (fewest pips left) gets a quiet gold count; a tie lights both.
+  const pipEls = [...document.querySelectorAll('#player-list .pips')].map(el => {
+    const p = gameState.players[Number(el.dataset.player)], arm = armOfP(p);
+    const n = arm >= 0 ? pipCount(arm, p.marbles) : null;
+    el.textContent = n == null ? '' : `${n} pips`;
+    return [el, n];
+  });
+  const least = Math.min(...pipEls.map(([, n]) => n ?? Infinity));
+  for (const [el, n] of pipEls) el.classList.toggle('pip-lead', n != null && n === least && pipEls.length > 1);
 }
 
 function renderDice(dice, color) {
