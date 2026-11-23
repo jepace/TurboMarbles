@@ -3964,6 +3964,8 @@ if (KIOSK) {
   document.body.classList.toggle('kiosk-nolist', q.get('players_list') === '0');
   $('kb-url').textContent = location.host;
   startKiosk();
+  // In OBS (advanced access): a fresh load of a match page starts the stream if it is off, so Refresh after "Full time" = a new video.
+  if (q.get("match")) try { window.obsstudio?.getStatus?.(s => { if (s && !s.streaming) window.obsstudio.startStreaming?.(); }); } catch {}
 }
 
 
