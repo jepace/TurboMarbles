@@ -3524,7 +3524,8 @@ function renderSidebar() {
   // The same game view for players, watchers and the stream page; `playing` keeps the player's controls.
   document.body.classList.toggle('playing', !KIOSK && !watching && !viewingStored);
   if (document.body.classList.toggle('streamview', true) !== document.body.dataset.sv) { document.body.dataset.sv = document.body.classList.contains('streamview'); setTimeout(placeCommentary, 0); }
-  $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel();
+  $('kb-game').textContent = gameState.gameNo ? `Game ${gameState.gameNo}` : '';
+  renderShowClock();
   $('kb-season').style.display = KIOSK || (watching && gameState.score && !gameState.match) ? '' : 'none';
   $('btn-leave-after').style.display = watching && !KIOSK ? '' : 'none';
   const list = $('player-list');
@@ -3845,15 +3846,17 @@ let lastLiteDraw = 0;
 function showLabel() {
   const sh = gameState?.show;
   if (!sh) return '';
-  if (sh.tiebreak) return ' · Tie-breaker!';
+  if (sh.tiebreak) return 'Tie-breaker!';
   const left = sh.endsAt - Date.now();
-  if (left <= 0) return ' · Final game';
+  if (left <= 0) return 'Final game';
   // A game clock, like a sport: 1:00:00, 59:59 … 0:01.
   const sec = Math.ceil(left / 1000), h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, ss = String(sec % 60).padStart(2, '0');
-  return ` · ⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss}`;
+  return `⏱ ${h ? `${h}:${String(m).padStart(2, '0')}` : m}:${ss} left in the show`;
 }
 // Every second (cheap): the last ten minutes count in seconds.
-setInterval(() => { if (gameState?.show && $('kb-game')) $('kb-game').textContent = (gameState.gameNo ? `Game ${gameState.gameNo}` : '') + showLabel(); }, 1000);
+// The show's clock: its own line at the top of the right column, apart from the game.
+function renderShowClock() { const c = $('kb-clock'); if (!c) return; const t = showLabel(); c.textContent = t; c.style.display = t ? '' : 'none'; }
+setInterval(renderShowClock, 1000);
 on('showUpdate', ({ tiebreak }) => {
   if (gameState?.show) gameState.show.tiebreak = tiebreak;
   commentator.league([...tiebreak.flatMap((c, i) => [i ? (i === tiebreak.length - 1 ? ' and ' : ', ') : 'Time! ', { team: c }]), ' are level at the top: a tie-breaker decides the show!'], 3);
